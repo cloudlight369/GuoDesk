@@ -15,9 +15,10 @@ GuoDesk 是一个 Windows 桌面分区整理工具：在桌面上创建多个可
 
 ## 安装
 
-从 [Releases](https://github.com/cloudlight369/GuoDesk/releases) 下载 `GuoDesk-x.y.z-setup.exe`，双击安装即可。安装程序为按用户安装（不需要管理员权限），自带全部运行库。
+从 [Releases](https://github.com/cloudlight369/GuoDesk/releases) 下载：
 
-也可以直接运行免安装版：解压发布包后双击 `GuoDesk.exe`。
+- **安装版**：`GuoDesk-x.y.z-setup.exe`，双击安装即可。按用户安装（不需要管理员权限），自带全部运行库
+- **免安装版**：`GuoDesk-x.y.z-portable.zip`，解压后直接运行 `GuoDesk\GuoDesk.exe`，适合绿色环境或 U 盘携带
 
 ## 从源码构建
 
@@ -44,6 +45,12 @@ cd GuoDesk
 ```powershell
 & "<Inno Setup 安装目录>\ISCC.exe" scripts/guodesk.iss
 # 输出 artifacts\installer\GuoDesk-<版本>-setup.exe
+```
+
+制作免安装版 zip：
+
+```powershell
+./scripts/package-portable.ps1    # 输出 artifacts\installer\GuoDesk-<版本>-portable.zip
 ```
 
 ## 使用说明
