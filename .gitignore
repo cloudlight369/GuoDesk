@@ -1,0 +1,8 @@
+.tools/
+.vs/
+artifacts/
+packages/
+**/obj/
+**/x64/
+guodesk-created.png
+**/Generated Files/

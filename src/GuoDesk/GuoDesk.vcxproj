@@ -1,0 +1,26 @@
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+ <PropertyGroup Label="Globals">
+  <ProjectGuid>{AA420A6C-31E3-490E-AC44-918E906E42AE}</ProjectGuid><ProjectName>GuoDesk</ProjectName><RootNamespace>GuoDesk</RootNamespace>
+  <CppWinRTOptimized>true</CppWinRTOptimized><CppWinRTRootNamespaceAutoMerge>true</CppWinRTRootNamespaceAutoMerge>
+  <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion><WindowsTargetPlatformMinVersion>10.0.22000.0</WindowsTargetPlatformMinVersion>
+  <ApplicationType>Windows Store</ApplicationType><ApplicationTypeRevision>10.0</ApplicationTypeRevision><AppContainerApplication>false</AppContainerApplication><AppxPackage>false</AppxPackage>
+  <DesktopCompatible>true</DesktopCompatible><RuntimeIdentifiers>win10-x64</RuntimeIdentifiers><UseWinUI>true</UseWinUI><WindowsPackageType>None</WindowsPackageType><WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+  <RestoreProjectStyle>PackageReference</RestoreProjectStyle><NuGetTargetMoniker>native,Version=v0.0</NuGetTargetMoniker><NuGetTargetPlatformIdentifier>Windows</NuGetTargetPlatformIdentifier><NuGetTargetPlatformVersion>10.0.22000.0</NuGetTargetPlatformVersion>
+ </PropertyGroup>
+ <ItemGroup Label="ProjectConfigurations"><ProjectConfiguration Include="Debug|x64"><Configuration>Debug</Configuration><Platform>x64</Platform></ProjectConfiguration><ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration></ItemGroup>
+ <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+ <PropertyGroup Label="Configuration"><ConfigurationType>Application</ConfigurationType><PlatformToolset>v143</PlatformToolset><CharacterSet>Unicode</CharacterSet><UseDebugLibraries Condition="'$(Configuration)'=='Debug'">true</UseDebugLibraries></PropertyGroup>
+ <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+ <PropertyGroup><OutDir>$(ProjectDir)..\..\artifacts\$(Configuration)\</OutDir><IntDir>$(ProjectDir)obj\$(Configuration)\</IntDir><TargetName>GuoDesk</TargetName></PropertyGroup>
+ <ItemDefinitionGroup><ClCompile><LanguageStandard>stdcpp20</LanguageStandard><PrecompiledHeader>Use</PrecompiledHeader><PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile><AdditionalOptions>/utf-8 /bigobj %(AdditionalOptions)</AdditionalOptions><PreprocessorDefinitions>NOMINMAX;WIN32_LEAN_AND_MEAN;%(PreprocessorDefinitions)</PreprocessorDefinitions><AdditionalIncludeDirectories>$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories><WarningLevel>Level4</WarningLevel></ClCompile><Link><SubSystem>Windows</SubSystem><AdditionalDependencies>user32.lib;ole32.lib;gdi32.lib;shell32.lib;shlwapi.lib;comctl32.lib;windowsapp.lib;%(AdditionalDependencies)</AdditionalDependencies></Link></ItemDefinitionGroup>
+ <ItemGroup><PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260921001"/><PackageReference Include="Microsoft.Windows.CppWinRT" Version="2.0.250303.1"/></ItemGroup>
+ <ItemGroup><ApplicationDefinition Include="App.xaml"/><Manifest Include="app.manifest"/></ItemGroup>
+ <ItemGroup><ClCompile Include="pch.cpp"><PrecompiledHeader>Create</PrecompiledHeader></ClCompile><ClCompile Include="App.xaml.cpp"/><ClCompile Include="Core.cpp"/><ClCompile Include="..\..\tests\CoreTests.cpp"/><ClCompile Include="Shell.cpp"/><ClCompile Include="DeskWindow.cpp"/><ClCompile Include="$(GeneratedFilesDir)module.g.cpp"/></ItemGroup>
+ <ItemGroup><ClInclude Include="pch.h"/><ClInclude Include="App.xaml.h"/><ClInclude Include="Core.h"/><ClInclude Include="Shell.h"/><ClInclude Include="DeskWindow.h"/></ItemGroup>
+ <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>
+
+
+
+
+
