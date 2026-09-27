@@ -2,7 +2,8 @@
 namespace guodesk {
 struct Entry { std::wstring id, path; };
 struct Zone { std::wstring id, name=L"常用"; int x=120,y=120,width=440,height=360; bool collapsed=false; std::vector<Entry> entries; };
-struct Layout { std::vector<Zone> zones; };
+struct Settings { std::wstring theme; bool compact=false; };
+struct Layout { std::vector<Zone> zones; Settings settings; };
 std::wstring NewId();
 std::wstring PathKey(std::wstring const& path);
 bool AddEntry(Zone& zone,std::wstring const& path);
