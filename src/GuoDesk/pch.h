@@ -9,9 +9,11 @@
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Data.Json.h>
 #include <winrt/Windows.Storage.h>
+#include <winrt/Windows.Storage.Streams.h>
 #include <winrt/Windows.Storage.FileProperties.h>
 #include <winrt/Windows.ApplicationModel.DataTransfer.h>
 #include <winrt/Windows.UI.h>
+#include <winrt/Windows.UI.Text.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
@@ -25,6 +27,7 @@
 #include <filesystem>
 #include <fstream>
 #include <vector>
+#include <map>
 #include <memory>
 #include <string>
 #include <algorithm>

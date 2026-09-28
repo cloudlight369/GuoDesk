@@ -1,5 +1,5 @@
 #define AppName "GuoDesk"
-#define AppVersion "0.1.0"
+#define AppVersion "0.2.0"
 
 [Setup]
 AppId={{7E1F9C52-3D8A-4B7E-9C41-2A6F0D5B8E13}
@@ -11,6 +11,7 @@ PrivilegesRequired=lowest
 OutputDir=..\artifacts\installer
 OutputBaseFilename={#AppName}-{#AppVersion}-setup
 LicenseFile=..\LICENSE
+SetupIconFile=..\src\GuoDesk\app.ico
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern

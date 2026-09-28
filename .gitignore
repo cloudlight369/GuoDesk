@@ -7,3 +7,4 @@ packages/
 guodesk-created.png
 **/Generated Files/
 vibe_images/
+*.log
