@@ -40,7 +40,8 @@ public:
  explicit Controller(std::filesystem::path root={}); ~Controller();
  void Start(); void Save(); void Add(); void Remove(std::wstring const& id); void Refresh(); void Show(); void Quit(); void ToggleDesktop();
  void ShowSettings(); void CloseSettings(); void ApplySettings();
+ void ShowTidy(); void CloseTidy();
  void MoveEntry(std::wstring const& entry,std::wstring const& target,size_t index);
- std::unique_ptr<class SettingsWindow> settings;
+ std::unique_ptr<class SettingsWindow> settings; std::unique_ptr<class TidyWindow> tidy;
 };
 }

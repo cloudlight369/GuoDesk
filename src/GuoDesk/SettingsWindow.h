@@ -8,7 +8,10 @@ class SettingsWindow {
  winrt::Microsoft::UI::Xaml::Controls::ComboBox theme{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::ToggleSwitch compact{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::ToggleSwitch autostart{nullptr};
+ winrt::Microsoft::UI::Xaml::Controls::ScrollViewer scroll{nullptr};
+ winrt::Microsoft::UI::Xaml::Controls::StackPanel rulesPanel{nullptr};
  void OnTheme(int index); void OnCompact(bool on); void OnAutostart(bool on);
+ void RebuildRules(); void EditRule(std::wstring ruleId);
 public:
  SettingsWindow(Controller&);
  ~SettingsWindow();
