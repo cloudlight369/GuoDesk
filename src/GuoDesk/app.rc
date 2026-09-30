@@ -19,12 +19,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "cloudlight369"
             VALUE "FileDescription", "GuoDesk Desktop Zones"
-            VALUE "FileVersion", "0.4.0.0"
+            VALUE "FileVersion", "0.5.0.0"
             VALUE "InternalName", "GuoDesk"
             VALUE "LegalCopyright", "MIT License"
             VALUE "OriginalFilename", "GuoDesk.exe"
             VALUE "ProductName", "GuoDesk"
-            VALUE "ProductVersion", "0.4.0.0"
+            VALUE "ProductVersion", "0.5.0.0"
         END
     END
     BLOCK "VarFileInfo"
