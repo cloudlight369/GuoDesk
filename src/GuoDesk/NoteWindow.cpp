@@ -2,6 +2,7 @@
 #include "NoteWindow.h"
 #include "DeskWindow.h"
 #include "Shell.h"
+#include "I18n.h"
 using namespace winrt;
 using namespace Microsoft::UI::Xaml;
 using namespace Microsoft::UI::Xaml::Controls;
@@ -20,7 +21,7 @@ static Brush ResolveNoteBrush(wchar_t const* key,Windows::UI::Color fallback,boo
 }
 Brush NoteWindow::ThemeBrush(wchar_t const* key,Windows::UI::Color fallback){bool dark=false;try{dark=root.ActualTheme()==ElementTheme::Dark;}catch(...){}return ResolveNoteBrush(key,fallback,dark);}
 NoteWindow::NoteWindow(Controller& c):owner(c){
- window=Window();window.Title(L"GuoDesk 便签");hwnd=shell::Handle(window);
+ window=Window();window.Title(i18n::Tr(L"GuoDesk 便签"));hwnd=shell::Handle(window);
  try{auto dir=std::filesystem::path(NoteExePath()).parent_path();window.AppWindow().SetIcon((dir/L"guodesk.ico").wstring());}catch(...){}
  window.SystemBackdrop(MicaBackdrop());
  try{auto presenter=window.AppWindow().Presenter().as<Microsoft::UI::Windowing::OverlappedPresenter>();presenter.SetBorderAndTitleBar(true,false);window.AppWindow().IsShownInSwitchers(false);}catch(...){}
@@ -31,7 +32,7 @@ NoteWindow::NoteWindow(Controller& c):owner(c){
  Border header;header.Padding(Thickness{12,8,12,6});header.Background(SolidColorBrush(Windows::UI::Colors::Transparent()));
  StackPanel headRow;headRow.Orientation(Orientation::Horizontal);headRow.Spacing(8);
  FontIcon grip;grip.FontFamily(FontFamily(L"Segoe Fluent Icons"));grip.Glyph(L"\uE7C2");grip.FontSize(12);grip.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));headRow.Children().Append(grip);
- TextBlock title;title.Text(L"便签");title.FontSize(12);title.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));headRow.Children().Append(title);
+ TextBlock title;title.Text(i18n::Tr(L"便签"));title.FontSize(12);title.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));headRow.Children().Append(title);
  header.Child(headRow);root.Children().Append(header);
  auto dragging=std::make_shared<bool>(false);auto dragStart=std::make_shared<POINT>();auto dragOrigin=std::make_shared<RECT>();
  auto dragTimer=root.DispatcherQueue().CreateTimer();dragTimer.Interval(std::chrono::milliseconds(16));
@@ -41,7 +42,7 @@ NoteWindow::NoteWindow(Controller& c):owner(c){
  header.PointerReleased([EndDrag](auto&&,auto&&){EndDrag();});
  header.PointerCaptureLost([EndDrag](auto&&,auto&&){EndDrag();});
  Border paper;paper.Margin(Thickness{10,0,10,10});paper.CornerRadius(CornerRadius{10,10,10,10});paper.Background(ThemeBrush(L"NotePaperFill",Windows::UI::Color{255,255,244,179}));
- body=TextBox();body.AcceptsReturn(true);body.TextWrapping(TextWrapping::Wrap);body.PlaceholderText(L"记点什么…");body.FontSize(14);body.Background(SolidColorBrush(Windows::UI::Colors::Transparent()));body.BorderThickness(Thickness{0});body.Padding(Thickness{12,10,12,10});body.VerticalAlignment(VerticalAlignment::Stretch);body.HorizontalAlignment(HorizontalAlignment::Stretch);ScrollViewer::SetVerticalScrollBarVisibility(body,ScrollBarVisibility::Auto);
+ body=TextBox();body.AcceptsReturn(true);body.TextWrapping(TextWrapping::Wrap);body.PlaceholderText(i18n::Tr(L"记点什么…"));body.FontSize(14);body.Background(SolidColorBrush(Windows::UI::Colors::Transparent()));body.BorderThickness(Thickness{0});body.Padding(Thickness{12,10,12,10});body.VerticalAlignment(VerticalAlignment::Stretch);body.HorizontalAlignment(HorizontalAlignment::Stretch);ScrollViewer::SetVerticalScrollBarVisibility(body,ScrollBarVisibility::Auto);
  body.Text(w.noteText);
  paper.Child(body);Grid::SetRow(paper,1);root.Children().Append(paper);
  body.TextChanged([this](auto&&,auto&&){auto t=std::wstring(body.Text());size_t pos=0;while((pos=t.find(L"\r\n",pos))!=std::wstring::npos){t.replace(pos,2,L"\n");pos+=1;}while((pos=t.find(L'\r'))!=std::wstring::npos)t.replace(pos,1,L"\n");owner.layout.widgets.noteText=std::move(t);saveTimer.Start();});

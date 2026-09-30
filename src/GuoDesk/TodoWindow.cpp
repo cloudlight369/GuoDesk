@@ -2,6 +2,7 @@
 #include "TodoWindow.h"
 #include "DeskWindow.h"
 #include "Shell.h"
+#include "I18n.h"
 using namespace winrt;
 using namespace Microsoft::UI::Xaml;
 using namespace Microsoft::UI::Xaml::Controls;
@@ -29,9 +30,9 @@ void TodoWindow::Rebuild(){
  list.Children().Clear();
  auto& todos=owner.layout.widgets.todos;
  int done=0;for(auto const& t:todos)if(t.done)++done;
- count.Text(todos.empty()?L"":(std::to_wstring(done)+L"/"+std::to_wstring(todos.size())+L" 已完成"));
+ count.Text(todos.empty()?L"":i18n::TrF(L"{0}/{1} 已完成",{std::to_wstring(done),std::to_wstring(todos.size())}));
  if(todos.empty()){
-  TextBlock empty;empty.Text(L"还没有待办，从下方添加一条");empty.FontSize(12);empty.HorizontalAlignment(HorizontalAlignment::Center);empty.Margin(Thickness{0,24,0,0});empty.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,140,140,140}));list.Children().Append(empty);
+  TextBlock empty;empty.Text(i18n::Tr(L"还没有待办，从下方添加一条"));empty.FontSize(12);empty.HorizontalAlignment(HorizontalAlignment::Center);empty.Margin(Thickness{0,24,0,0});empty.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,140,140,140}));list.Children().Append(empty);
   return;
  }
  for(auto const& t:todos){
@@ -53,10 +54,10 @@ std::wstring TodoWindow::CountText(){
  auto& todos=owner.layout.widgets.todos;
  if(todos.empty())return L"";
  int done=0;for(auto const& t:todos)if(t.done)++done;
- return std::to_wstring(done)+L"/"+std::to_wstring(todos.size())+L" 已完成";
+ return i18n::TrF(L"{0}/{1} 已完成",{std::to_wstring(done),std::to_wstring(todos.size())});
 }
 TodoWindow::TodoWindow(Controller& c):owner(c){
- window=Window();window.Title(L"GuoDesk 待办");hwnd=shell::Handle(window);
+ window=Window();window.Title(i18n::Tr(L"GuoDesk 待办"));hwnd=shell::Handle(window);
  try{auto dir=std::filesystem::path(TodoExePath()).parent_path();window.AppWindow().SetIcon((dir/L"guodesk.ico").wstring());}catch(...){}
  window.SystemBackdrop(MicaBackdrop());
  try{auto presenter=window.AppWindow().Presenter().as<Microsoft::UI::Windowing::OverlappedPresenter>();presenter.SetBorderAndTitleBar(true,false);window.AppWindow().IsShownInSwitchers(false);}catch(...){}
@@ -69,7 +70,7 @@ TodoWindow::TodoWindow(Controller& c):owner(c){
  Grid headGrid;ColumnDefinition hc1;hc1.Width(GridLength{1,GridUnitType::Star});headGrid.ColumnDefinitions().Append(hc1);ColumnDefinition hc2;hc2.Width(GridLength{0,GridUnitType::Auto});headGrid.ColumnDefinitions().Append(hc2);
  StackPanel headLeft;headLeft.Orientation(Orientation::Horizontal);headLeft.Spacing(8);
  FontIcon grip;grip.FontFamily(FontFamily(L"Segoe Fluent Icons"));grip.Glyph(L"\uE7C2");grip.FontSize(12);grip.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));headLeft.Children().Append(grip);
- TextBlock title;title.Text(L"待办");title.FontSize(12);title.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));headLeft.Children().Append(title);
+ TextBlock title;title.Text(i18n::Tr(L"待办"));title.FontSize(12);title.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));headLeft.Children().Append(title);
  Grid::SetColumn(headLeft,0);headGrid.Children().Append(headLeft);
  count=TextBlock();count.FontSize(12);count.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,140,140,140}));count.VerticalAlignment(VerticalAlignment::Center);Grid::SetColumn(count,1);headGrid.Children().Append(count);
  header.Child(headGrid);root.Children().Append(header);
@@ -83,8 +84,8 @@ TodoWindow::TodoWindow(Controller& c):owner(c){
  auto scroll=ScrollViewer();scroll.VerticalScrollBarVisibility(ScrollBarVisibility::Auto);scroll.Padding(Thickness{8,0,8,0});
  list=StackPanel();list.Spacing(4);scroll.Content(list);Grid::SetRow(scroll,1);root.Children().Append(scroll);
  auto bar=Grid();bar.Padding(Thickness{8,6,8,10});ColumnDefinition fc1;fc1.Width(GridLength{1,GridUnitType::Star});bar.ColumnDefinitions().Append(fc1);ColumnDefinition fc2;fc2.Width(GridLength{0,GridUnitType::Auto});bar.ColumnDefinitions().Append(fc2);
- input=TextBox();input.PlaceholderText(L"添加待办，回车确认");input.FontSize(13);input.Margin(Thickness{0,0,8,0});Grid::SetColumn(input,0);bar.Children().Append(input);
- auto addBtn=Button();addBtn.Content(box_value(L"添加"));try{addBtn.Style(Application::Current().Resources().Lookup(box_value(L"AccentButtonStyle")).as<Style>());}catch(...){}
+ input=TextBox();input.PlaceholderText(i18n::Tr(L"添加待办，回车确认"));input.FontSize(13);input.Margin(Thickness{0,0,8,0});Grid::SetColumn(input,0);bar.Children().Append(input);
+ auto addBtn=Button();addBtn.Content(box_value(i18n::Tr(L"添加")));try{addBtn.Style(Application::Current().Resources().Lookup(box_value(L"AccentButtonStyle")).as<Style>());}catch(...){}
  addBtn.Click([this](auto&&,auto&&){Add();});Grid::SetColumn(addBtn,1);bar.Children().Append(addBtn);
  input.KeyDown([this](auto&&,Input::KeyRoutedEventArgs const& a){if(a.Key()==winrt::Windows::System::VirtualKey::Enter)Add();});
  Grid::SetRow(bar,2);root.Children().Append(bar);

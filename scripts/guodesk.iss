@@ -1,5 +1,11 @@
 #define AppName "GuoDesk"
-#define AppVersion "0.5.0"
+#define AppVersion "0.6.0"
+#ifndef SourceDir
+#define SourceDir "..\artifacts\Release"
+#endif
+#ifndef OutSuffix
+#define OutSuffix ""
+#endif
 
 [Setup]
 AppId={{7E1F9C52-3D8A-4B7E-9C41-2A6F0D5B8E13}
@@ -9,7 +15,7 @@ AppPublisher=cloudlight369
 DefaultDirName={autopf}\{#AppName}
 PrivilegesRequired=lowest
 OutputDir=..\artifacts\installer
-OutputBaseFilename={#AppName}-{#AppVersion}-setup
+OutputBaseFilename={#AppName}-{#AppVersion}{#OutSuffix}-setup
 LicenseFile=..\LICENSE
 SetupIconFile=..\src\GuoDesk\app.ico
 Compression=lzma2/max
@@ -26,7 +32,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 
 [Files]
-Source: "..\artifacts\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "*.pdb,*.exp,*.lib"
+Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "*.pdb,*.exp,*.lib"
 
 [Icons]
 Name: "{autoprograms}\{#AppName}"; Filename: "{app}\GuoDesk.exe"

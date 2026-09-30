@@ -2,7 +2,7 @@
 namespace guodesk {
 struct Entry { std::wstring id, path; };
 struct Zone { std::wstring id, name=L"常用"; int x=120,y=120,width=440,height=360; bool collapsed=false; std::vector<Entry> entries; std::wstring mappedFolder; std::wstring viewMode=L"grid"; int nameLines=2; };
-struct Settings { std::wstring theme; bool compact=false; };
+struct Settings { std::wstring theme; bool compact=false; std::wstring language; };
 struct Rule { std::wstring id, name; std::vector<std::wstring> exts, keywords; std::wstring targetZone; };
 struct TodoItem { std::wstring id, text; bool done=false; };
 struct Widgets {

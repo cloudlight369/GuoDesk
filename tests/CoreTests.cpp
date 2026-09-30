@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "Core.h"
+#include "I18n.h"
 #include <iostream>
 namespace guodesk {
 void RunTests(std::filesystem::path const& output){std::ofstream report(output);int passed=0;auto expect=[&](bool ok,char const* name){report<<(ok?"PASS ":"FAIL ")<<name<<'\n';report.flush();if(!ok)throw std::runtime_error(name);++passed;};
@@ -33,6 +34,12 @@ void RunTests(std::filesystem::path const& output){std::ofstream report(output);
  w.noteText=L"便签：中文 内容\n第二行";w.noteVisible=true;w.todoVisible=true;w.noteX=15;w.noteY=25;w.noteW=333;w.noteH=222;w.todoX=44;w.todoY=55;w.todoW=266;w.todoH=333;RemoveTodo(w,w.todos[0].id);expect(w.todos.size()==1,"todo remove");
  auto wr=Deserialize(Serialize(l));expect(wr.widgets.todos.empty()&&!wr.widgets.noteVisible,"default widgets empty");l.widgets=w;auto wr2=Deserialize(Serialize(l));expect(wr2.widgets.noteText==w.noteText&&wr2.widgets.noteVisible&&wr2.widgets.todoVisible&&wr2.widgets.todos.size()==1&&wr2.widgets.todos[0].text==L"写周报"&&wr2.widgets.noteW==333&&wr2.widgets.todoH==333,"widgets roundtrip");
  auto legacyW=Deserialize("{\"version\":1,\"zones\":[]}");expect(legacyW.widgets.todos.empty()&&!legacyW.widgets.noteVisible&&legacyW.widgets.noteW==300&&legacyW.widgets.todoW==300,"legacy missing widgets defaults");
+ i18n::SetLanguage(L"zh-CN");expect(i18n::Tr(L"设置")==L"设置","tr zh passthrough");
+ i18n::SetLanguage(L"en-US");expect(i18n::Tr(L"设置")==L"Settings"&&i18n::Tr(L"不存在的键")==L"不存在的键","tr en lookup with fallback");
+ expect(i18n::TrF(L"应用整理（添加 {0} 个引用）",{L"3"})==L"Apply tidy (adds 3 references)","trf formats placeholder");
+ expect(i18n::Fmt(L"{1}+{0}",{L"A",L"B"})==L"B+A"&&i18n::Fmt(L"a {0} b {9} c",{L"X"})==L"a X b {9} c","fmt reorder and unknown index");
+ Layout langL;langL.settings.language=L"en-US";auto langR=Deserialize(Serialize(langL));expect(langR.settings.language==L"en-US","language roundtrip");
+ expect(Deserialize("{\"version\":1,\"zones\":[]}").settings.language.empty(),"legacy missing language tolerated");
 report<<"TOTAL "<<passed<<" passed\n";
 }
 }

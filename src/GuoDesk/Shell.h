@@ -2,7 +2,8 @@
 #include "Core.h"
 namespace guodesk::shell {
 HWND Handle(winrt::Microsoft::UI::Xaml::Window const& window);
-std::vector<std::wstring> Pick(HWND owner,bool folder=false);
+std::vector<std::wstring> Pick(HWND owner,bool folder=false,std::wstring const& title={});
+std::wstring SaveFile(HWND owner,wchar_t const* defaultName);
 void Open(HWND owner,std::wstring const& path);
 void Reveal(HWND owner,std::wstring const& path);
 std::wstring Name(std::wstring const& path);
