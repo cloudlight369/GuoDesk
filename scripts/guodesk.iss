@@ -1,5 +1,5 @@
 #define AppName "GuoDesk"
-#define AppVersion "0.2.0"
+#define AppVersion "0.3.0"
 
 [Setup]
 AppId={{7E1F9C52-3D8A-4B7E-9C41-2A6F0D5B8E13}

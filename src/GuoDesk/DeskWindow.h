@@ -11,6 +11,8 @@ class DeskWindow {
  winrt::Microsoft::UI::Xaml::Controls::TextBox title{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::TextBlock status{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::GridView grid{nullptr};
+ winrt::Microsoft::UI::Xaml::Controls::ScrollViewer listHost{nullptr};
+ winrt::Microsoft::UI::Xaml::Controls::StackPanel listPanel{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::Button chevron{nullptr};
  winrt::Microsoft::UI::Dispatching::DispatcherQueueTimer embedTimer{nullptr};
  static LRESULT CALLBACK Subclass(HWND,UINT,WPARAM,LPARAM,UINT_PTR,DWORD_PTR);
@@ -30,7 +32,7 @@ public:
 };
 class SettingsWindow;
 class Controller {
- HWND messageWindow{}; NOTIFYICONDATAW tray{}; UINT taskbarCreated{}; HANDLE mutex{}; bool quitting=false;
+ HWND messageWindow{}; NOTIFYICONDATAW tray{}; UINT taskbarCreated{}; HANDLE mutex{}; bool quitting=false; std::map<std::wstring,std::wstring> mappedStamp;
  static LRESULT CALLBACK MessageProc(HWND,UINT,WPARAM,LPARAM);
  void AddTray();
 public:
