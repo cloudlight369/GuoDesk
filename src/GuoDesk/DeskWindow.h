@@ -5,21 +5,32 @@ namespace guodesk {
 class Controller;
 struct already_running {};
 class DeskWindow {
- Controller& owner; std::wstring id; bool desktop=false,closing=false,dragging=false;
+ Controller& owner; bool desktop=false,closing=false,dragging=false,capsuleNow=false;
+ std::wstring expandedStack;
  POINT dragStart{}; RECT dragOrigin{};
  winrt::Microsoft::UI::Xaml::Controls::Grid root{nullptr};
+ winrt::Microsoft::UI::Xaml::Controls::StackPanel tabsPanel{nullptr}; winrt::Microsoft::UI::Xaml::Controls::Grid barGrid{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::TextBox title{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::TextBlock status{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::GridView grid{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::ScrollViewer listHost{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::StackPanel listPanel{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::Button chevron{nullptr};
+ winrt::Microsoft::UI::Xaml::Controls::Border pill{nullptr};
+ winrt::Microsoft::UI::Xaml::Controls::TextBlock pillName{nullptr};
+ winrt::Microsoft::UI::Xaml::Controls::Image pillIcon{nullptr};
+ winrt::Microsoft::UI::Xaml::Controls::FontIcon pillGlyph{nullptr};
  winrt::Microsoft::UI::Dispatching::DispatcherQueueTimer embedTimer{nullptr};
+ winrt::Microsoft::UI::Dispatching::DispatcherQueueTimer hoverTimer{nullptr};
  static LRESULT CALLBACK Subclass(HWND,UINT,WPARAM,LPARAM,UINT_PTR,DWORD_PTR);
  std::vector<RECT> Peers(); void SnapResize(RECT&,int); void DragUpdate();
- winrt::fire_and_forget Drop(winrt::Microsoft::UI::Xaml::DragEventArgs args,size_t position);
+ winrt::fire_and_forget Drop(winrt::Microsoft::UI::Xaml::DragEventArgs args,size_t position,std::wstring stackId={});
  void Menu(winrt::Microsoft::UI::Xaml::FrameworkElement const& target);
+ void RebuildTabs(); void SwitchTab(int index);
+ void SetCapsule(bool on); void ExpandCapsule(); void ShrinkCapsule();
 public:
+ std::wstring id; std::wstring viewId;
+ Zone& View();
  winrt::Microsoft::UI::Xaml::Window window{nullptr}; HWND hwnd{};
  DeskWindow(Controller&,std::wstring);
  ~DeskWindow();
@@ -45,6 +56,7 @@ public:
  void ShowClock(); void CloseClock(); void ShowGuide(); void CloseGuide(); void CheckReminders();
  void ShowMusic(); void CloseMusic(); void ShowSearch(); void CloseSearch(); void ShowWeather(); void CloseWeather();
  void MoveEntry(std::wstring const& entry,std::wstring const& target,size_t index);
+ void SyncWindows(); void MergeInto(std::wstring const& self,std::wstring const& other); void Ungroup(std::wstring const& zoneId); void AddToGroup(std::wstring const& anchorId);
  std::unique_ptr<class SettingsWindow> settings; std::unique_ptr<class TidyWindow> tidy;
  std::unique_ptr<class NoteWindow> note; std::unique_ptr<class TodoWindow> todo;
  std::unique_ptr<class ClockWindow> clockW; std::unique_ptr<class GuideWindow> guide;

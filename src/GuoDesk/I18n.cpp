@@ -5,6 +5,22 @@ namespace {
 std::wstring g_lang;
 struct KV { wchar_t const* key; wchar_t const* en; };
 KV const table[]{
+ {L"叠放",L"Stack"},
+ {L"新建叠放",L"New stack"},
+ {L"移入叠放",L"Add to stack"},
+ {L"移出叠放",L"Remove from stack"},
+ {L"重命名叠放",L"Rename stack"},
+ {L"重命名叠放…",L"Rename stack…"},
+ {L"解散叠放",L"Dissolve stack"},
+ {L"展开叠放",L"Expand stack"},
+ {L"收起叠放",L"Collapse stack"},
+ {L"叠放 · {0} 项（双击展开）",L"Stack · {0} items (double-tap to expand)"},
+ {L"合并到标签组…",L"Merge into tab group…"},
+ {L"把其他分区并入此组…",L"Merge other zones into this group…"},
+ {L"把「{0}」移出标签组",L"Move \"{0}\" out of the tab group"},
+ {L"胶囊模式（悬停展开）",L"Capsule mode (hover to expand)"},
+ {L"关闭胶囊模式",L"Exit capsule mode"},
+ {L"在标签组中新增分区",L"New zone in tab group"},
  {L"主配置缺失，已从备份恢复。",L"Main config missing — restored from backup."},
  {L"配置损坏，已保留原文件。",L"Config corrupt — original file preserved. "},
  {L"已从备份恢复。",L"Restored from backup."},

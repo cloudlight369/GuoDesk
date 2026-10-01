@@ -64,7 +64,7 @@ SettingsWindow::SettingsWindow(Controller& c):owner(c){
  panel.Children().Append(ruleBar);
  RebuildRules();
  panel.Children().Append(Caption(i18n::Tr(L"关于")));
- TextBlock about;about.Text(i18n::Tr(L"GuoDesk v0.9.0 · 桌面分区整理\n引用式入口：只存引用，不动原文件\n缺失入口可右键重新定位\n便签与待办：托盘右键开启，待办可设截止日期提醒\n时钟：托盘右键开启，右键时钟查看日历\n音乐·搜索·天气：托盘右键开启\n\nMIT License · cloudlight369"));about.FontSize(12);about.TextWrapping(TextWrapping::Wrap);about.Opacity(0.8);panel.Children().Append(about);
+ TextBlock about;about.Text(i18n::Tr(L"GuoDesk v1.0.0 · 桌面分区整理\n引用式入口：只存引用，不动原文件\n缺失入口可右键重新定位\n便签与待办：托盘右键开启，待办可设截止日期提醒\n时钟：托盘右键开启，右键时钟查看日历\n音乐·搜索·天气：托盘右键开启\n\nMIT License · cloudlight369"));about.FontSize(12);about.TextWrapping(TextWrapping::Wrap);about.Opacity(0.8);panel.Children().Append(about);
  scroll.Content(panel);window.Content(scroll);
  window.Closed([this](auto&&,auto&&){if(closing)return;closing=true;window.DispatcherQueue().TryEnqueue([this]{owner.CloseSettings();});});
  window.Activate();
