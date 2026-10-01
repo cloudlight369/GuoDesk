@@ -14,6 +14,7 @@ class SearchWindow {
  winrt::Microsoft::UI::Xaml::Media::Brush ThemeBrush(wchar_t const* key,winrt::Windows::UI::Color fallback);
  void Rebuild(std::wstring const& q);
  void OpenPath(std::wstring const& path);
+ void OpenHit(SearchHit const& hit);
  void SaveGeometry();
 public:
  SearchWindow(Controller&);

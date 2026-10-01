@@ -27,36 +27,47 @@ static std::wstring WebUrl(std::wstring const& q){
  return L"https://www.bing.com/search?q="+enc;
 }
 void SearchWindow::OpenPath(std::wstring const& path){shell::Open(hwnd,path);}
+void SearchWindow::OpenHit(SearchHit const& hit){
+ if(hit.kind==L"todo"){owner.ShowTodo();return;}
+ if(hit.kind==L"note"){owner.ShowNote();return;}
+ if(!hit.path.empty())OpenPath(hit.path);
+}
 void SearchWindow::Rebuild(std::wstring const& q){
  results.Children().Clear();hits.clear();
  if(q.empty()){
   hint.Visibility(Visibility::Visible);
-  hint.Text(i18n::Tr(L"输入关键词，搜索全部分区的内容。回车打开第一项。"));
+  hint.Text(i18n::Tr(L"输入关键词，搜索分区内容、待办和便签。回车打开第一项。"));
   return;
  }
  SearchZones(owner.layout,q,hits);
+ SearchWidgets(owner.layout,q,hits);
  if(hits.empty()){
   hint.Visibility(Visibility::Visible);
-  hint.Text(i18n::Tr(L"分区里没有匹配的内容，可以试试网页搜索。"));
+  hint.Text(i18n::Tr(L"分区和小组件里没有匹配的内容，可以试试网页搜索。"));
  }else hint.Visibility(Visibility::Collapsed);
  auto addRow=[&](Grid g){Button row;row.HorizontalAlignment(HorizontalAlignment::Stretch);row.HorizontalContentAlignment(HorizontalAlignment::Stretch);row.Padding(Thickness{6,4,6,4});row.BorderThickness(Thickness{0});row.Background(SolidColorBrush(Windows::UI::Colors::Transparent()));row.Content(g);results.Children().Append(row);};
  for(auto const& hit:hits){
   Grid g;g.Padding(Thickness{4,4,4,4});
   ColumnDefinition c0;c0.Width(GridLength{0,GridUnitType::Auto});g.ColumnDefinitions().Append(c0);
   ColumnDefinition c1;c1.Width(GridLength{1,GridUnitType::Star});g.ColumnDefinitions().Append(c1);
-  Image icon;icon.Width(20);icon.Height(20);icon.VerticalAlignment(VerticalAlignment::Top);icon.Margin(Thickness{0,1,10,0});
-  Grid::SetColumn(icon,0);g.Children().Append(icon);
-  try{shell::LoadIcon(hit.path,icon);}catch(...){}
+  bool widget=hit.kind==L"todo"||hit.kind==L"note";
+  if(widget){
+   FontIcon glyph;glyph.FontFamily(FontFamily(L"Segoe Fluent Icons"));glyph.Glyph(hit.kind==L"todo"?L"\uE73A":L"\uE70B");glyph.FontSize(14);glyph.Margin(Thickness{2,1,12,0});glyph.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));
+   Grid::SetColumn(glyph,0);g.Children().Append(glyph);
+  }else{
+   Image icon;icon.Width(20);icon.Height(20);icon.VerticalAlignment(VerticalAlignment::Top);icon.Margin(Thickness{0,1,10,0});
+   Grid::SetColumn(icon,0);g.Children().Append(icon);
+   try{shell::LoadIcon(hit.path,icon);}catch(...){}
+  }
   StackPanel texts;texts.Spacing(1);
   TextBlock name;name.Text(hit.name);name.FontSize(13);name.TextTrimming(TextTrimming::CharacterEllipsis);
   TextBlock meta;meta.FontSize(11);meta.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));
-  meta.Text(hit.zone+L" · "+hit.path);meta.TextTrimming(TextTrimming::CharacterEllipsis);
+  meta.Text(widget?i18n::Tr(hit.kind==L"todo"?L"待办":L"便签"):hit.zone+L" · "+hit.path);meta.TextTrimming(TextTrimming::CharacterEllipsis);
   texts.Children().Append(name);texts.Children().Append(meta);
   Grid::SetColumn(texts,1);g.Children().Append(texts);
-  auto path=hit.path;
   addRow(g);
   auto row=results.Children().GetAt(results.Children().Size()-1).as<Button>();
-  row.Click([this,path](auto&&,auto&&){OpenPath(path);});
+  row.Click([this,hit](auto&&,auto&&){OpenHit(hit);});
  }
  if(!q.empty()){
   Grid g;g.Padding(Thickness{4,4,4,4});
@@ -100,7 +111,7 @@ SearchWindow::SearchWindow(Controller& c):owner(c){
  query.KeyDown([this](auto&&,Input::KeyRoutedEventArgs const& a){
   if(a.Key()==Windows::System::VirtualKey::Enter){
    a.Handled(true);
-   if(!hits.empty())OpenPath(hits.front().path);
+   if(!hits.empty())OpenHit(hits.front());
   }else if(a.Key()==Windows::System::VirtualKey::Escape){
    a.Handled(true);
    window.DispatcherQueue().TryEnqueue([this]{owner.CloseSearch();});

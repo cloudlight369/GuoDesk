@@ -24,7 +24,7 @@ struct Widgets {
 };
 struct Layout { std::vector<Zone> zones; Settings settings; std::vector<Rule> rules; Widgets widgets; };
 struct PlanItem { std::wstring path, rule, zone; };
-struct SearchHit { std::wstring path, name, zone; };
+struct SearchHit { std::wstring path, name, zone, kind; };
 struct WeatherDay { int code=0; double lo=0,hi=0; long long date=0; };
 struct WeatherNow { bool valid=false; double temp=0,hi=0,lo=0; int humidity=0; int code=0; std::wstring city; std::vector<WeatherDay> days; };
 struct GeoPlace { std::wstring name,country; double lat=0,lon=0; };
@@ -68,6 +68,8 @@ bool IsMusicFile(std::wstring const& path);
 std::vector<std::wstring> MusicPlaylist(std::wstring const& folder);
 bool SearchMatch(std::wstring const& text,std::wstring const& query);
 void SearchZones(Layout const& layout,std::wstring const& query,std::vector<SearchHit>& out);
+void SearchWidgets(Layout const& layout,std::wstring const& query,std::vector<SearchHit>& out);
+inline bool IsDoubleCtrlHotkey(std::wstring const& text){return text==L"DoubleCtrl";}
 std::wstring WmoText(int code);
 std::wstring WmoEmoji(int code);
 WeatherNow ParseWeatherJson(std::wstring const& json);

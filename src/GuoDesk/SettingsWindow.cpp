@@ -29,8 +29,31 @@ SettingsWindow::SettingsWindow(Controller& c):owner(c){
  panel.Children().Append(Caption(i18n::Tr(L"常规")));
  autostart=ToggleSwitch();autostart.OnContent(box_value(i18n::Tr(L"开机自动启动")));autostart.OffContent(box_value(i18n::Tr(L"开机自动启动")));autostart.Toggled([this](auto&&,auto&&){if(applying)return;OnAutostart(autostart.IsOn());});panel.Children().Append(autostart);
  panel.Children().Append(Caption(i18n::Tr(L"全局热键")));
- hotkey=ComboBox();hotkey.HorizontalAlignment(HorizontalAlignment::Stretch);for(wchar_t const* p:{L"Ctrl+Alt+G",L"Ctrl+Alt+Z",L"Ctrl+Shift+Space",L"Win+Z",L"禁用"}){ComboBoxItem it;it.Content(box_value(i18n::Tr(p)));hotkey.Items().Append(it);}
+ hotkey=ComboBox();hotkey.HorizontalAlignment(HorizontalAlignment::Stretch);for(wchar_t const* p:{L"双击 Ctrl",L"Ctrl+Alt+G",L"Ctrl+Alt+Z",L"Ctrl+Shift+Space",L"Win+Z",L"自定义…",L"禁用"}){ComboBoxItem it;it.Content(box_value(i18n::Tr(p)));hotkey.Items().Append(it);}
  hotkey.SelectionChanged([this](auto&&,auto&&){if(applying)return;OnHotkey(hotkey.SelectedIndex());});panel.Children().Append(hotkey);
+ hotkeyCustom=TextBox();hotkeyCustom.HorizontalAlignment(HorizontalAlignment::Stretch);hotkeyCustom.Margin(Thickness{0,6,0,0});hotkeyCustom.PlaceholderText(i18n::Tr(L"点击此处，然后按下热键组合"));hotkeyCustom.IsReadOnly(true);panel.Children().Append(hotkeyCustom);
+ hotkeyCustom.KeyDown([this](auto&&,Input::KeyRoutedEventArgs const& a){
+  auto key=a.Key();a.Handled(true);
+  UINT vk=static_cast<UINT>(key);
+  if(vk==VK_CONTROL||vk==VK_SHIFT||vk==VK_MENU||vk==VK_LWIN||vk==VK_RWIN){hotkeyCustom.Text(i18n::Tr(L"继续，按下组合键中的主键…"));return;}
+  Hotkey hk{};
+  if(GetKeyState(VK_CONTROL)&0x8000)hk.mods|=MOD_CONTROL;
+  if(GetKeyState(VK_MENU)&0x8000)hk.mods|=MOD_ALT;
+  if(GetKeyState(VK_SHIFT)&0x8000)hk.mods|=MOD_SHIFT;
+  if((GetKeyState(VK_LWIN)|GetKeyState(VK_RWIN))&0x8000)hk.mods|=MOD_WIN;
+  hk.vk=vk;
+  std::wstring text=HotkeyToString(hk);
+  Hotkey check{};
+  if(text.empty()||!ParseHotkey(text,check)){hotkeyHint.Text(i18n::Tr(L"组合键需包含 Ctrl、Alt 或 Win 修饰键。"));hotkeyHint.Visibility(Visibility::Visible);return;}
+  auto& s=owner.layout.settings;
+  s.hotkey=text;
+  hotkeyCustom.Text(text);
+  applying=true;hotkey.SelectedIndex(5);applying=false;
+  bool ok=owner.ApplyHotkey();
+  hotkeyHint.Text(i18n::Tr(L"热键已被其他程序占用，未生效。"));
+  hotkeyHint.Visibility(ok?Visibility::Collapsed:Visibility::Visible);
+  owner.Save();
+ });
  hotkeyHint=TextBlock();hotkeyHint.Text(i18n::Tr(L"热键已被其他程序占用，未生效。"));hotkeyHint.FontSize(11);hotkeyHint.Foreground(winrt::Microsoft::UI::Xaml::Media::SolidColorBrush(Windows::UI::Color{255,232,17,35}));hotkeyHint.Visibility(Visibility::Collapsed);panel.Children().Append(hotkeyHint);
  panel.Children().Append(Caption(i18n::Tr(L"搜索热键")));
  hotkeySearch=ComboBox();hotkeySearch.HorizontalAlignment(HorizontalAlignment::Stretch);for(wchar_t const* p:{L"禁用",L"Ctrl+Alt+F",L"Ctrl+Shift+F",L"Alt+Q"}){ComboBoxItem it;it.Content(box_value(i18n::Tr(p)));hotkeySearch.Items().Append(it);}
@@ -78,7 +101,7 @@ SettingsWindow::SettingsWindow(Controller& c):owner(c){
  panel.Children().Append(ruleBar);
  RebuildRules();
  panel.Children().Append(Caption(i18n::Tr(L"关于")));
- TextBlock about;about.Text(i18n::Tr(L"GuoDesk v1.1.0 · 桌面分区整理\n引用式入口：只存引用，不动原文件\n缺失入口可右键重新定位\n便签与待办：托盘右键开启，待办可设截止日期提醒\n时钟：托盘右键开启，右键时钟查看日历\n音乐·搜索·天气：托盘右键开启\nWebDAV 同步：设置中配置网盘，多机同步布局\n\nMIT License · cloudlight369"));about.FontSize(12);about.TextWrapping(TextWrapping::Wrap);about.Opacity(0.8);panel.Children().Append(about);
+ TextBlock about;about.Text(i18n::Tr(L"GuoDesk v1.2.0 · 桌面分区整理\n引用式入口：只存引用，不动原文件\n缺失入口可右键重新定位\n便签与待办：托盘右键开启，待办可设截止日期提醒\n时钟：托盘右键开启，右键时钟查看日历\n音乐·搜索·天气：托盘右键开启\n双击 Ctrl 或自定义热键随时唤起\nWebDAV 同步：设置中配置网盘，多机同步布局\n\nMIT License · cloudlight369"));about.FontSize(12);about.TextWrapping(TextWrapping::Wrap);about.Opacity(0.8);panel.Children().Append(about);
  scroll.Content(panel);window.Content(scroll);
  window.Closed([this](auto&&,auto&&){if(closing)return;closing=true;window.DispatcherQueue().TryEnqueue([this]{owner.CloseSettings();});});
  window.Activate();
@@ -88,7 +111,7 @@ void SettingsWindow::OnCompact(bool on){owner.layout.settings.compact=on;owner.A
 void SettingsWindow::OnPerformance(bool on){owner.layout.settings.performance=on;for(auto& w:owner.windows)w->ApplySettings();owner.Save();}
 void SettingsWindow::OnAutostart(bool on){SetAutostart(on);bool actual=AutostartEnabled();if(actual!=on){applying=true;autostart.IsOn(actual);applying=false;}}
 void SettingsWindow::OnLanguage(int index){owner.layout.settings.language=index==1?L"zh-CN":index==2?L"en-US":L"";owner.Save();}
-void SettingsWindow::OnHotkey(int index){auto& s=owner.layout.settings;s.hotkey=index==1?L"Ctrl+Alt+Z":index==2?L"Ctrl+Shift+Space":index==3?L"Win+Z":index==4?L"":L"Ctrl+Alt+G";bool ok=owner.ApplyHotkey();hotkeyHint.Visibility(ok?Visibility::Collapsed:Visibility::Visible);owner.Save();}
+void SettingsWindow::OnHotkey(int index){auto& s=owner.layout.settings;if(index==5){hotkeyHint.Visibility(Visibility::Collapsed);window.DispatcherQueue().TryEnqueue([hc=hotkeyCustom]{hc.Focus(FocusState::Programmatic);});return;}s.hotkey=index==0?L"DoubleCtrl":index==1?L"Ctrl+Alt+G":index==2?L"Ctrl+Alt+Z":index==3?L"Ctrl+Shift+Space":index==4?L"Win+Z":L"";hotkeyCustom.Text(s.hotkey==L"DoubleCtrl"?i18n::Tr(L"双击 Ctrl"):s.hotkey);bool ok=owner.ApplyHotkey();hotkeyHint.Text(i18n::Tr(L"热键已被其他程序占用，未生效。"));hotkeyHint.Visibility(ok?Visibility::Collapsed:Visibility::Visible);owner.Save();}
 void SettingsWindow::OnHotkeySearch(int index){auto& s=owner.layout.settings;s.hotkeySearch=index==1?L"Ctrl+Alt+F":index==2?L"Ctrl+Shift+F":index==3?L"Alt+Q":L"";bool ok=owner.ApplyHotkey();hotkeySearchHint.Visibility(ok?Visibility::Collapsed:Visibility::Visible);owner.Save();}
 void SettingsWindow::OnGeoSearch(){auto name=std::wstring(weatherCity.Text());size_t a=name.find_first_not_of(L" \t");size_t b=name.find_last_not_of(L" \t");name=a==std::wstring::npos?L"":name.substr(a,b-a+1);if(name.empty())return;weatherHint.Text(i18n::Tr(L"正在搜索…"));weatherResults.Visibility(Visibility::Collapsed);weatherSave.Visibility(Visibility::Collapsed);auto weak=std::weak_ptr<bool>(alive);std::thread([this,weak,name]{auto json=HttpGetJson(L"geocoding-api.open-meteo.com",L"/v1/search?count=5&language=zh-CN&format=json&name="+UrlParam(name),false);auto list=ParseGeoJson(std::wstring(winrt::to_hstring(json)));window.DispatcherQueue().TryEnqueue([this,weak,list]{if(weak.lock()==nullptr||closing||!weatherResults)return;geo=list;weatherResults.Items().Clear();for(auto const& g:list)weatherResults.Items().Append(box_value(g.country.empty()?g.name:g.name+L" · "+g.country));weatherResults.Visibility(Visibility::Visible);weatherHint.Text(list.empty()?i18n::Tr(L"没有找到这个城市，换个名字试试。"):i18n::Tr(L"选择一个城市后点击“使用该城市”。"));weatherSave.Visibility(Visibility::Collapsed);});}).detach();}
 void SettingsWindow::OnGeoSave(){int sel=weatherResults.SelectedIndex();if(sel<0||sel>=static_cast<int>(geo.size()))return;auto& s=owner.layout.widgets;s.weatherCity=geo[static_cast<size_t>(sel)].name;s.weatherLat=geo[static_cast<size_t>(sel)].lat;s.weatherLon=geo[static_cast<size_t>(sel)].lon;owner.Save();weatherHint.Text(i18n::Tr(L"已保存，天气组件将使用所选城市。"));weatherResults.Visibility(Visibility::Collapsed);weatherSave.Visibility(Visibility::Collapsed);if(owner.weather)owner.weather->Reload();}
@@ -144,7 +167,7 @@ void SettingsWindow::OnSyncDownload(){
   });
  }).detach();
 }
-void SettingsWindow::Apply(){applying=true;auto const& s=owner.layout.settings;theme.SelectedIndex(s.theme==L"Light"?1:s.theme==L"Dark"?2:0);compact.IsOn(s.compact);performance.IsOn(s.performance);autostart.IsOn(AutostartEnabled());lang.SelectedIndex(s.language==L"en-US"?2:s.language==L"zh-CN"?1:0);hotkey.SelectedIndex(s.hotkey==L"Ctrl+Alt+Z"?1:s.hotkey==L"Ctrl+Shift+Space"?2:s.hotkey==L"Win+Z"?3:s.hotkey.empty()?4:0);hotkeySearch.SelectedIndex(s.hotkeySearch==L"Ctrl+Alt+F"?1:s.hotkeySearch==L"Ctrl+Shift+F"?2:s.hotkeySearch==L"Alt+Q"?3:0);weatherCity.Text(owner.layout.widgets.weatherCity);snapshots.IsOn(s.snapshots);syncUrl.Text(s.syncUrl);syncUser.Text(s.syncUser);try{syncPass.Password(webdav::UnprotectSecret(s.syncPass));}catch(...){}syncAuto.IsOn(s.syncAuto);if(syncHint){syncHint.Foreground(nullptr);syncHint.Text(L"");}hotkeyHint.Visibility(Visibility::Collapsed);hotkeySearchHint.Visibility(Visibility::Collapsed);applying=false;}
+void SettingsWindow::Apply(){applying=true;auto const& s=owner.layout.settings;theme.SelectedIndex(s.theme==L"Light"?1:s.theme==L"Dark"?2:0);compact.IsOn(s.compact);performance.IsOn(s.performance);autostart.IsOn(AutostartEnabled());lang.SelectedIndex(s.language==L"en-US"?2:s.language==L"zh-CN"?1:0);hotkey.SelectedIndex(s.hotkey==L"DoubleCtrl"?0:s.hotkey==L"Ctrl+Alt+G"?1:s.hotkey==L"Ctrl+Alt+Z"?2:s.hotkey==L"Ctrl+Shift+Space"?3:s.hotkey==L"Win+Z"?4:s.hotkey.empty()?6:5);hotkeyCustom.Text(s.hotkey==L"DoubleCtrl"?i18n::Tr(L"双击 Ctrl"):s.hotkey);hotkeySearch.SelectedIndex(s.hotkeySearch==L"Ctrl+Alt+F"?1:s.hotkeySearch==L"Ctrl+Shift+F"?2:s.hotkeySearch==L"Alt+Q"?3:0);weatherCity.Text(owner.layout.widgets.weatherCity);snapshots.IsOn(s.snapshots);syncUrl.Text(s.syncUrl);syncUser.Text(s.syncUser);try{syncPass.Password(webdav::UnprotectSecret(s.syncPass));}catch(...){}syncAuto.IsOn(s.syncAuto);if(syncHint){syncHint.Foreground(nullptr);syncHint.Text(L"");}hotkeyHint.Visibility(Visibility::Collapsed);hotkeySearchHint.Visibility(Visibility::Collapsed);applying=false;}
 static std::string ReadTextFile(std::filesystem::path const& p){std::ifstream f(p,std::ios::binary);if(!f)throw std::runtime_error("Cannot read file");return {std::istreambuf_iterator<char>(f),{}};}
 void SettingsWindow::OnExport(){owner.Save();auto target=shell::SaveFile(hwnd,L"guodesk-layout.json");if(target.empty())return;try{std::filesystem::copy_file(owner.store.Directory()/L"layout.json",target,std::filesystem::copy_options::overwrite_existing);}catch(...){MessageBoxW(hwnd,i18n::Tr(L"导出失败：请检查目标位置是否可写。").c_str(),L"GuoDesk",MB_OK|MB_ICONERROR);return;}if(!owner.windows.empty())owner.windows.front()->Notify(i18n::TrF(L"已导出到 {0}",{target}));}
 void SettingsWindow::OnImport(){auto picked=shell::Pick(hwnd,false,i18n::Tr(L"选择要导入的 GuoDesk 配置"));if(picked.size()!=1)return;std::string text;try{text=ReadTextFile(std::filesystem::path(picked[0]));}catch(...){MessageBoxW(hwnd,i18n::Tr(L"导入失败：文件不是有效的 GuoDesk 配置。").c_str(),L"GuoDesk",MB_OK|MB_ICONERROR);return;}Layout next;try{next=Deserialize(text);}catch(...){MessageBoxW(hwnd,i18n::Tr(L"导入失败：文件不是有效的 GuoDesk 配置。").c_str(),L"GuoDesk",MB_OK|MB_ICONERROR);return;}owner.ImportLayout(std::move(next));Controller* c=&owner;winrt::Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread().TryEnqueue([c](){c->CloseSettings();});}

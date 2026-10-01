@@ -13,6 +13,7 @@ class SettingsWindow {
  winrt::Microsoft::UI::Xaml::Controls::ComboBox lang{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::ComboBox hotkey{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::TextBlock hotkeyHint{nullptr};
+ winrt::Microsoft::UI::Xaml::Controls::TextBox hotkeyCustom{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::ComboBox hotkeySearch{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::TextBlock hotkeySearchHint{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::TextBox weatherCity{nullptr};

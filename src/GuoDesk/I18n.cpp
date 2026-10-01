@@ -216,6 +216,13 @@ KV const table[]{
  {L"GuoDesk 搜索",L"GuoDesk Search"},
  {L"搜索分区内容…",L"Search zones…"},
  {L"输入关键词，搜索全部分区的内容。回车打开第一项。",L"Type keywords to search all zones. Press Enter to open the first match."},
+ {L"输入关键词，搜索分区内容、待办和便签。回车打开第一项。",L"Type keywords to search zones, to-dos and notes. Press Enter to open the first match."},
+ {L"分区和小组件里没有匹配的内容，可以试试网页搜索。",L"No matches in zones or widgets — try a web search."},
+ {L"双击 Ctrl",L"Double-press Ctrl"},
+ {L"自定义…",L"Custom…"},
+ {L"点击此处，然后按下热键组合",L"Click here, then press a key combination"},
+ {L"继续，按下组合键中的主键…",L"Now press the main key of the combination…"},
+ {L"组合键需包含 Ctrl、Alt 或 Win 修饰键。",L"The combination must include Ctrl, Alt or Win."},
  {L"分区里没有匹配的内容，可以试试网页搜索。",L"No matches in your zones — try a web search."},
  {L"在浏览器中搜索「{0}」",L"Search the web for \"{0}\""},
  {L"GuoDesk 天气",L"GuoDesk Weather"},
@@ -295,8 +302,8 @@ KV const table[]{
  {L"下载失败：请检查地址、账号密码或网络。",L"Download failed: check the URL, credentials, or network."},
  {L"云端文件不是有效的 GuoDesk 配置。",L"The cloud file is not a valid GuoDesk layout."},
  {L"自动同步上传失败：请检查网络或 WebDAV 设置。",L"Auto sync upload failed: check the network or WebDAV settings."},
- {L"GuoDesk v1.1.0 · 桌面分区整理\n引用式入口：只存引用，不动原文件\n缺失入口可右键重新定位\n便签与待办：托盘右键开启，待办可设截止日期提醒\n时钟：托盘右键开启，右键时钟查看日历\n音乐·搜索·天气：托盘右键开启\n\nMIT License · cloudlight369",
-  L"GuoDesk v1.1.0 · Desktop zone organizer\nReference-based entries: only links stored, originals untouched\nRight-click a missing entry to relocate it\nNote & To-Do: enable from the tray; to-dos support due-date reminders\nClock: enable from the tray; right-click for a calendar\nMusic · Search · Weather: enable from the tray\n\nMIT License · cloudlight369"},
+ {L"GuoDesk v1.2.0 · 桌面分区整理\n引用式入口：只存引用，不动原文件\n缺失入口可右键重新定位\n便签与待办：托盘右键开启，待办可设截止日期提醒\n时钟：托盘右键开启，右键时钟查看日历\n音乐·搜索·天气：托盘右键开启\n双击 Ctrl 或自定义热键随时唤起\nWebDAV 同步：设置中配置网盘，多机同步布局\n\nMIT License · cloudlight369",
+  L"GuoDesk v1.2.0 · Desktop zone organizer\nReference-based entries: only links stored, originals untouched\nRight-click a missing entry to relocate it\nNote & To-Do: enable from the tray; to-dos support due-date reminders\nClock: enable from the tray; right-click for a calendar\nMusic · Search · Weather: enable from the tray\nSummon anytime with double-press Ctrl or a custom hotkey\nWebDAV sync: configure a cloud drive in Settings to sync layouts across machines\n\nMIT License · cloudlight369"},
 };
 std::wstring Resolve(std::wstring const& setting){
  std::wstring lang=setting;

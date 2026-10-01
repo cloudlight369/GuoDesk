@@ -188,6 +188,26 @@ void RunTests(std::filesystem::path const& output){std::ofstream report(output);
  expect(bad11.settings.syncUrl.empty()&&bad11.settings.syncPass==L"x","non-http sync url rejected");
  auto lg11=Deserialize("{\"version\":1,\"zones\":[]}");
  expect(!lg11.settings.performance&&lg11.settings.syncUrl.empty()&&!lg11.settings.syncAuto,"legacy defaults for v11 fields");
+ expect(IsDoubleCtrlHotkey(L"DoubleCtrl")&&!IsDoubleCtrlHotkey(L"Ctrl+Alt+G")&&!IsDoubleCtrlHotkey(L""),"double ctrl marker");
+ Layout dcl;dcl.settings.hotkey=L"DoubleCtrl";auto dcr=Deserialize(Serialize(dcl));
+ expect(dcr.settings.hotkey==L"DoubleCtrl","double ctrl hotkey roundtrip");
+ auto dcl2=Deserialize("{\"version\":1,\"zones\":[],\"settings\":{\"hotkey\":\"DoubleCtrl\"}}");
+ expect(dcl2.settings.hotkey==L"DoubleCtrl","double ctrl hotkey from json");
+ expect(ParseHotkey(L"Win+F9",hk)&&HotkeyToString(hk)==L"Win+F9","parse hotkey win F9");
+ expect(ParseHotkey(L"Ctrl+Shift+7",hk)&&hk.vk==L'7'&&HotkeyToString(hk)==L"Ctrl+Shift+7","parse hotkey digit");
+ Widgets sw;AddTodo(sw,L"买牛奶");AddTodo(sw,L"写周报");ToggleTodo(sw,sw.todos[0].id);
+ sw.pages.push_back({L"会议记录\n细节",0});sw.pages.push_back({L"   ",0});
+ Layout swl;swl.widgets=sw;
+ std::vector<SearchHit> wh;SearchWidgets(swl,L"牛奶",wh);
+ expect(wh.empty(),"search widgets skips done todo");
+ std::vector<SearchHit> wh2;SearchWidgets(swl,L"周报",wh2);
+ expect(wh2.size()==1&&wh2[0].kind==L"todo"&&wh2[0].name==L"写周报"&&wh2[0].zone.empty(),"search widgets finds todo");
+ std::vector<SearchHit> wh3;SearchWidgets(swl,L"会议",wh3);
+ expect(wh3.size()==1&&wh3[0].kind==L"note"&&wh3[0].name==L"会议记录","search widgets finds note first line");
+ std::vector<SearchHit> wh4;SearchWidgets(swl,L"",wh4);
+ expect(wh4.empty(),"search widgets empty query");
+ std::vector<SearchHit> wh5;SearchWidgets(swl,L"不存在的词",wh5);
+ expect(wh5.empty(),"search widgets no match");
 report<<"TOTAL "<<passed<<" passed\n";
 }
 }
