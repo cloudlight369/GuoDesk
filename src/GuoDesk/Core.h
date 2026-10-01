@@ -3,7 +3,7 @@ namespace guodesk {
 struct Entry { std::wstring id, path; std::wstring stack; };
 struct Stack { std::wstring id, name; };
 struct Zone { std::wstring id, name=L"常用"; int x=120,y=120,width=440,height=360; bool collapsed=false; std::vector<Entry> entries; std::wstring mappedFolder; std::wstring viewMode=L"grid"; int nameLines=2; std::wstring sortKey; bool sortDescending=false; int tileSize=1; std::wstring mon; int mx=0,my=0; std::vector<Stack> stacks; std::wstring group; int groupTab=0; bool capsule=false; };
-struct Settings { std::wstring theme; bool compact=false; std::wstring language; std::wstring hotkey=L"Ctrl+Alt+G"; bool snapshots=true; bool guideDone=false; std::wstring hotkeySearch; };
+struct Settings { std::wstring theme; bool compact=false; std::wstring language; std::wstring hotkey=L"Ctrl+Alt+G"; bool snapshots=true; bool guideDone=false; std::wstring hotkeySearch; bool performance=false; std::wstring syncUrl,syncUser,syncPass; bool syncAuto=false; };
 struct Rule { std::wstring id, name; std::vector<std::wstring> exts, keywords; std::wstring targetZone; };
 struct TodoItem { std::wstring id, text; bool done=false; long long due=0; bool reminded=false; };
 struct NotePage { std::wstring text; int color=0; };

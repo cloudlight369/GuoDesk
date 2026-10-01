@@ -26,8 +26,10 @@ class DeskWindow {
  std::vector<RECT> Peers(); void SnapResize(RECT&,int); void DragUpdate();
  winrt::fire_and_forget Drop(winrt::Microsoft::UI::Xaml::DragEventArgs args,size_t position,std::wstring stackId={});
  void Menu(winrt::Microsoft::UI::Xaml::FrameworkElement const& target);
+ void EntryMenu(std::wstring const& path,std::wstring const& key,std::wstring const& stackId);
  void RebuildTabs(); void SwitchTab(int index);
  void SetCapsule(bool on); void ExpandCapsule(); void ShrinkCapsule();
+ void ApplyPerformance();
 public:
  std::wstring id; std::wstring viewId;
  Zone& View();
@@ -43,7 +45,7 @@ public:
 };
 class SettingsWindow;
 class Controller {
- HWND messageWindow{}; NOTIFYICONDATAW tray{}; UINT taskbarCreated{}; HANDLE mutex{}; bool quitting=false; std::map<std::wstring,std::wstring> mappedStamp;
+ HWND messageWindow{}; NOTIFYICONDATAW tray{}; UINT taskbarCreated{}; HANDLE mutex{}; bool quitting=false; std::map<std::wstring,std::wstring> mappedStamp; std::shared_ptr<bool> syncAlive{std::make_shared<bool>(true)};
  static LRESULT CALLBACK MessageProc(HWND,UINT,WPARAM,LPARAM);
  void AddTray();
 public:
@@ -55,6 +57,7 @@ public:
  void ShowNote(); void CloseNote(); void ShowTodo(); void CloseTodo();
  void ShowClock(); void CloseClock(); void ShowGuide(); void CloseGuide(); void CheckReminders();
  void ShowMusic(); void CloseMusic(); void ShowSearch(); void CloseSearch(); void ShowWeather(); void CloseWeather();
+ void SyncUploadAuto();
  void MoveEntry(std::wstring const& entry,std::wstring const& target,size_t index);
  void SyncWindows(); void MergeInto(std::wstring const& self,std::wstring const& other); void Ungroup(std::wstring const& zoneId); void AddToGroup(std::wstring const& anchorId);
  std::unique_ptr<class SettingsWindow> settings; std::unique_ptr<class TidyWindow> tidy;

@@ -4,6 +4,7 @@
 #include "Shell.h"
 #include "I18n.h"
 #include "WeatherWindow.h"
+#include "WebDav.h"
 using namespace winrt;
 using namespace Microsoft::UI::Xaml;
 using namespace Microsoft::UI::Xaml::Controls;
@@ -23,6 +24,8 @@ SettingsWindow::SettingsWindow(Controller& c):owner(c){
  theme=ComboBox();theme.HorizontalAlignment(HorizontalAlignment::Stretch);ComboBoxItem def;def.Content(box_value(i18n::Tr(L"跟随系统")));theme.Items().Append(def);ComboBoxItem light;light.Content(box_value(i18n::Tr(L"浅色")));theme.Items().Append(light);ComboBoxItem dark;dark.Content(box_value(i18n::Tr(L"深色")));theme.Items().Append(dark);
  theme.SelectionChanged([this](auto&&,auto&&){if(applying)return;OnTheme(theme.SelectedIndex());});panel.Children().Append(theme);
  compact=ToggleSwitch();compact.OnContent(box_value(i18n::Tr(L"紧凑磁贴")));compact.OffContent(box_value(i18n::Tr(L"紧凑磁贴")));compact.Toggled([this](auto&&,auto&&){if(applying)return;OnCompact(compact.IsOn());});panel.Children().Append(compact);
+ performance=ToggleSwitch();performance.OnContent(box_value(i18n::Tr(L"性能模式")));performance.OffContent(box_value(i18n::Tr(L"性能模式")));performance.Toggled([this](auto&&,auto&&){if(applying)return;OnPerformance(performance.IsOn());});panel.Children().Append(performance);
+ TextBlock perfHint;perfHint.Text(i18n::Tr(L"关闭背景效果与入场动画，低配电脑上更流畅。"));perfHint.FontSize(11);perfHint.Opacity(0.6);perfHint.TextWrapping(TextWrapping::Wrap);panel.Children().Append(perfHint);
  panel.Children().Append(Caption(i18n::Tr(L"常规")));
  autostart=ToggleSwitch();autostart.OnContent(box_value(i18n::Tr(L"开机自动启动")));autostart.OffContent(box_value(i18n::Tr(L"开机自动启动")));autostart.Toggled([this](auto&&,auto&&){if(applying)return;OnAutostart(autostart.IsOn());});panel.Children().Append(autostart);
  panel.Children().Append(Caption(i18n::Tr(L"全局热键")));
@@ -55,6 +58,17 @@ SettingsWindow::SettingsWindow(Controller& c):owner(c){
  snapshots=ToggleSwitch();snapshots.OnContent(box_value(i18n::Tr(L"配置自动快照")));snapshots.OffContent(box_value(i18n::Tr(L"配置自动快照")));snapshots.Toggled([this](auto&&,auto&&){if(applying)return;OnSnapshots(snapshots.IsOn());});panel.Children().Append(snapshots);
  TextBlock snapHint;snapHint.Text(i18n::Tr(L"每天首次及每 20 次保存各留一份，保留最近 5 份，配置损坏可自动恢复。"));snapHint.FontSize(11);snapHint.Opacity(0.6);snapHint.TextWrapping(TextWrapping::Wrap);panel.Children().Append(snapHint);
  auto guideLink=HyperlinkButton();guideLink.Content(box_value(i18n::Tr(L"查看新手引导")));guideLink.Margin(Thickness{0,2,0,0});guideLink.Padding(Thickness{0});guideLink.Click([this](auto&&,auto&&){owner.ShowGuide();});panel.Children().Append(guideLink);
+ panel.Children().Append(Caption(i18n::Tr(L"WebDAV 同步")));
+ TextBlock syncIntro;syncIntro.Text(i18n::Tr(L"通过任意支持 WebDAV 的网盘在多台电脑间同步分区配置，上传后以 guodesk-layout.json 存到该目录。"));syncIntro.FontSize(12);syncIntro.TextWrapping(TextWrapping::Wrap);syncIntro.Opacity(0.8);panel.Children().Append(syncIntro);
+ syncUrl=TextBox();syncUrl.PlaceholderText(i18n::Tr(L"WebDAV 地址，如 https://dav.jianguoyun.com/dav/GuoDesk"));syncUrl.HorizontalAlignment(HorizontalAlignment::Stretch);syncUrl.Margin(Thickness{0,6,0,0});panel.Children().Append(syncUrl);
+ syncUser=TextBox();syncUser.PlaceholderText(i18n::Tr(L"账号（可选）"));syncUser.HorizontalAlignment(HorizontalAlignment::Stretch);syncUser.Margin(Thickness{0,6,0,0});panel.Children().Append(syncUser);
+ syncPass=PasswordBox();syncPass.PlaceholderText(i18n::Tr(L"密码（本机加密保存）"));syncPass.HorizontalAlignment(HorizontalAlignment::Stretch);syncPass.Margin(Thickness{0,6,0,0});panel.Children().Append(syncPass);
+ syncAuto=ToggleSwitch();syncAuto.OnContent(box_value(i18n::Tr(L"自动同步")));syncAuto.OffContent(box_value(i18n::Tr(L"自动同步")));syncAuto.Margin(Thickness{0,6,0,0});syncAuto.Toggled([this](auto&&,auto&&){if(applying)return;OnSyncAuto(syncAuto.IsOn());});panel.Children().Append(syncAuto);
+ StackPanel syncBar;syncBar.Orientation(Orientation::Horizontal);syncBar.Spacing(8);syncBar.Margin(Thickness{0,8,0,0});
+ auto syncUpBtn=Button();syncUpBtn.Content(box_value(i18n::Tr(L"上传到云端")));syncUpBtn.Click([this](auto&&,auto&&){OnSyncUpload();});syncBar.Children().Append(syncUpBtn);
+ auto syncDownBtn=Button();syncDownBtn.Content(box_value(i18n::Tr(L"从云端恢复")));syncDownBtn.Click([this](auto&&,auto&&){OnSyncDownload();});syncBar.Children().Append(syncDownBtn);
+ panel.Children().Append(syncBar);
+ syncHint=TextBlock();syncHint.FontSize(11);syncHint.Opacity(0.85);syncHint.TextWrapping(TextWrapping::Wrap);syncHint.Margin(Thickness{0,4,0,0});panel.Children().Append(syncHint);
  panel.Children().Append(Caption(i18n::Tr(L"整理规则")));
  TextBlock ruleIntro;ruleIntro.Text(i18n::Tr(L"按扩展名或文件名关键词，把桌面文件以引用方式归入分区——原文件始终保持在桌面。"));ruleIntro.FontSize(12);ruleIntro.TextWrapping(TextWrapping::Wrap);ruleIntro.Opacity(0.8);panel.Children().Append(ruleIntro);
  rulesPanel=StackPanel();rulesPanel.Spacing(4);rulesPanel.Padding(Thickness{0,6,0,0});panel.Children().Append(rulesPanel);
@@ -64,13 +78,14 @@ SettingsWindow::SettingsWindow(Controller& c):owner(c){
  panel.Children().Append(ruleBar);
  RebuildRules();
  panel.Children().Append(Caption(i18n::Tr(L"关于")));
- TextBlock about;about.Text(i18n::Tr(L"GuoDesk v1.0.0 · 桌面分区整理\n引用式入口：只存引用，不动原文件\n缺失入口可右键重新定位\n便签与待办：托盘右键开启，待办可设截止日期提醒\n时钟：托盘右键开启，右键时钟查看日历\n音乐·搜索·天气：托盘右键开启\n\nMIT License · cloudlight369"));about.FontSize(12);about.TextWrapping(TextWrapping::Wrap);about.Opacity(0.8);panel.Children().Append(about);
+ TextBlock about;about.Text(i18n::Tr(L"GuoDesk v1.1.0 · 桌面分区整理\n引用式入口：只存引用，不动原文件\n缺失入口可右键重新定位\n便签与待办：托盘右键开启，待办可设截止日期提醒\n时钟：托盘右键开启，右键时钟查看日历\n音乐·搜索·天气：托盘右键开启\nWebDAV 同步：设置中配置网盘，多机同步布局\n\nMIT License · cloudlight369"));about.FontSize(12);about.TextWrapping(TextWrapping::Wrap);about.Opacity(0.8);panel.Children().Append(about);
  scroll.Content(panel);window.Content(scroll);
  window.Closed([this](auto&&,auto&&){if(closing)return;closing=true;window.DispatcherQueue().TryEnqueue([this]{owner.CloseSettings();});});
  window.Activate();
 }
 void SettingsWindow::OnTheme(int index){auto& s=owner.layout.settings;s.theme=index==1?L"Light":index==2?L"Dark":L"";owner.ApplySettings();owner.Save();}
 void SettingsWindow::OnCompact(bool on){owner.layout.settings.compact=on;owner.ApplySettings();owner.Save();}
+void SettingsWindow::OnPerformance(bool on){owner.layout.settings.performance=on;for(auto& w:owner.windows)w->ApplySettings();owner.Save();}
 void SettingsWindow::OnAutostart(bool on){SetAutostart(on);bool actual=AutostartEnabled();if(actual!=on){applying=true;autostart.IsOn(actual);applying=false;}}
 void SettingsWindow::OnLanguage(int index){owner.layout.settings.language=index==1?L"zh-CN":index==2?L"en-US":L"";owner.Save();}
 void SettingsWindow::OnHotkey(int index){auto& s=owner.layout.settings;s.hotkey=index==1?L"Ctrl+Alt+Z":index==2?L"Ctrl+Shift+Space":index==3?L"Win+Z":index==4?L"":L"Ctrl+Alt+G";bool ok=owner.ApplyHotkey();hotkeyHint.Visibility(ok?Visibility::Collapsed:Visibility::Visible);owner.Save();}
@@ -79,7 +94,57 @@ void SettingsWindow::OnGeoSearch(){auto name=std::wstring(weatherCity.Text());si
 void SettingsWindow::OnGeoSave(){int sel=weatherResults.SelectedIndex();if(sel<0||sel>=static_cast<int>(geo.size()))return;auto& s=owner.layout.widgets;s.weatherCity=geo[static_cast<size_t>(sel)].name;s.weatherLat=geo[static_cast<size_t>(sel)].lat;s.weatherLon=geo[static_cast<size_t>(sel)].lon;owner.Save();weatherHint.Text(i18n::Tr(L"已保存，天气组件将使用所选城市。"));weatherResults.Visibility(Visibility::Collapsed);weatherSave.Visibility(Visibility::Collapsed);if(owner.weather)owner.weather->Reload();}
 void SettingsWindow::OnGeoAuto(){auto& s=owner.layout.widgets;s.weatherCity.clear();s.weatherLat=999;s.weatherLon=999;owner.Save();weatherCity.Text(L"");weatherHint.Text(i18n::Tr(L"已恢复自动定位。"));weatherResults.Visibility(Visibility::Collapsed);weatherSave.Visibility(Visibility::Collapsed);if(owner.weather)owner.weather->Reload();}
 void SettingsWindow::OnSnapshots(bool on){owner.layout.settings.snapshots=on;owner.store.SetSnapshots(on);owner.Save();}
-void SettingsWindow::Apply(){applying=true;auto const& s=owner.layout.settings;theme.SelectedIndex(s.theme==L"Light"?1:s.theme==L"Dark"?2:0);compact.IsOn(s.compact);autostart.IsOn(AutostartEnabled());lang.SelectedIndex(s.language==L"en-US"?2:s.language==L"zh-CN"?1:0);hotkey.SelectedIndex(s.hotkey==L"Ctrl+Alt+Z"?1:s.hotkey==L"Ctrl+Shift+Space"?2:s.hotkey==L"Win+Z"?3:s.hotkey.empty()?4:0);hotkeySearch.SelectedIndex(s.hotkeySearch==L"Ctrl+Alt+F"?1:s.hotkeySearch==L"Ctrl+Shift+F"?2:s.hotkeySearch==L"Alt+Q"?3:0);weatherCity.Text(owner.layout.widgets.weatherCity);snapshots.IsOn(s.snapshots);hotkeyHint.Visibility(Visibility::Collapsed);hotkeySearchHint.Visibility(Visibility::Collapsed);applying=false;}
+static std::wstring TrimSpace(std::wstring v){size_t a=v.find_first_not_of(L" \t\r\n");if(a==std::wstring::npos)return{};size_t b=v.find_last_not_of(L" \t\r\n");return v.substr(a,b-a+1);}
+static void SyncHintWarn(winrt::Microsoft::UI::Xaml::Controls::TextBlock const& hint,std::wstring const& text){hint.Foreground(winrt::Microsoft::UI::Xaml::Media::SolidColorBrush(Windows::UI::Color{255,232,17,35}));hint.Text(text);}
+static void SyncHintInfo(winrt::Microsoft::UI::Xaml::Controls::TextBlock const& hint,std::wstring const& text){hint.Foreground(nullptr);hint.Text(text);}
+void SettingsWindow::OnSyncSave(){
+ auto& s=owner.layout.settings;
+ s.syncUrl=TrimSpace(std::wstring(syncUrl.Text()));
+ if(!s.syncUrl.empty()){webdav::UrlParts up;if(!webdav::ParseUrl(s.syncUrl,up)){s.syncUrl.clear();SyncHintWarn(syncHint,i18n::Tr(L"地址无效：需以 http:// 或 https:// 开头。"));return;}}
+ s.syncUser=TrimSpace(std::wstring(syncUser.Text()));
+ s.syncPass=webdav::ProtectSecret(TrimSpace(std::wstring(syncPass.Password())));
+ owner.Save();
+}
+void SettingsWindow::OnSyncAuto(bool on){
+ OnSyncSave();
+ auto& s=owner.layout.settings;
+ if(on&&(s.syncUrl.empty()||s.syncPass.empty())){SyncHintWarn(syncHint,i18n::Tr(L"请先填写 WebDAV 地址和密码，再开启自动同步。"));applying=true;syncAuto.IsOn(false);applying=false;return;}
+ s.syncAuto=on;owner.Save();
+ if(on)SyncHintInfo(syncHint,i18n::Tr(L"已开启自动同步：配置变化后约 20 秒内自动上传。"));
+}
+void SettingsWindow::OnSyncUpload(){
+ OnSyncSave();
+ if(owner.layout.settings.syncUrl.empty()||owner.layout.settings.syncPass.empty()){SyncHintWarn(syncHint,i18n::Tr(L"请先填写 WebDAV 地址和密码。"));return;}
+ SyncHintInfo(syncHint,i18n::Tr(L"正在上传…"));
+ auto data=Serialize(owner.layout);
+ auto url=webdav::JoinUrl(owner.layout.settings.syncUrl,L"guodesk-layout.json");
+ auto user=owner.layout.settings.syncUser;auto pass=webdav::UnprotectSecret(owner.layout.settings.syncPass);
+ auto weak=std::weak_ptr<bool>(alive);
+ std::thread([this,weak,data=std::move(data),url,user,pass](){
+  bool ok=webdav::UploadText(url,user,pass,data);
+  window.DispatcherQueue().TryEnqueue([this,weak,ok]{if(weak.lock()==nullptr||closing||!syncHint)return;SyncHintInfo(syncHint,ok?i18n::Tr(L"上传完成。"):i18n::Tr(L"上传失败：请检查地址、账号密码或网络。"));});
+ }).detach();
+}
+void SettingsWindow::OnSyncDownload(){
+ OnSyncSave();
+ if(owner.layout.settings.syncUrl.empty()||owner.layout.settings.syncPass.empty()){SyncHintWarn(syncHint,i18n::Tr(L"请先填写 WebDAV 地址和密码。"));return;}
+ SyncHintInfo(syncHint,i18n::Tr(L"正在下载…"));
+ auto url=webdav::JoinUrl(owner.layout.settings.syncUrl,L"guodesk-layout.json");
+ auto user=owner.layout.settings.syncUser;auto pass=webdav::UnprotectSecret(owner.layout.settings.syncPass);
+ auto weak=std::weak_ptr<bool>(alive);
+ std::thread([this,weak,url,user,pass](){
+  std::string data;bool ok=webdav::DownloadText(url,user,pass,data);
+  Layout next;bool valid=false;
+  if(ok){try{next=Deserialize(data);valid=true;}catch(...){}}
+  window.DispatcherQueue().TryEnqueue([this,weak,ok,valid,next=std::move(next)]()mutable{
+   if(weak.lock()==nullptr||closing||!syncHint)return;
+   if(!ok){SyncHintWarn(syncHint,i18n::Tr(L"下载失败：请检查地址、账号密码或网络。"));return;}
+   if(!valid){SyncHintWarn(syncHint,i18n::Tr(L"云端文件不是有效的 GuoDesk 配置。"));return;}
+   owner.ImportLayout(std::move(next));
+  });
+ }).detach();
+}
+void SettingsWindow::Apply(){applying=true;auto const& s=owner.layout.settings;theme.SelectedIndex(s.theme==L"Light"?1:s.theme==L"Dark"?2:0);compact.IsOn(s.compact);performance.IsOn(s.performance);autostart.IsOn(AutostartEnabled());lang.SelectedIndex(s.language==L"en-US"?2:s.language==L"zh-CN"?1:0);hotkey.SelectedIndex(s.hotkey==L"Ctrl+Alt+Z"?1:s.hotkey==L"Ctrl+Shift+Space"?2:s.hotkey==L"Win+Z"?3:s.hotkey.empty()?4:0);hotkeySearch.SelectedIndex(s.hotkeySearch==L"Ctrl+Alt+F"?1:s.hotkeySearch==L"Ctrl+Shift+F"?2:s.hotkeySearch==L"Alt+Q"?3:0);weatherCity.Text(owner.layout.widgets.weatherCity);snapshots.IsOn(s.snapshots);syncUrl.Text(s.syncUrl);syncUser.Text(s.syncUser);try{syncPass.Password(webdav::UnprotectSecret(s.syncPass));}catch(...){}syncAuto.IsOn(s.syncAuto);if(syncHint){syncHint.Foreground(nullptr);syncHint.Text(L"");}hotkeyHint.Visibility(Visibility::Collapsed);hotkeySearchHint.Visibility(Visibility::Collapsed);applying=false;}
 static std::string ReadTextFile(std::filesystem::path const& p){std::ifstream f(p,std::ios::binary);if(!f)throw std::runtime_error("Cannot read file");return {std::istreambuf_iterator<char>(f),{}};}
 void SettingsWindow::OnExport(){owner.Save();auto target=shell::SaveFile(hwnd,L"guodesk-layout.json");if(target.empty())return;try{std::filesystem::copy_file(owner.store.Directory()/L"layout.json",target,std::filesystem::copy_options::overwrite_existing);}catch(...){MessageBoxW(hwnd,i18n::Tr(L"导出失败：请检查目标位置是否可写。").c_str(),L"GuoDesk",MB_OK|MB_ICONERROR);return;}if(!owner.windows.empty())owner.windows.front()->Notify(i18n::TrF(L"已导出到 {0}",{target}));}
 void SettingsWindow::OnImport(){auto picked=shell::Pick(hwnd,false,i18n::Tr(L"选择要导入的 GuoDesk 配置"));if(picked.size()!=1)return;std::string text;try{text=ReadTextFile(std::filesystem::path(picked[0]));}catch(...){MessageBoxW(hwnd,i18n::Tr(L"导入失败：文件不是有效的 GuoDesk 配置。").c_str(),L"GuoDesk",MB_OK|MB_ICONERROR);return;}Layout next;try{next=Deserialize(text);}catch(...){MessageBoxW(hwnd,i18n::Tr(L"导入失败：文件不是有效的 GuoDesk 配置。").c_str(),L"GuoDesk",MB_OK|MB_ICONERROR);return;}owner.ImportLayout(std::move(next));Controller* c=&owner;winrt::Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread().TryEnqueue([c](){c->CloseSettings();});}

@@ -2,6 +2,7 @@
 #include "Shell.h"
 #include "I18n.h"
 #include <robuffer.h>
+#include <shlwapi.h>
 using namespace winrt;
 namespace guodesk::shell {
 HWND Handle(Microsoft::UI::Xaml::Window const& w){HWND h{};check_hresult(w.as<IWindowNative>()->get_WindowHandle(&h));return h;}
@@ -9,6 +10,32 @@ std::vector<std::wstring> Pick(HWND owner,bool folder,std::wstring const& title)
 std::wstring SaveFile(HWND owner,wchar_t const* defaultName){com_ptr<IFileSaveDialog> dialog;check_hresult(CoCreateInstance(CLSID_FileSaveDialog,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(dialog.put())));DWORD options{};check_hresult(dialog->GetOptions(&options));check_hresult(dialog->SetOptions(options|FOS_FORCEFILESYSTEM));check_hresult(dialog->SetFileName(defaultName));check_hresult(dialog->SetDefaultExtension(L"json"));HRESULT hr=dialog->Show(owner);if(hr==HRESULT_FROM_WIN32(ERROR_CANCELLED))return {};check_hresult(hr);com_ptr<IShellItem> item;check_hresult(dialog->GetResult(item.put()));PWSTR p{};check_hresult(item->GetDisplayName(SIGDN_FILESYSPATH,&p));std::wstring result(p);CoTaskMemFree(p);return result;}
 void Open(HWND owner,std::wstring const& path){SHELLEXECUTEINFOW e{sizeof(e)};e.hwnd=owner;e.lpFile=path.c_str();e.nShow=SW_SHOWNORMAL;e.fMask=SEE_MASK_FLAG_NO_UI;if(!ShellExecuteExW(&e))throw_last_error();}
 void Reveal(HWND,std::wstring const& path){PIDLIST_ABSOLUTE pidl{};check_hresult(SHParseDisplayName(path.c_str(),nullptr,&pidl,0,nullptr));auto hr=SHOpenFolderAndSelectItems(pidl,0,nullptr,0);CoTaskMemFree(pidl);check_hresult(hr);}
+int EntryContextMenu(HWND hwnd,std::wstring const& path,std::vector<std::wstring> const& custom){
+ int result=-1;
+ PIDLIST_ABSOLUTE pidl{};
+ if(FAILED(SHParseDisplayName(path.c_str(),nullptr,&pidl,0,nullptr))||!pidl)return result;
+ auto parent=ILClone(pidl);
+ if(parent)ILRemoveLastID(parent);
+ PCUITEMID_CHILD child=ILFindLastID(pidl);
+ com_ptr<IShellFolder> folder;
+ com_ptr<IContextMenu> context;
+ if(parent&&SUCCEEDED(SHBindToObject(nullptr,parent,nullptr,IID_PPV_ARGS(folder.put())))&&SUCCEEDED(folder->GetUIObjectOf(hwnd,1,&child,IID_IContextMenu,nullptr,context.put_void()))){
+  if(HMENU menu=CreatePopupMenu()){
+   if(SUCCEEDED(context->QueryContextMenu(menu,0,1,0x6FFF,GetKeyState(VK_SHIFT)<0?CMF_EXTENDEDVERBS:CMF_NORMAL))){
+    if(!custom.empty()){AppendMenuW(menu,MF_SEPARATOR,0,nullptr);for(size_t i=0;i<custom.size();++i)AppendMenuW(menu,MF_STRING,static_cast<UINT_PTR>(0x7000+i),custom[i].c_str());}
+    POINT p{};GetCursorPos(&p);
+    SetForegroundWindow(hwnd);
+    int cmd=TrackPopupMenu(menu,TPM_RETURNCMD|TPM_NONOTIFY|TPM_RIGHTBUTTON,p.x,p.y,0,hwnd,nullptr);
+    if(cmd>=0x7000)result=cmd-0x7000;
+    else if(cmd>0){CMINVOKECOMMANDINFO info{sizeof(info)};info.hwnd=hwnd;info.lpVerb=MAKEINTRESOURCEA(cmd);info.nShow=SW_SHOWNORMAL;context->InvokeCommand(&info);}
+   }
+   DestroyMenu(menu);
+  }
+ }
+ if(parent)ILFree(parent);
+ ILFree(pidl);
+ return result;
+}
 std::wstring Name(std::wstring const& path){SHFILEINFOW info{};if(SHGetFileInfoW(path.c_str(),0,&info,sizeof(info),SHGFI_DISPLAYNAME))return info.szDisplayName;return std::filesystem::path(path).filename().wstring();}
 void Fit(Zone& z){RECT r{z.x,z.y,z.x+z.width,z.y+z.height};MONITORINFO info{sizeof(info)};GetMonitorInfoW(MonitorFromRect(&r,MONITOR_DEFAULTTONEAREST),&info);Clamp(z,info.rcWork);}
 HWND DesktopHost(){HWND result{};EnumWindows([](HWND h,LPARAM p)->BOOL{if(FindWindowExW(h,nullptr,L"SHELLDLL_DefView",nullptr)){*reinterpret_cast<HWND*>(p)=h;return FALSE;}return TRUE;},reinterpret_cast<LPARAM>(&result));return result;}

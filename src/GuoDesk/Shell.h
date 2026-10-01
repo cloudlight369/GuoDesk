@@ -6,6 +6,7 @@ std::vector<std::wstring> Pick(HWND owner,bool folder=false,std::wstring const& 
 std::wstring SaveFile(HWND owner,wchar_t const* defaultName);
 void Open(HWND owner,std::wstring const& path);
 void Reveal(HWND owner,std::wstring const& path);
+int EntryContextMenu(HWND hwnd,std::wstring const& path,std::vector<std::wstring> const& custom);
 std::wstring Name(std::wstring const& path);
 void Fit(Zone& zone);
 HWND DesktopHost();

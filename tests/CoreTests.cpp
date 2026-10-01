@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "Core.h"
 #include "I18n.h"
+#include "WebDav.h"
 #include <iostream>
 namespace guodesk {
 void RunTests(std::filesystem::path const& output){std::ofstream report(output);int passed=0;auto expect=[&](bool ok,char const* name){report<<(ok?"PASS ":"FAIL ")<<name<<'\n';report.flush();if(!ok)throw std::runtime_error(name);++passed;};
@@ -171,6 +172,22 @@ void RunTests(std::filesystem::path const& output){std::ofstream report(output);
  expect(ds10.zones[0].entries[0].stack.empty(),"dangling entry stack cleared");
  auto vs10=Deserialize("{\"version\":1,\"zones\":[{\"id\":\"z\",\"name\":\"n\",\"x\":0,\"y\":0,\"width\":280,\"height\":160,\"collapsed\":false,\"entries\":[{\"id\":\"e1\",\"path\":\"D:\\\\x.txt\",\"stack\":\"s1\"}],\"stacks\":[{\"id\":\"s1\",\"name\":\"S\"}]}]}");
  expect(vs10.zones[0].entries[0].stack==L"s1","valid entry stack survives");
+ webdav::UrlParts up;
+ expect(webdav::ParseUrl(L"https://dav.example.com:5006/home",up)&&up.scheme==L"https"&&up.host==L"dav.example.com"&&up.port==5006&&up.path==L"/home","parse https url with port");
+ webdav::UrlParts uh;
+ expect(webdav::ParseUrl(L"http://example.com/dav",uh)&&uh.scheme==L"http"&&uh.host==L"example.com"&&uh.port==80&&uh.path==L"/dav","parse http url default port");
+ expect(!webdav::ParseUrl(L"example.com/dav",up)&&!webdav::ParseUrl(L"ftp://example.com",up)&&!webdav::ParseUrl(L"",up),"parse url rejects bad input");
+ expect(webdav::JoinUrl(L"https://dav.example.com/dav/",L"a.txt")==L"https://dav.example.com/dav/a.txt"&&webdav::JoinUrl(L"https://dav.example.com/dav",L"b.txt")==L"https://dav.example.com/dav/b.txt","join url normalizes slash");
+ auto blob=webdav::ProtectSecret(L"密码 abc 123");
+ expect(!blob.empty()&&blob!=L"密码 abc 123"&&webdav::UnprotectSecret(blob)==L"密码 abc 123","dpapi secret roundtrip");
+ expect(webdav::UnprotectSecret(L"not-a-blob!!").empty(),"unprotect garbage returns empty");
+ l.settings.performance=true;l.settings.syncUrl=L"https://dav.example.com:5006/home/";l.settings.syncUser=L"user@example.com";l.settings.syncPass=L"pass";l.settings.syncAuto=true;
+ auto r11=Deserialize(Serialize(l));
+ expect(r11.settings.performance&&r11.settings.syncUrl==L"https://dav.example.com:5006/home/"&&r11.settings.syncUser==L"user@example.com"&&r11.settings.syncPass==L"pass"&&r11.settings.syncAuto,"v11 sync fields roundtrip");
+ auto bad11=Deserialize("{\"version\":1,\"zones\":[],\"settings\":{\"syncUrl\":\"ftp://example.com\",\"syncPass\":\"x\"}}");
+ expect(bad11.settings.syncUrl.empty()&&bad11.settings.syncPass==L"x","non-http sync url rejected");
+ auto lg11=Deserialize("{\"version\":1,\"zones\":[]}");
+ expect(!lg11.settings.performance&&lg11.settings.syncUrl.empty()&&!lg11.settings.syncAuto,"legacy defaults for v11 fields");
 report<<"TOTAL "<<passed<<" passed\n";
 }
 }
