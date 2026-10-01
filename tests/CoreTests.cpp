@@ -14,6 +14,9 @@ void RunTests(std::filesystem::path const& output){std::ofstream report(output);
  std::filesystem::remove(dir/L"a.txt");SyncMapped(mz);expect(mz.entries.size()==2,"mapped sync reflects deletion");
  mz.mappedFolder=dir/L"missing";SyncMapped(mz);expect(mz.entries.size()==2,"missing folder keeps entries");
  std::filesystem::remove_all(dir);
+ auto hdir=std::filesystem::temp_directory_path()/NewId();std::filesystem::create_directories(hdir);std::ofstream(hdir/L"keep.txt");std::ofstream(hdir/L"desktop.ini");
+ Zone hz;hz.id=NewId();hz.mappedFolder=hdir.wstring();SyncMapped(hz);expect(hz.entries.size()==1&&PathKey(hz.entries[0].path)==PathKey((hdir/L"keep.txt").wstring()),"mapped sync skips desktop.ini");
+ std::filesystem::remove_all(hdir);
  expect(Deserialize("{\"version\":1,\"zones\":[]}").rules.size()==3,"default rules injected");
  Rule dr;dr.id=NewId();dr.name=L"测试规则";dr.exts={L".PDF",L"doc"};dr.targetZone=z.id;Layout rl{{z}};rl.rules={dr};auto rr=Deserialize(Serialize(rl));expect(rr.rules.size()==1&&rr.rules[0].name==L"测试规则"&&rr.rules[0].targetZone==z.id,"rules roundtrip");
  auto rdir=std::filesystem::temp_directory_path()/NewId();std::filesystem::create_directories(rdir);std::ofstream(rdir/L"报告.pdf");std::ofstream(rdir/L"简历-v2.docx");std::ofstream(rdir/L"photo.png");std::ofstream(rdir/L"misc.xyz");std::ofstream(rdir/L"desktop.ini");std::filesystem::create_directories(rdir/L"文件夹");
@@ -208,6 +211,27 @@ void RunTests(std::filesystem::path const& output){std::ofstream report(output);
  expect(wh4.empty(),"search widgets empty query");
  std::vector<SearchHit> wh5;SearchWidgets(swl,L"不存在的词",wh5);
  expect(wh5.empty(),"search widgets no match");
+ expect(!KnownFolder(L"downloads").empty()&&!KnownFolder(L"documents").empty()&&!KnownFolder(L"pictures").empty()&&!KnownFolder(L"music").empty()&&!KnownFolder(L"videos").empty(),"known folders resolve");
+ expect(KnownFolder(L"bogus").empty()&&KnownFolder(L"").empty(),"known folder unknown tag empty");
+ auto tpls=BuiltInTemplates();
+ expect(tpls.size()==3&&tpls[0].id==L"office"&&tpls[1].id==L"media"&&tpls[2].id==L"minimal","three built-in templates");
+ bool tplShape=true;for(auto const& t:tpls)for(auto const& tz:t.zones){if(tz.name.empty()||tz.folderTag.empty())tplShape=false;if(tz.rx<0||tz.ry<0||tz.rw<=0||tz.rh<=0||tz.rx+tz.rw>1000||tz.ry+tz.rh>1000)tplShape=false;}
+ expect(tplShape,"template zones named and within work area");
+ RECT work{0,0,1920,1080};
+ int expected=0;for(auto const& tz:tpls[0].zones)if(!KnownFolder(tz.folderTag).empty())++expected;
+ Layout tplL;int n1=ApplyTemplate(tplL,tpls[0],work);
+ expect(n1==expected&&static_cast<int>(tplL.zones.size())==expected,"apply office template adds zones");
+ bool mapped=true,inWork=true;for(auto const& zz:tplL.zones){if(zz.mappedFolder.empty())mapped=false;if(zz.x<0||zz.y<0||zz.width<200||zz.height<140||zz.x+zz.width>1920||zz.y+zz.height>1080)inWork=false;}
+ expect(mapped,"template zones carry mapped folder");
+ expect(inWork,"template zone rects inside work area");
+ expect(ApplyTemplate(tplL,tpls[0],work)==0,"apply template twice is idempotent");
+ expect(ApplyTemplate(tplL,tpls[1],work)==2&&static_cast<int>(tplL.zones.size())==expected+2,"partial overlap adds only missing");
+ expect(ApplyTemplate(tplL,tpls[2],work)==0,"fully overlapping template adds nothing");
+ Layout qkL;
+ expect(AddQuickZone(qkL,L"downloads",work)==1&&AddQuickZone(qkL,L"downloads",work)==0,"quick zone adds once");
+ expect(!qkL.zones.empty()&&qkL.zones[0].mappedFolder==KnownFolder(L"downloads"),"quick zone maps known folder");
+ std::string tjson=Serialize(tplL);Layout tback=Deserialize(tjson);
+ expect(tback.zones.size()==tplL.zones.size()&&tback.zones[0].mappedFolder==tplL.zones[0].mappedFolder,"template zones serialize roundtrip");
 report<<"TOTAL "<<passed<<" passed\n";
 }
 }

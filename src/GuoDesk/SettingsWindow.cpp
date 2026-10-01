@@ -81,6 +81,11 @@ SettingsWindow::SettingsWindow(Controller& c):owner(c){
  snapshots=ToggleSwitch();snapshots.OnContent(box_value(i18n::Tr(L"配置自动快照")));snapshots.OffContent(box_value(i18n::Tr(L"配置自动快照")));snapshots.Toggled([this](auto&&,auto&&){if(applying)return;OnSnapshots(snapshots.IsOn());});panel.Children().Append(snapshots);
  TextBlock snapHint;snapHint.Text(i18n::Tr(L"每天首次及每 20 次保存各留一份，保留最近 5 份，配置损坏可自动恢复。"));snapHint.FontSize(11);snapHint.Opacity(0.6);snapHint.TextWrapping(TextWrapping::Wrap);panel.Children().Append(snapHint);
  auto guideLink=HyperlinkButton();guideLink.Content(box_value(i18n::Tr(L"查看新手引导")));guideLink.Margin(Thickness{0,2,0,0});guideLink.Padding(Thickness{0});guideLink.Click([this](auto&&,auto&&){owner.ShowGuide();});panel.Children().Append(guideLink);
+ panel.Children().Append(Caption(i18n::Tr(L"分区模板")));
+ TextBlock tplIntro;tplIntro.Text(i18n::Tr(L"一键在屏幕工作区铺好常用文件夹分区；已有对应文件夹的分区会自动跳过，不会重复添加。"));tplIntro.FontSize(12);tplIntro.TextWrapping(TextWrapping::Wrap);tplIntro.Opacity(0.8);panel.Children().Append(tplIntro);
+ StackPanel tplBar;tplBar.Orientation(Orientation::Horizontal);tplBar.Spacing(8);tplBar.Margin(Thickness{0,8,0,0});
+ {auto tpls=BuiltInTemplates();for(size_t i=0;i<tpls.size();++i){auto b=Button();b.Content(box_value(i18n::Tr(tpls[i].name)));auto const tpl=tpls[i];b.Click([this,tpl](auto&&,auto&&){owner.UseTemplate(tpl);});tplBar.Children().Append(b);}}
+ panel.Children().Append(tplBar);
  panel.Children().Append(Caption(i18n::Tr(L"WebDAV 同步")));
  TextBlock syncIntro;syncIntro.Text(i18n::Tr(L"通过任意支持 WebDAV 的网盘在多台电脑间同步分区配置，上传后以 guodesk-layout.json 存到该目录。"));syncIntro.FontSize(12);syncIntro.TextWrapping(TextWrapping::Wrap);syncIntro.Opacity(0.8);panel.Children().Append(syncIntro);
  syncUrl=TextBox();syncUrl.PlaceholderText(i18n::Tr(L"WebDAV 地址，如 https://dav.jianguoyun.com/dav/GuoDesk"));syncUrl.HorizontalAlignment(HorizontalAlignment::Stretch);syncUrl.Margin(Thickness{0,6,0,0});panel.Children().Append(syncUrl);
@@ -101,7 +106,7 @@ SettingsWindow::SettingsWindow(Controller& c):owner(c){
  panel.Children().Append(ruleBar);
  RebuildRules();
  panel.Children().Append(Caption(i18n::Tr(L"关于")));
- TextBlock about;about.Text(i18n::Tr(L"GuoDesk v1.2.0 · 桌面分区整理\n引用式入口：只存引用，不动原文件\n缺失入口可右键重新定位\n便签与待办：托盘右键开启，待办可设截止日期提醒\n时钟：托盘右键开启，右键时钟查看日历\n音乐·搜索·天气：托盘右键开启\n双击 Ctrl 或自定义热键随时唤起\nWebDAV 同步：设置中配置网盘，多机同步布局\n\nMIT License · cloudlight369"));about.FontSize(12);about.TextWrapping(TextWrapping::Wrap);about.Opacity(0.8);panel.Children().Append(about);
+ TextBlock about;about.Text(i18n::Tr(L"GuoDesk v1.3.0 · 桌面分区整理\n引用式入口：只存引用，不动原文件\n缺失入口可右键重新定位\n便签与待办：托盘右键开启，待办可设截止日期提醒\n时钟：托盘右键开启，右键时钟查看日历\n音乐·搜索·天气：托盘右键开启\n双击 Ctrl 或自定义热键随时唤起\n分区模板：托盘或设置一键铺好常用文件夹分区\nWebDAV 同步：设置中配置网盘，多机同步布局\n\nMIT License · cloudlight369"));about.FontSize(12);about.TextWrapping(TextWrapping::Wrap);about.Opacity(0.8);panel.Children().Append(about);
  scroll.Content(panel);window.Content(scroll);
  window.Closed([this](auto&&,auto&&){if(closing)return;closing=true;window.DispatcherQueue().TryEnqueue([this]{owner.CloseSettings();});});
  window.Activate();

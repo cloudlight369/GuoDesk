@@ -10,7 +10,7 @@ namespace guodesk {
 std::wstring NewId(){ GUID id{}; check_hresult(CoCreateGuid(&id)); wchar_t text[40]{}; StringFromGUID2(id,text,40); return text; }
 std::wstring PathKey(std::wstring const& value){ auto p=std::filesystem::absolute(value).lexically_normal().wstring(); std::replace(p.begin(),p.end(),L'/',L'\\'); CharLowerBuffW(p.data(),static_cast<DWORD>(p.size())); while(p.size()>3 && p.back()==L'\\')p.pop_back(); return p; }
 bool AddEntry(Zone& z,std::wstring const& path){if(path.empty())return false; auto key=PathKey(path); for(auto const& e:z.entries)if(PathKey(e.path)==key)return false; z.entries.push_back({NewId(),std::filesystem::absolute(path).lexically_normal().wstring()}); return true;}
-void SyncMapped(Zone& z){if(z.mappedFolder.empty())return; std::error_code ec;std::filesystem::directory_iterator it(std::filesystem::path(z.mappedFolder),ec);if(ec)return;struct Item{std::wstring name,path;bool dir;};std::vector<Item> items;for(auto const& e:it){std::error_code de;bool dir=e.is_directory(de);items.push_back({e.path().filename().wstring(),e.path().wstring(),dir});}std::sort(items.begin(),items.end(),[](Item const& a,Item const& b){if(a.dir!=b.dir)return a.dir>b.dir;return StrCmpLogicalW(a.name.c_str(),b.name.c_str())<0;});z.entries.clear();for(auto const& i:items)z.entries.push_back({NewId(),i.path});}
+void SyncMapped(Zone& z){if(z.mappedFolder.empty())return; std::error_code ec;std::filesystem::directory_iterator it(std::filesystem::path(z.mappedFolder),ec);if(ec)return;struct Item{std::wstring name,path;bool dir;};std::vector<Item> items;for(auto const& e:it){std::error_code de;bool dir=e.is_directory(de);auto path=e.path().wstring();DWORD attr=GetFileAttributesW(path.c_str());if(attr==INVALID_FILE_ATTRIBUTES)continue;if(attr&(FILE_ATTRIBUTE_HIDDEN|FILE_ATTRIBUTE_SYSTEM))continue;if(_wcsicmp(e.path().filename().c_str(),L"desktop.ini")==0)continue;items.push_back({e.path().filename().wstring(),path,dir});}std::sort(items.begin(),items.end(),[](Item const& a,Item const& b){if(a.dir!=b.dir)return a.dir>b.dir;return StrCmpLogicalW(a.name.c_str(),b.name.c_str())<0;});z.entries.clear();for(auto const& i:items)z.entries.push_back({NewId(),i.path});}
 void Clamp(Zone& z,RECT const& a){int w=std::max(1L,a.right-a.left),h=std::max(1L,a.bottom-a.top); z.width=std::clamp(z.width,std::min(280,w),w); z.height=std::clamp(z.height,std::min(160,h),h); z.x=std::clamp(z.x,static_cast<int>(a.left),static_cast<int>(a.right)-z.width); z.y=std::clamp(z.y,static_cast<int>(a.top),static_cast<int>(a.bottom)-(z.collapsed?std::min(64,h):z.height));}
 static std::wstring Lower(std::wstring v){CharLowerBuffW(v.data(),static_cast<DWORD>(v.size()));return v;}
 static std::wstring ExtOf(std::wstring const& path){auto p=std::filesystem::path(path).extension().wstring();if(!p.empty()&&p.front()==L'.')p.erase(p.begin());return Lower(p);}
@@ -20,6 +20,42 @@ std::vector<std::wstring> DesktopFileList(){std::vector<std::wstring> out;PWSTR 
 std::vector<PlanItem> BuildPlan(std::vector<Rule> const& rules,std::vector<Zone> const& zones,std::vector<std::wstring> const& files,std::vector<std::wstring>* unmatched){std::vector<PlanItem> plan;if(unmatched)unmatched->clear();std::vector<Rule> norm;for(auto const& r:rules){if(r.targetZone.empty()||r.exts.empty()&&r.keywords.empty())continue;if(std::find_if(zones.begin(),zones.end(),[&](auto const& z){return z.id==r.targetZone;})==zones.end())continue;Rule n=r;for(auto& e:n.exts)e=Lower(e);for(auto& k:n.keywords)k=Lower(k);norm.push_back(std::move(n));}
 for(auto const& f:files){auto ext=ExtOf(f);auto fname=Lower(std::filesystem::path(f).filename().wstring());bool hit=false;for(auto const& r:norm){bool m=false;for(auto const& e:r.exts)if(ext==e){m=true;break;}if(!m)for(auto const& k:r.keywords)if(fname.find(k)!=std::wstring::npos){m=true;break;}if(m){plan.push_back({f,r.name,r.targetZone});hit=true;break;}}if(!hit&&unmatched)unmatched->push_back(f);}return plan;}
 int ApplyPlan(Layout& l,std::vector<PlanItem> const& plan){int added=0;for(auto const& p:plan){auto it=std::find_if(l.zones.begin(),l.zones.end(),[&](auto const& z){return z.id==p.zone;});if(it==l.zones.end())continue;if(AddEntry(*it,p.path))++added;}return added;}
+std::wstring KnownFolder(std::wstring const& tag){
+ GUID id{};
+ if(tag==L"downloads")id=FOLDERID_Downloads;else if(tag==L"documents")id=FOLDERID_Documents;else if(tag==L"pictures")id=FOLDERID_Pictures;else if(tag==L"music")id=FOLDERID_Music;else if(tag==L"videos")id=FOLDERID_Videos;else return L"";
+ PWSTR p{};if(FAILED(SHGetKnownFolderPath(id,0,nullptr,&p)))return L"";std::wstring out=p;CoTaskMemFree(p);return out;}
+std::wstring KnownFolderName(std::wstring const& tag){
+ if(tag==L"downloads")return i18n::Tr(L"下载");if(tag==L"documents")return i18n::Tr(L"文档");if(tag==L"pictures")return i18n::Tr(L"图片");if(tag==L"music")return i18n::Tr(L"音乐");if(tag==L"videos")return i18n::Tr(L"视频");return i18n::Tr(L"常用");}
+std::vector<ZoneTemplate> BuiltInTemplates(){
+ return {
+  {L"office",i18n::Tr(L"办公模板"),{{L"文档",L"documents",0,0,494,494},{L"下载",L"downloads",0,506,494,494},{L"图片",L"pictures",506,0,494,494}}},
+  {L"media",i18n::Tr(L"影音模板"),{{L"视频",L"videos",0,0,610,1000},{L"音乐",L"music",618,0,382,494},{L"图片",L"pictures",618,512,382,488}}},
+  {L"minimal",i18n::Tr(L"极简模板"),{{L"下载",L"downloads",0,0,494,1000},{L"文档",L"documents",506,0,494,1000}}},
+ };}
+static Zone MakeTemplateZone(std::wstring const& name,std::wstring const& folder,RECT const& work,TemplateZone const& t){
+ Zone z;z.id=NewId();z.name=name;z.mappedFolder=folder;
+ long long w=std::max(1L,work.right-work.left),h=std::max(1L,work.bottom-work.top);
+ z.x=static_cast<int>(work.left+w*t.rx/1000);z.y=static_cast<int>(work.top+h*t.ry/1000);
+ z.width=static_cast<int>(std::max<long long>(200,w*t.rw/1000));z.height=static_cast<int>(std::max<long long>(140,h*t.rh/1000));
+ return z;}
+static bool MapsFolder(Zone const& z,std::wstring const& key){return !z.mappedFolder.empty()&&PathKey(z.mappedFolder)==key;}
+int ApplyTemplate(Layout& l,ZoneTemplate const& t,RECT const& work){
+ int added=0;
+ for(auto const& tz:t.zones){
+  auto folder=KnownFolder(tz.folderTag);if(folder.empty())continue;
+  auto key=PathKey(folder);
+  if(std::any_of(l.zones.begin(),l.zones.end(),[&](auto const& z){return MapsFolder(z,key);}))continue;
+  l.zones.push_back(MakeTemplateZone(i18n::Tr(tz.name),folder,work,tz));
+  SyncMapped(l.zones.back());++added;}
+ return added;}
+int AddQuickZone(Layout& l,std::wstring const& tag,RECT const& work){
+ auto folder=KnownFolder(tag);if(folder.empty())return 0;
+ auto key=PathKey(folder);
+ if(std::any_of(l.zones.begin(),l.zones.end(),[&](auto const& z){return MapsFolder(z,key);}))return 0;
+ TemplateZone t{KnownFolderName(tag),tag,0,0,494,494};
+ l.zones.push_back(MakeTemplateZone(KnownFolderName(tag),folder,work,t));
+ auto& z=l.zones.back();int off=30*(static_cast<int>(l.zones.size())-1)%180;z.x+=off;z.y+=off;
+ SyncMapped(z);return 1;}
 TodoItem* AddTodo(Widgets& w,std::wstring const& text){auto t=text;size_t first=t.find_first_not_of(L" \t\r\n");if(first==std::wstring::npos)return nullptr;size_t last=t.find_last_not_of(L" \t\r\n");t=t.substr(first,last-first+1);if(t.size()>2000)t=t.substr(0,2000);w.todos.push_back({NewId(),std::move(t),false});return &w.todos.back();}
 void ToggleTodo(Widgets& w,std::wstring const& id){for(auto& t:w.todos)if(t.id==id)t.done=!t.done;}
 void RemoveTodo(Widgets& w,std::wstring const& id){std::erase_if(w.todos,[&](auto const& t){return t.id==id;});}

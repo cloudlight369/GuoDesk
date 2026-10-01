@@ -53,6 +53,7 @@ public:
  Store store; Layout layout; std::vector<std::unique_ptr<DeskWindow>> windows; bool desktopMode=false; HWND host{};
  explicit Controller(std::filesystem::path root={}); ~Controller();
  void Start(); void Save(); void ImportLayout(Layout&& next); void Add(); void Remove(std::wstring const& id); void Refresh(); void Show(); void HideAll(); void ToggleAll(); bool ApplyHotkey(); void Quit(); void ToggleDesktop();
+ void QuickZone(std::wstring const& tag); void UseTemplate(ZoneTemplate const& tpl);
  void ShowSettings(); void CloseSettings(); void ApplySettings();
  void ShowTidy(); void CloseTidy();
  void ShowNote(); void CloseNote(); void ShowTodo(); void CloseTodo();
