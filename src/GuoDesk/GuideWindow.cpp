@@ -31,8 +31,9 @@ GuideWindow::GuideWindow(Controller& c):owner(c){
   {L"映射文件夹",L"分区右键 →「映射文件夹」，把任意文件夹实时镜像到桌面，只读展示。"},
   {L"便签与待办",L"托盘右键打开便签和待办；待办可设截止日期，到期时通过托盘气泡提醒。"},
   {L"时钟与热键",L"托盘右键打开时钟，右键时钟可查看日历；设置里可配置显示/隐藏的全局热键。"},
+  {L"音乐·搜索·天气",L"托盘右键打开音乐播放器、全局搜索和天气组件，全部可在桌面自由摆放。"},
  };
- for(int i=0;i<5;++i){
+ for(int i=0;i<6;++i){
   auto row=Grid();row.Margin(Thickness{0,0,0,18});
   ColumnDefinition badgeCol;badgeCol.Width(GridLength{0,GridUnitType::Auto});row.ColumnDefinitions().Append(badgeCol);
   ColumnDefinition textCol;textCol.Width(GridLength{1,GridUnitType::Star});row.ColumnDefinitions().Append(textCol);

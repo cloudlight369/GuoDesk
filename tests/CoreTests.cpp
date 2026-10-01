@@ -109,6 +109,37 @@ void RunTests(std::filesystem::path const& output){std::ofstream report(output);
  std::wstring mon9{};int mx9=0,my9=0;RECT off9{-9000,-9000,-8700,-8800};Reanchor(off9,mon9,mx9,my9);
  bool inSome=false;for(auto const& a:areas)if(off9.left>=a.work.left&&off9.top>=a.work.top&&off9.right<=a.work.right&&off9.bottom<=a.work.bottom)inSome=true;
  expect(inSome&&mon9.size()>0,"reanchor off-screen clamps into work area");
+ expect(IsMusicFile(L"C:\\m\\a.MP3")&&IsMusicFile(L"C:\\m\\b.flac")&&IsMusicFile(L"C:\\m\\c.m4a")&&IsMusicFile(L"C:\\m\\d.ogg")&&!IsMusicFile(L"C:\\m\\e.txt")&&!IsMusicFile(L"C:\\m\\f"),"music file extensions");
+ auto mdir=std::filesystem::temp_directory_path()/NewId();std::filesystem::create_directories(mdir/L"专辑");
+ {std::ofstream f(mdir/L"b.mp3");f<<"x";}{std::ofstream f(mdir/L"a.mp3");f<<"x";}{std::ofstream f(mdir/L"封面.txt");f<<"x";}
+ auto pl=MusicPlaylist(mdir.wstring());expect(pl.size()==2&&std::filesystem::path(pl[0]).filename()==L"a.mp3"&&std::filesystem::path(pl[1]).filename()==L"b.mp3","music playlist scans and natural sorts");
+ expect(MusicPlaylist((mdir/L"missing").wstring()).empty(),"music playlist missing folder empty");
+ std::filesystem::remove_all(mdir);
+ expect(SearchMatch(L"报告 Final.PDF",L"final")&&SearchMatch(L"报告",L"报")&&!SearchMatch(L"报告",L"简历")&&!SearchMatch(L"报告",L""),"search match contains");
+ Layout sl;Zone z1;z1.id=NewId();z1.name=L"文档";AddEntry(z1,L"D:\\docs\\报告2026.pdf");Zone z2;z2.id=NewId();z2.name=L"图片";AddEntry(z2,L"D:\\pics\\cat.png");sl.zones={z1,z2};
+ std::vector<SearchHit> hits;SearchZones(sl,L"报告",hits);expect(hits.size()==1&&hits[0].zone==L"文档"&&hits[0].name==L"报告2026.pdf","search zones finds by name");
+ std::vector<SearchHit> hits2;SearchZones(sl,L"docs",hits2);expect(hits2.size()==1&&PathKey(hits2[0].path)==PathKey(L"D:\\docs\\报告2026.pdf"),"search zones finds by path");
+ std::vector<SearchHit> hits3;SearchZones(sl,L"不存在的词",hits3);expect(hits3.empty(),"search zones no match empty");
+ expect(WmoText(0)==L"晴"&&WmoText(95)==L"雷暴"&&WmoText(999)==L"—","wmo text mapping");
+ bool emojiOk=true;for(int c=0;c<=99;++c)if(WmoEmoji(c).empty())emojiOk=false;expect(emojiOk,"wmo emoji covers all codes");
+ auto wn=ParseWeatherJson(LR"({"current":{"temperature_2m":21.4,"relative_humidity_2m":63,"weather_code":2},"daily":{"time":["2026-10-01","2026-10-02","2026-10-03","2026-10-04"],"weather_code":[2,61,3,0],"temperature_2m_max":[25.1,22.0,20.5,26.2],"temperature_2m_min":[15.2,14.0,12.1,16.0]}})");
+ expect(wn.valid&&wn.temp==21.4&&wn.humidity==63&&wn.code==2&&wn.hi==25.1&&wn.lo==15.2,"parse weather json");
+ expect(wn.days.size()==3&&wn.days[0].code==61&&wn.days[0].date==20261002&&wn.days[2].hi==26.2,"parse weather daily");
+ auto wnb=ParseWeatherJson(L"not json");expect(!wnb.valid,"parse weather garbage invalid");
+ auto gp=ParseGeoJson(LR"({"results":[{"name":"上海","country":"中国","latitude":31.22,"longitude":121.45},{"name":"Shanghai","country":"","latitude":1.0,"longitude":2.0}]})");
+ expect(gp.size()==2&&gp[0].name==L"上海"&&gp[0].lat==31.22&&gp[0].lon==121.45&&gp[1].country.empty(),"parse geocode json");
+ expect(ParseGeoJson(L"broken").empty(),"parse geocode garbage");
+ auto ip=ParseIpLocJson(LR"({"status":"success","city":"杭州","lat":30.27,"lon":120.15})");
+ expect(ip.name==L"杭州"&&ip.lat==30.27&&ip.lon==120.15,"parse ip locate json");
+ auto ipBad=ParseIpLocJson(LR"({"status":"fail"})");expect(ipBad.name.empty()&&ipBad.lat==0&&ipBad.lon==0,"parse ip locate rejected");
+ l.widgets.musicVisible=true;l.widgets.weatherVisible=true;l.widgets.musicX=5;l.widgets.musicY=6;l.widgets.musicW=280;l.widgets.musicH=380;l.widgets.weatherX=7;l.widgets.weatherY=8;l.widgets.weatherW=250;l.widgets.weatherH=340;l.widgets.searchX=9;l.widgets.searchY=10;l.widgets.musicFolder=L"D:\\音乐";l.widgets.musicIndex=2;l.widgets.musicVol=80;l.widgets.weatherCity=L"上海";l.widgets.weatherLat=31.22;l.widgets.weatherLon=121.45;l.widgets.musicMon=L"\\\\.\\DISPLAY1";l.widgets.musicMX=3;l.widgets.musicMY=4;l.widgets.weatherMon=L"\\\\.\\DISPLAY2";l.widgets.weatherMX=1;l.widgets.weatherMY=2;l.widgets.searchMon=L"\\\\.\\DISPLAY1";l.widgets.searchMX=6;l.widgets.searchMY=8;l.settings.hotkeySearch=L"Ctrl+Alt+F";
+ auto r9=Deserialize(Serialize(l));
+ expect(r9.widgets.musicVisible&&r9.widgets.weatherVisible&&r9.widgets.musicX==5&&r9.widgets.musicW==280&&r9.widgets.weatherX==7&&r9.widgets.weatherW==250&&r9.widgets.searchX==9&&r9.widgets.searchY==10&&r9.widgets.musicFolder==L"D:\\音乐"&&r9.widgets.musicIndex==2&&r9.widgets.musicVol==80&&r9.widgets.weatherCity==L"上海"&&r9.widgets.weatherLat==31.22&&r9.widgets.weatherLon==121.45&&r9.widgets.musicMon==L"\\\\.\\DISPLAY1"&&r9.widgets.musicMX==3&&r9.widgets.weatherMX==1&&r9.widgets.searchMX==6&&r9.settings.hotkeySearch==L"Ctrl+Alt+F","v09 fields roundtrip");
+ auto legacy9=Deserialize("{\"version\":1,\"zones\":[]}");
+ expect(!legacy9.widgets.musicVisible&&!legacy9.widgets.weatherVisible&&legacy9.widgets.weatherLat==999&&legacy9.widgets.weatherLon==999&&legacy9.widgets.musicVol==65&&legacy9.settings.hotkeySearch.empty(),"legacy defaults for v09 fields");
+ auto clamped9=Deserialize("{\"version\":1,\"zones\":[],\"widgets\":{\"musicW\":100,\"musicH\":50,\"weatherW\":10,\"weatherH\":10,\"musicVol\":250,\"musicIndex\":-5,\"weatherLat\":5000,\"weatherLon\":-5000}}");
+ expect(clamped9.widgets.musicW==240&&clamped9.widgets.musicH==300&&clamped9.widgets.weatherW==220&&clamped9.widgets.weatherH==280&&clamped9.widgets.musicVol==100&&clamped9.widgets.musicIndex==0&&clamped9.widgets.weatherLat==999&&clamped9.widgets.weatherLon==999,"v09 out-of-range values clamped");
+ Hotkey hs;expect(ParseHotkey(L"Ctrl+Alt+F",hs)&&HotkeyToString(hs)==L"Ctrl+Alt+F","parse search hotkey");
 report<<"TOTAL "<<passed<<" passed\n";
 }
 }
