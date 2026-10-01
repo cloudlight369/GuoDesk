@@ -24,6 +24,10 @@ SettingsWindow::SettingsWindow(Controller& c):owner(c){
  compact=ToggleSwitch();compact.OnContent(box_value(i18n::Tr(L"紧凑磁贴")));compact.OffContent(box_value(i18n::Tr(L"紧凑磁贴")));compact.Toggled([this](auto&&,auto&&){if(applying)return;OnCompact(compact.IsOn());});panel.Children().Append(compact);
  panel.Children().Append(Caption(i18n::Tr(L"常规")));
  autostart=ToggleSwitch();autostart.OnContent(box_value(i18n::Tr(L"开机自动启动")));autostart.OffContent(box_value(i18n::Tr(L"开机自动启动")));autostart.Toggled([this](auto&&,auto&&){if(applying)return;OnAutostart(autostart.IsOn());});panel.Children().Append(autostart);
+ panel.Children().Append(Caption(i18n::Tr(L"全局热键")));
+ hotkey=ComboBox();hotkey.HorizontalAlignment(HorizontalAlignment::Stretch);for(wchar_t const* p:{L"Ctrl+Alt+G",L"Ctrl+Alt+Z",L"Ctrl+Shift+Space",L"Win+Z",L"禁用"}){ComboBoxItem it;it.Content(box_value(i18n::Tr(p)));hotkey.Items().Append(it);}
+ hotkey.SelectionChanged([this](auto&&,auto&&){if(applying)return;OnHotkey(hotkey.SelectedIndex());});panel.Children().Append(hotkey);
+ hotkeyHint=TextBlock();hotkeyHint.Text(i18n::Tr(L"热键已被其他程序占用，未生效。"));hotkeyHint.FontSize(11);hotkeyHint.Foreground(winrt::Microsoft::UI::Xaml::Media::SolidColorBrush(Windows::UI::Color{255,232,17,35}));hotkeyHint.Visibility(Visibility::Collapsed);panel.Children().Append(hotkeyHint);
  panel.Children().Append(Caption(i18n::Tr(L"语言")));
  lang=ComboBox();lang.HorizontalAlignment(HorizontalAlignment::Stretch);ComboBoxItem langSys;langSys.Content(box_value(i18n::Tr(L"跟随系统")));lang.Items().Append(langSys);ComboBoxItem langZh;langZh.Content(box_value(L"简体中文"));lang.Items().Append(langZh);ComboBoxItem langEn;langEn.Content(box_value(L"English"));lang.Items().Append(langEn);
  lang.SelectionChanged([this](auto&&,auto&&){if(applying)return;OnLanguage(lang.SelectedIndex());});panel.Children().Append(lang);
@@ -33,6 +37,8 @@ SettingsWindow::SettingsWindow(Controller& c):owner(c){
  auto exportBtn=Button();exportBtn.Content(box_value(i18n::Tr(L"导出配置")));exportBtn.Click([this](auto&&,auto&&){OnExport();});backupBar.Children().Append(exportBtn);
  auto importBtn=Button();importBtn.Content(box_value(i18n::Tr(L"导入配置")));importBtn.Click([this](auto&&,auto&&){OnImport();});backupBar.Children().Append(importBtn);
  panel.Children().Append(backupBar);
+ snapshots=ToggleSwitch();snapshots.OnContent(box_value(i18n::Tr(L"配置自动快照")));snapshots.OffContent(box_value(i18n::Tr(L"配置自动快照")));snapshots.Toggled([this](auto&&,auto&&){if(applying)return;OnSnapshots(snapshots.IsOn());});panel.Children().Append(snapshots);
+ TextBlock snapHint;snapHint.Text(i18n::Tr(L"每天首次及每 20 次保存各留一份，保留最近 5 份，配置损坏可自动恢复。"));snapHint.FontSize(11);snapHint.Opacity(0.6);snapHint.TextWrapping(TextWrapping::Wrap);panel.Children().Append(snapHint);
  panel.Children().Append(Caption(i18n::Tr(L"整理规则")));
  TextBlock ruleIntro;ruleIntro.Text(i18n::Tr(L"按扩展名或文件名关键词，把桌面文件以引用方式归入分区——原文件始终保持在桌面。"));ruleIntro.FontSize(12);ruleIntro.TextWrapping(TextWrapping::Wrap);ruleIntro.Opacity(0.8);panel.Children().Append(ruleIntro);
  rulesPanel=StackPanel();rulesPanel.Spacing(4);rulesPanel.Padding(Thickness{0,6,0,0});panel.Children().Append(rulesPanel);
@@ -42,7 +48,7 @@ SettingsWindow::SettingsWindow(Controller& c):owner(c){
  panel.Children().Append(ruleBar);
  RebuildRules();
  panel.Children().Append(Caption(i18n::Tr(L"关于")));
- TextBlock about;about.Text(i18n::Tr(L"GuoDesk v0.6.0 · 桌面分区整理\n引用式入口：只存引用，不动原文件\n缺失入口可右键重新定位\n便签与待办：托盘右键开启，本地保存\n\nMIT License · cloudlight369"));about.FontSize(12);about.TextWrapping(TextWrapping::Wrap);about.Opacity(0.8);panel.Children().Append(about);
+ TextBlock about;about.Text(i18n::Tr(L"GuoDesk v0.7.0 · 桌面分区整理\n引用式入口：只存引用，不动原文件\n缺失入口可右键重新定位\n便签与待办：托盘右键开启，本地保存\n\nMIT License · cloudlight369"));about.FontSize(12);about.TextWrapping(TextWrapping::Wrap);about.Opacity(0.8);panel.Children().Append(about);
  scroll.Content(panel);window.Content(scroll);
  window.Closed([this](auto&&,auto&&){if(closing)return;closing=true;window.DispatcherQueue().TryEnqueue([this]{owner.CloseSettings();});});
  window.Activate();
@@ -51,7 +57,9 @@ void SettingsWindow::OnTheme(int index){auto& s=owner.layout.settings;s.theme=in
 void SettingsWindow::OnCompact(bool on){owner.layout.settings.compact=on;owner.ApplySettings();owner.Save();}
 void SettingsWindow::OnAutostart(bool on){SetAutostart(on);bool actual=AutostartEnabled();if(actual!=on){applying=true;autostart.IsOn(actual);applying=false;}}
 void SettingsWindow::OnLanguage(int index){owner.layout.settings.language=index==1?L"zh-CN":index==2?L"en-US":L"";owner.Save();}
-void SettingsWindow::Apply(){applying=true;auto const& s=owner.layout.settings;theme.SelectedIndex(s.theme==L"Light"?1:s.theme==L"Dark"?2:0);compact.IsOn(s.compact);autostart.IsOn(AutostartEnabled());lang.SelectedIndex(s.language==L"en-US"?2:s.language==L"zh-CN"?1:0);applying=false;}
+void SettingsWindow::OnHotkey(int index){auto& s=owner.layout.settings;s.hotkey=index==1?L"Ctrl+Alt+Z":index==2?L"Ctrl+Shift+Space":index==3?L"Win+Z":index==4?L"":L"Ctrl+Alt+G";bool ok=owner.ApplyHotkey();hotkeyHint.Visibility(ok?Visibility::Collapsed:Visibility::Visible);owner.Save();}
+void SettingsWindow::OnSnapshots(bool on){owner.layout.settings.snapshots=on;owner.store.SetSnapshots(on);owner.Save();}
+void SettingsWindow::Apply(){applying=true;auto const& s=owner.layout.settings;theme.SelectedIndex(s.theme==L"Light"?1:s.theme==L"Dark"?2:0);compact.IsOn(s.compact);autostart.IsOn(AutostartEnabled());lang.SelectedIndex(s.language==L"en-US"?2:s.language==L"zh-CN"?1:0);hotkey.SelectedIndex(s.hotkey==L"Ctrl+Alt+Z"?1:s.hotkey==L"Ctrl+Shift+Space"?2:s.hotkey==L"Win+Z"?3:s.hotkey.empty()?4:0);snapshots.IsOn(s.snapshots);hotkeyHint.Visibility(Visibility::Collapsed);applying=false;}
 static std::string ReadTextFile(std::filesystem::path const& p){std::ifstream f(p,std::ios::binary);if(!f)throw std::runtime_error("Cannot read file");return {std::istreambuf_iterator<char>(f),{}};}
 void SettingsWindow::OnExport(){owner.Save();auto target=shell::SaveFile(hwnd,L"guodesk-layout.json");if(target.empty())return;try{std::filesystem::copy_file(owner.store.Directory()/L"layout.json",target,std::filesystem::copy_options::overwrite_existing);}catch(...){MessageBoxW(hwnd,i18n::Tr(L"导出失败：请检查目标位置是否可写。").c_str(),L"GuoDesk",MB_OK|MB_ICONERROR);return;}if(!owner.windows.empty())owner.windows.front()->Notify(i18n::TrF(L"已导出到 {0}",{target}));}
 void SettingsWindow::OnImport(){auto picked=shell::Pick(hwnd,false,i18n::Tr(L"选择要导入的 GuoDesk 配置"));if(picked.size()!=1)return;std::string text;try{text=ReadTextFile(std::filesystem::path(picked[0]));}catch(...){MessageBoxW(hwnd,i18n::Tr(L"导入失败：文件不是有效的 GuoDesk 配置。").c_str(),L"GuoDesk",MB_OK|MB_ICONERROR);return;}Layout next;try{next=Deserialize(text);}catch(...){MessageBoxW(hwnd,i18n::Tr(L"导入失败：文件不是有效的 GuoDesk 配置。").c_str(),L"GuoDesk",MB_OK|MB_ICONERROR);return;}owner.ImportLayout(std::move(next));Controller* c=&owner;winrt::Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread().TryEnqueue([c](){c->CloseSettings();});}

@@ -1,4 +1,4 @@
-param([string]$Version = '0.6.0', [ValidateSet('x64','ARM64')][string]$Platform = 'x64')
+param([string]$Version = '0.7.0', [ValidateSet('x64','ARM64')][string]$Platform = 'x64')
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $src = Join-Path $root 'artifacts\Release'

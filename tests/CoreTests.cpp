@@ -40,6 +40,48 @@ void RunTests(std::filesystem::path const& output){std::ofstream report(output);
  expect(i18n::Fmt(L"{1}+{0}",{L"A",L"B"})==L"B+A"&&i18n::Fmt(L"a {0} b {9} c",{L"X"})==L"a X b {9} c","fmt reorder and unknown index");
  Layout langL;langL.settings.language=L"en-US";auto langR=Deserialize(Serialize(langL));expect(langR.settings.language==L"en-US","language roundtrip");
  expect(Deserialize("{\"version\":1,\"zones\":[]}").settings.language.empty(),"legacy missing language tolerated");
+ Hotkey hk;expect(ParseHotkey(L"Ctrl+Alt+G",hk)&&hk.mods==(MOD_CONTROL|MOD_ALT)&&hk.vk==L'G',"parse hotkey basic");
+ expect(ParseHotkey(L"Win+Z",hk)&&hk.mods==MOD_WIN&&hk.vk==L'Z',"parse hotkey win");
+ expect(ParseHotkey(L"ctrl + f5",hk)&&hk.vk==VK_F5&&HotkeyToString(hk)==L"Ctrl+F5","parse hotkey case space");
+ Hotkey bad;expect(!ParseHotkey(L"Ctrl+G+X",bad)&&!ParseHotkey(L"Alt+",bad)&&!ParseHotkey(L"G",bad)&&!ParseHotkey(L"G+X",bad),"parse hotkey rejects");
+ expect(ParseHotkey(L"  ",bad)&&bad.mods==0&&bad.vk==0&&HotkeyToString(bad).empty(),"empty hotkey disabled");
+ expect(ParseHotkey(L"Ctrl+Alt+G",hk)&&HotkeyToString(hk)==L"Ctrl+Alt+G"&&ParseHotkey(L"Win+Z",hk)&&HotkeyToString(hk)==L"Win+Z","hotkey string roundtrip");
+ auto sdir=std::filesystem::temp_directory_path()/NewId();std::filesystem::create_directories(sdir/L"子目录");
+ {std::ofstream f(sdir/L"a2.txt");f<<std::string(100,'x');}{std::ofstream f(sdir/L"a10.txt");f<<"xxxxx";}{std::ofstream f(sdir/L"z.doc");f<<"x";}
+ auto touch=[](std::filesystem::path const& p,unsigned long long daysAgo){FILETIME now{};GetSystemTimeAsFileTime(&now);unsigned long long t=(static_cast<unsigned long long>(now.dwHighDateTime)<<32)|now.dwLowDateTime;t-=daysAgo*864000000000ULL;FILETIME ft{static_cast<DWORD>(t&0xffffffffULL),static_cast<DWORD>(t>>32)};HANDLE f=CreateFileW(p.c_str(),FILE_WRITE_ATTRIBUTES,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr);if(f!=INVALID_HANDLE_VALUE){SetFileTime(f,nullptr,nullptr,&ft);CloseHandle(f);}};
+ touch(sdir/L"z.doc",10);touch(sdir/L"a2.txt",1);touch(sdir/L"a10.txt",2);
+ Zone sz;sz.id=NewId();
+ AddEntry(sz,(sdir/L"bad\\none.xyz").wstring());AddEntry(sz,(sdir/L"a10.txt").wstring());AddEntry(sz,(sdir/L"z.doc").wstring());AddEntry(sz,(sdir/L"子目录").wstring());AddEntry(sz,(sdir/L"a2.txt").wstring());
+ auto nm=[&](int i){return std::filesystem::path(sz.entries[i].path).filename().wstring();};
+ SortEntries(sz,SortKey::Name,false);expect(nm(0)==L"子目录"&&nm(1)==L"a2.txt"&&nm(2)==L"a10.txt"&&nm(3)==L"z.doc"&&nm(4)==L"none.xyz","sort name natural dirs first bad last");
+ SortEntries(sz,SortKey::Name,true);expect(nm(0)==L"子目录"&&nm(1)==L"z.doc"&&nm(2)==L"a10.txt"&&nm(3)==L"a2.txt"&&nm(4)==L"none.xyz","sort name desc keeps dirs first bad last");
+ SortEntries(sz,SortKey::Size,false);expect(nm(0)==L"子目录"&&nm(1)==L"z.doc"&&nm(2)==L"a10.txt"&&nm(3)==L"a2.txt"&&nm(4)==L"none.xyz","sort size asc");
+ SortEntries(sz,SortKey::Size,true);expect(nm(0)==L"子目录"&&nm(1)==L"a2.txt"&&nm(2)==L"a10.txt"&&nm(3)==L"z.doc"&&nm(4)==L"none.xyz","sort size desc bad last");
+ SortEntries(sz,SortKey::Date,false);expect(nm(0)==L"子目录"&&nm(1)==L"z.doc"&&nm(2)==L"a10.txt"&&nm(3)==L"a2.txt","sort date asc");
+ SortEntries(sz,SortKey::Date,true);expect(nm(1)==L"a2.txt"&&nm(2)==L"a10.txt"&&nm(3)==L"z.doc"&&nm(4)==L"none.xyz","sort date desc");
+ SortEntries(sz,SortKey::Type,false);expect(nm(0)==L"子目录"&&nm(1)==L"z.doc"&&nm(2)==L"a2.txt"&&nm(3)==L"a10.txt"&&nm(4)==L"none.xyz","sort type asc");
+ std::filesystem::remove_all(sdir);
+ auto tdir=std::filesystem::temp_directory_path()/NewId();Store st(tdir);
+ Zone qz;qz.id=NewId();qz.name=L"快照";Layout ql{{qz}};
+ for(int i=0;i<25;++i){qz.name=L"快照"+std::to_wstring(i);ql.zones[0]=qz;st.Save(ql);}
+ int snapCount=0;std::error_code sec;for(auto const& e:std::filesystem::directory_iterator(tdir/L"snapshots",sec))if(e.is_regular_file(sec))++snapCount;
+ expect(snapCount>=1&&snapCount<=5,"snapshots throttled and capped");
+ auto tdir2=std::filesystem::temp_directory_path()/NewId();Store st2(tdir2);st2.SetSnapshots(false);
+ for(int i=0;i<25;++i)st2.Save(ql);
+ expect(!std::filesystem::exists(tdir2/L"snapshots"),"snapshots disabled writes none");
+ auto tdir3=std::filesystem::temp_directory_path()/NewId();Store st3(tdir3);
+ Zone rz;rz.id=NewId();rz.name=L"快照恢复";Layout rl2{{rz}};st3.Save(rl2);
+ {std::ofstream f(tdir3/L"layout.json",std::ios::binary);f<<"broken";}{std::ofstream f(tdir3/L"layout.backup.json",std::ios::binary);f<<"broken";}
+ std::wstring warn3;auto rec=st3.Load(warn3);
+ expect(rec.zones.size()==1&&rec.zones[0].name==L"快照恢复"&&!warn3.empty(),"load recovers from snapshot");
+ std::filesystem::remove_all(tdir);std::filesystem::remove_all(tdir2);std::filesystem::remove_all(tdir3);
+ l.zones[0].sortKey=L"date";l.zones[0].sortDescending=true;l.zones[0].tileSize=2;l.settings.hotkey=L"Win+Z";l.settings.snapshots=false;
+ auto nr=Deserialize(Serialize(l));
+ expect(nr.zones[0].sortKey==L"date"&&nr.zones[0].sortDescending&&nr.zones[0].tileSize==2&&nr.settings.hotkey==L"Win+Z"&&!nr.settings.snapshots,"v07 fields roundtrip");
+ auto legacy7=Deserialize("{\"version\":1,\"zones\":[]}");
+ expect(legacy7.settings.hotkey==L"Ctrl+Alt+G"&&legacy7.settings.snapshots,"legacy defaults for v07 settings");
+ auto bad7=Deserialize("{\"version\":1,\"zones\":[{\"id\":\"a\",\"name\":\"n\",\"x\":0,\"y\":0,\"width\":280,\"height\":160,\"collapsed\":false,\"entries\":[],\"tileSize\":7,\"sortKey\":\"weird\"}],\"settings\":{\"hotkey\":\"Bad+\"}}");
+ expect(bad7.zones[0].tileSize==1&&bad7.zones[0].sortKey.empty()&&bad7.settings.hotkey.empty(),"invalid v07 values fall back");
 report<<"TOTAL "<<passed<<" passed\n";
 }
 }
