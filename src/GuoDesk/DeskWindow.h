@@ -42,8 +42,10 @@ public:
  void ShowSettings(); void CloseSettings(); void ApplySettings();
  void ShowTidy(); void CloseTidy();
  void ShowNote(); void CloseNote(); void ShowTodo(); void CloseTodo();
+ void ShowClock(); void CloseClock(); void ShowGuide(); void CloseGuide(); void CheckReminders();
  void MoveEntry(std::wstring const& entry,std::wstring const& target,size_t index);
  std::unique_ptr<class SettingsWindow> settings; std::unique_ptr<class TidyWindow> tidy;
  std::unique_ptr<class NoteWindow> note; std::unique_ptr<class TodoWindow> todo;
+ std::unique_ptr<class ClockWindow> clockW; std::unique_ptr<class GuideWindow> guide;
 };
 }

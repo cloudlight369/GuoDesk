@@ -82,6 +82,33 @@ void RunTests(std::filesystem::path const& output){std::ofstream report(output);
  expect(legacy7.settings.hotkey==L"Ctrl+Alt+G"&&legacy7.settings.snapshots,"legacy defaults for v07 settings");
  auto bad7=Deserialize("{\"version\":1,\"zones\":[{\"id\":\"a\",\"name\":\"n\",\"x\":0,\"y\":0,\"width\":280,\"height\":160,\"collapsed\":false,\"entries\":[],\"tileSize\":7,\"sortKey\":\"weird\"}],\"settings\":{\"hotkey\":\"Bad+\"}}");
  expect(bad7.zones[0].tileSize==1&&bad7.zones[0].sortKey.empty()&&bad7.settings.hotkey.empty(),"invalid v07 values fall back");
+ long long dueToday=DueFromOffset(0),dueTomorrow=DueFromOffset(1),dueWeek=DueFromOffset(7);
+ expect(dueToday>0&&dueTomorrow>dueToday&&dueWeek>dueTomorrow,"due offsets monotonic");
+ expect(DueText(dueToday)==i18n::Tr(L"今天")&&DueText(dueTomorrow)==i18n::Tr(L"明天")&&!DueText(dueWeek).empty(),"due text formats");
+ expect(DueReached(dueToday)&&!DueReached(dueTomorrow)&&!DueReached(dueWeek)&&!DueReached(0),"due reached semantics");
+ auto tid=w.todos[0].id;SetTodoDue(w,tid,dueToday);expect(w.todos[0].due==dueToday,"set todo due");
+ w.todos[0].reminded=true;SetTodoDue(w,tid,dueTomorrow);expect(w.todos[0].due==dueTomorrow&&!w.todos[0].reminded,"due change resets reminded");
+ SetTodoDue(w,tid,dueWeek);w.todos[0].reminded=true;SetTodoDue(w,tid,dueWeek);expect(w.todos[0].reminded,"same due keeps reminded");
+ l.widgets=w;auto dr2=Deserialize(Serialize(l));expect(dr2.widgets.todos[0].due==dueWeek&&dr2.widgets.todos[0].reminded,"todo due roundtrip");
+ Widgets np;ActiveNote(np)->text=L"第一页";AddNotePage(np);ActiveNote(np)->text=L"第二页";AddNotePage(np);ActiveNote(np)->text=L"第三页";
+ expect(np.pages.size()==3&&np.notePage==2&&np.pages[0].text==L"第一页"&&np.pages[2].text==L"第三页","note pages add");
+ RemoveNotePage(np);expect(np.pages.size()==2&&np.notePage==1&&np.pages[1].text==L"第二页","note page remove");
+ RemoveNotePage(np);RemoveNotePage(np);expect(np.pages.size()==1&&np.pages[0].text.empty()&&np.notePage==0,"note last page resets blank");
+ Widgets np2;ActiveNote(np2)->text=L"甲";AddNotePage(np2);ActiveNote(np2)->text=L"乙";ActiveNote(np2)->color=4;np2.notePage=1;np2.noteTop=true;np2.clockVisible=true;np2.clockX=11;np2.clockY=22;np2.clockW=260;np2.clockH=140;
+ Layout nl;nl.widgets=np2;auto nr8=Deserialize(Serialize(nl));
+ expect(nr8.widgets.pages.size()==2&&nr8.widgets.pages[0].text==L"甲"&&nr8.widgets.pages[1].text==L"乙"&&nr8.widgets.pages[1].color==4&&nr8.widgets.noteTop&&nr8.widgets.notePage==1&&nr8.widgets.clockVisible&&nr8.widgets.clockW==260,"note pages and clock fields roundtrip");
+ auto legacyNote=Deserialize("{\"version\":1,\"zones\":[],\"widgets\":{\"noteText\":\"\\u65E7\\u5185\\u5BB9\"}}");
+ expect(legacyNote.widgets.pages.size()==1&&legacyNote.widgets.pages[0].text==std::wstring(L"\u65E7\u5185\u5BB9"),"legacy noteText migrates");
+ l.zones[0].mon=L"\\\\.\\DISPLAY1";l.zones[0].mx=5;l.zones[0].my=7;l.settings.guideDone=true;
+ auto mr8=Deserialize(Serialize(l));expect(mr8.zones[0].mon==L"\\\\.\\DISPLAY1"&&mr8.zones[0].mx==5&&mr8.zones[0].my==7&&mr8.settings.guideDone,"monitor anchor and guideDone roundtrip");
+ auto areas=EnumMonitorAreas();expect(!areas.empty(),"monitor areas enumerated");
+ std::wstring mon8{};int mx8=0,my8=0;RECT on8{100,100,500,400};Reanchor(on8,mon8,mx8,my8);
+ expect(on8.left==100&&on8.top==100&&mon8.size()>0,"reanchor on-screen keeps position");
+ bool named=false;for(auto const& a:areas)if(a.device==mon8){named=true;expect(mx8==on8.left-a.work.left&&my8==on8.top-a.work.top,"reanchor records work-area-relative origin");break;}
+ expect(named,"reanchor names a monitor");
+ std::wstring mon9{};int mx9=0,my9=0;RECT off9{-9000,-9000,-8700,-8800};Reanchor(off9,mon9,mx9,my9);
+ bool inSome=false;for(auto const& a:areas)if(off9.left>=a.work.left&&off9.top>=a.work.top&&off9.right<=a.work.right&&off9.bottom<=a.work.bottom)inSome=true;
+ expect(inSome&&mon9.size()>0,"reanchor off-screen clamps into work area");
 report<<"TOTAL "<<passed<<" passed\n";
 }
 }

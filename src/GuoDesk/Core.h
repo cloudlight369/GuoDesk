@@ -1,25 +1,39 @@
 #pragma once
 namespace guodesk {
 struct Entry { std::wstring id, path; };
-struct Zone { std::wstring id, name=L"常用"; int x=120,y=120,width=440,height=360; bool collapsed=false; std::vector<Entry> entries; std::wstring mappedFolder; std::wstring viewMode=L"grid"; int nameLines=2; std::wstring sortKey; bool sortDescending=false; int tileSize=1; };
-struct Settings { std::wstring theme; bool compact=false; std::wstring language; std::wstring hotkey=L"Ctrl+Alt+G"; bool snapshots=true; };
+struct Zone { std::wstring id, name=L"常用"; int x=120,y=120,width=440,height=360; bool collapsed=false; std::vector<Entry> entries; std::wstring mappedFolder; std::wstring viewMode=L"grid"; int nameLines=2; std::wstring sortKey; bool sortDescending=false; int tileSize=1; std::wstring mon; int mx=0,my=0; };
+struct Settings { std::wstring theme; bool compact=false; std::wstring language; std::wstring hotkey=L"Ctrl+Alt+G"; bool snapshots=true; bool guideDone=false; };
 struct Rule { std::wstring id, name; std::vector<std::wstring> exts, keywords; std::wstring targetZone; };
-struct TodoItem { std::wstring id, text; bool done=false; };
+struct TodoItem { std::wstring id, text; bool done=false; long long due=0; bool reminded=false; };
+struct NotePage { std::wstring text; int color=0; };
 struct Widgets {
- bool noteVisible=false,todoVisible=false;
+ bool noteVisible=false,todoVisible=false,clockVisible=false,noteTop=false;
  std::wstring noteText;
- int noteX=340,noteY=180,noteW=300,noteH=240;
+ int noteX=340,noteY=180,noteW=300,noteH=240; int notePage=0;
  int todoX=680,todoY=180,todoW=300,todoH=420;
+ int clockX=980,clockY=60,clockW=220,clockH=150;
+ std::wstring noteMon,todoMon,clockMon; int noteMX=0,noteMY=0,todoMX=0,todoMY=0,clockMX=0,clockMY=0;
+ std::vector<NotePage> pages;
  std::vector<TodoItem> todos;
 };
 struct Layout { std::vector<Zone> zones; Settings settings; std::vector<Rule> rules; Widgets widgets; };
 struct PlanItem { std::wstring path, rule, zone; };
 enum class SortKey { Name, Type, Date, Size };
 struct Hotkey { unsigned mods=0, vk=0; };
+struct MonitorArea { std::wstring device; RECT work; };
 SortKey SortKeyFromString(std::wstring const& value);
 bool ParseHotkey(std::wstring const& text,Hotkey& out);
 std::wstring HotkeyToString(Hotkey const& hotkey);
 void SortEntries(Zone& zone,SortKey key,bool descending);
+std::vector<MonitorArea> EnumMonitorAreas();
+void Reanchor(RECT& rect,std::wstring& mon,int& mx,int& my);
+long long DueFromOffset(int days);
+std::wstring DueText(long long due);
+bool DueReached(long long due);
+void SetTodoDue(Widgets& widgets,std::wstring const& id,long long due);
+NotePage* ActiveNote(Widgets& widgets);
+void AddNotePage(Widgets& widgets);
+void RemoveNotePage(Widgets& widgets);
 std::wstring NewId();
 std::wstring PathKey(std::wstring const& path);
 bool AddEntry(Zone& zone,std::wstring const& path);

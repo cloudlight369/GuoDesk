@@ -38,15 +38,28 @@ void TodoWindow::Rebuild(){
  for(auto const& t:todos){
   auto id=t.id;
   Border row;row.Padding(Thickness{10,4,4,4});row.CornerRadius(CornerRadius{6,6,6,6});row.Background(ThemeBrush(L"CardBackgroundFillColorDefault",Windows::UI::Color{255,60,60,60}));
-  Grid g;ColumnDefinition c1;c1.Width(GridLength{1,GridUnitType::Star});g.ColumnDefinitions().Append(c1);ColumnDefinition c2;c2.Width(GridLength{0,GridUnitType::Auto});g.ColumnDefinitions().Append(c2);
+  Grid g;ColumnDefinition c1;c1.Width(GridLength{1,GridUnitType::Star});g.ColumnDefinitions().Append(c1);ColumnDefinition c2;c2.Width(GridLength{0,GridUnitType::Auto});g.ColumnDefinitions().Append(c2);ColumnDefinition c3;c3.Width(GridLength{0,GridUnitType::Auto});g.ColumnDefinitions().Append(c3);
   CheckBox box;auto label=TextBlock();label.Text(t.text);label.TextWrapping(TextWrapping::Wrap);label.FontSize(13);label.Opacity(t.done?0.45:1.0);box.Content(label);box.IsChecked(t.done);box.MinWidth(0);box.Padding(Thickness{0});box.Margin(Thickness{0,0,0,0});
   box.Checked([this,id,label](auto&&,auto&&){ToggleTodo(owner.layout.widgets,id);label.Opacity(0.45);count.Text(CountText());owner.Save();});
   box.Unchecked([this,id,label](auto&&,auto&&){ToggleTodo(owner.layout.widgets,id);label.Opacity(1.0);count.Text(CountText());owner.Save();});
   Grid::SetColumn(box,0);g.Children().Append(box);
+  Button dueBtn;dueBtn.Background(SolidColorBrush(Windows::UI::Colors::Transparent()));dueBtn.BorderThickness(Thickness{0});dueBtn.Padding(Thickness{6,4,6,4});dueBtn.Margin(Thickness{0,2,0,0});dueBtn.MinWidth(0);
+  auto dueRow=StackPanel();dueRow.Orientation(Orientation::Horizontal);dueRow.Spacing(4);
+  FontIcon cal;cal.FontFamily(FontFamily(L"Segoe Fluent Icons"));cal.Glyph(L"\uE787");cal.FontSize(12);cal.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,160,160,160}));
+  TextBlock dueLabel;dueLabel.FontSize(11);
+  if(t.due){dueLabel.Text(DueText(t.due));if(DueReached(t.due)&&!t.done){auto red=SolidColorBrush(Windows::UI::Color{255,232,17,35});cal.Foreground(red);dueLabel.Foreground(red);dueLabel.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());}}
+  dueRow.Children().Append(cal);dueRow.Children().Append(dueLabel);dueBtn.Content(dueRow);
+  MenuFlyout mf;
+  auto mk=[&](wchar_t const* key,int days){MenuFlyoutItem mi;mi.Text(i18n::Tr(key));mi.Click([this,id,days](auto&&,auto&&){SetTodoDue(owner.layout.widgets,id,days<0?0:DueFromOffset(days));Rebuild();owner.Save();});mf.Items().Append(mi);};
+  mk(L"今天",0);mk(L"明天",1);mk(L"下周",7);
+  MenuFlyoutSeparator sep;mf.Items().Append(sep);
+  mk(L"清除截止",-1);
+  dueBtn.Flyout(mf);
+  Grid::SetColumn(dueBtn,1);g.Children().Append(dueBtn);
   Button del;del.Background(SolidColorBrush(Windows::UI::Colors::Transparent()));del.BorderThickness(Thickness{0});del.Padding(Thickness{6,4,6,4});del.Margin(Thickness{0,2,0,0});
   FontIcon trash;trash.FontFamily(FontFamily(L"Segoe Fluent Icons"));trash.Glyph(L"\uE74D");trash.FontSize(12);trash.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,160,160,160}));del.Content(trash);
   del.Click([this,id](auto&&,auto&&){RemoveTodo(owner.layout.widgets,id);Rebuild();owner.Save();});
-  Grid::SetColumn(del,1);g.Children().Append(del);
+  Grid::SetColumn(del,2);g.Children().Append(del);
   row.Child(g);list.Children().Append(row);
  }
 }

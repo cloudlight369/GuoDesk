@@ -1,0 +1,60 @@
+#include "pch.h"
+#include "ClockWindow.h"
+#include "DeskWindow.h"
+#include "Shell.h"
+#include "I18n.h"
+using namespace winrt;
+using namespace Microsoft::UI::Xaml;
+using namespace Microsoft::UI::Xaml::Controls;
+using namespace Microsoft::UI::Xaml::Media;
+namespace guodesk {
+static std::wstring ClockExePath(){wchar_t buf[MAX_PATH]{};GetModuleFileNameW(nullptr,buf,MAX_PATH);return buf;}
+static Brush ResolveClockBrush(wchar_t const* key,Windows::UI::Color fallback,bool dark){
+ try{return Application::Current().Resources().Lookup(box_value(key)).as<Brush>();}catch(...){}
+ struct Entry{wchar_t const* key;Windows::UI::Color light;Windows::UI::Color dark;};
+ static const Entry palette[]{
+  {L"TextFillColorSecondary",{255,97,97,97},{255,199,199,199}},
+ };
+ for(auto const& e:palette)if(!wcscmp(e.key,key))return SolidColorBrush(dark?e.dark:e.light);
+ return SolidColorBrush(fallback);
+}
+Brush ClockWindow::ThemeBrush(wchar_t const* key,Windows::UI::Color fallback){bool dark=false;try{dark=root.ActualTheme()==ElementTheme::Dark;}catch(...){}return ResolveClockBrush(key,fallback,dark);}
+void ClockWindow::Update(){
+ SYSTEMTIME st{};GetLocalTime(&st);
+ wchar_t buf[16]{};swprintf_s(buf,16,L"%02d:%02d",st.wHour,st.wMinute);time.Text(buf);
+ static wchar_t const* weekdays[]{L"星期日",L"星期一",L"星期二",L"星期三",L"星期四",L"星期五",L"星期六"};
+ date.Text(i18n::TrF(L"{0}年{1}月{2}日 · {3}",{std::to_wstring(st.wYear),std::to_wstring(st.wMonth),std::to_wstring(st.wDay),i18n::Tr(weekdays[st.wDayOfWeek%7])}));
+}
+ClockWindow::ClockWindow(Controller& c):owner(c){
+ window=Window();window.Title(i18n::Tr(L"GuoDesk 时钟"));hwnd=shell::Handle(window);
+ try{auto dir=std::filesystem::path(ClockExePath()).parent_path();window.AppWindow().SetIcon((dir/L"guodesk.ico").wstring());}catch(...){}
+ window.SystemBackdrop(MicaBackdrop());
+ try{auto presenter=window.AppWindow().Presenter().as<Microsoft::UI::Windowing::OverlappedPresenter>();presenter.SetBorderAndTitleBar(true,false);window.AppWindow().IsShownInSwitchers(false);}catch(...){}
+ auto& w=owner.layout.widgets;
+ root=Grid();
+ RowDefinition timeRow;timeRow.Height(GridLength{1,GridUnitType::Star});root.RowDefinitions().Append(timeRow);
+ RowDefinition dateRow;dateRow.Height(GridLength{0,GridUnitType::Auto});root.RowDefinitions().Append(dateRow);
+ time=TextBlock();time.FontSize(42);time.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());time.HorizontalAlignment(HorizontalAlignment::Center);time.VerticalAlignment(VerticalAlignment::Center);
+ Grid::SetRow(time,0);root.Children().Append(time);
+ date=TextBlock();date.FontSize(12);date.Margin(Thickness{0,0,0,10});date.HorizontalAlignment(HorizontalAlignment::Center);date.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));
+ Grid::SetRow(date,1);root.Children().Append(date);
+ auto dragging=std::make_shared<bool>(false);auto dragStart=std::make_shared<POINT>();auto dragOrigin=std::make_shared<RECT>();
+ auto dragTimer=root.DispatcherQueue().CreateTimer();dragTimer.Interval(std::chrono::milliseconds(16));
+ auto EndDrag=[this,dragging,dragTimer](){if(!*dragging)return;*dragging=false;dragTimer.Stop();RECT r{};GetWindowRect(hwnd,&r);auto& w=owner.layout.widgets;w.clockX=r.left;w.clockY=r.top;MONITORINFOEXW mi{sizeof(mi)};GetMonitorInfoW(MonitorFromWindow(hwnd,MONITOR_DEFAULTTONEAREST),&mi);w.clockMon=mi.szDevice;w.clockMX=r.left-mi.rcWork.left;w.clockMY=r.top-mi.rcWork.top;owner.Save();};
+ dragTimer.Tick([this,dragging,dragStart,dragOrigin,EndDrag](auto&&,auto&&){if(!(GetAsyncKeyState(VK_LBUTTON)&0x8000)){EndDrag();return;}POINT p{};GetCursorPos(&p);SetWindowPos(hwnd,nullptr,dragOrigin->left+p.x-dragStart->x,dragOrigin->top+p.y-dragStart->y,0,0,SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE);});
+ root.PointerPressed([this,dragging,dragStart,dragOrigin,dragTimer](auto&&,Input::PointerRoutedEventArgs const& a){*dragging=true;GetCursorPos(&*dragStart);GetWindowRect(hwnd,&*dragOrigin);root.CapturePointer(a.Pointer());a.Handled(true);dragTimer.Start();});
+ root.PointerReleased([EndDrag](auto&&,auto&&){EndDrag();});
+ root.PointerCaptureLost([EndDrag](auto&&,auto&&){EndDrag();});
+ try{Flyout calFlyout;CalendarView cal;cal.MinWidth(300);cal.MinHeight(320);calFlyout.Content(cal);root.ContextFlyout(calFlyout);}catch(...){}
+ window.Content(root);
+ window.Closed([this](auto&&,auto&&){if(closing)return;closing=true;window.DispatcherQueue().TryEnqueue([this]{owner.CloseClock();});});
+ int x=w.clockX,y=w.clockY,wd=w.clockW,ht=w.clockH;SetWindowPos(hwnd,nullptr,x,y,wd,ht,SWP_NOZORDER);
+ MONITORINFO mi{sizeof(mi)};GetMonitorInfoW(MonitorFromWindow(hwnd,MONITOR_DEFAULTTONEAREST),&mi);
+ if(y>mi.rcWork.bottom-40||y<mi.rcWork.top-20||x>mi.rcWork.right-60||x<mi.rcWork.left-40){x=std::clamp(x,(int)mi.rcWork.left,(int)mi.rcWork.right-100);y=std::clamp(y,(int)mi.rcWork.top,(int)mi.rcWork.bottom-60);SetWindowPos(hwnd,nullptr,x,y,0,0,SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE);}
+ Update();
+ tick=root.DispatcherQueue().CreateTimer();tick.Interval(std::chrono::seconds(1));tick.Tick([this](auto&&,auto&&){Update();});tick.Start();
+ window.Activate();
+}
+void ClockWindow::Show(){Update();window.Activate();}
+ClockWindow::~ClockWindow(){closing=true;if(tick)tick.Stop();if(IsWindow(hwnd))window.Close();}
+}

@@ -39,6 +39,7 @@ SettingsWindow::SettingsWindow(Controller& c):owner(c){
  panel.Children().Append(backupBar);
  snapshots=ToggleSwitch();snapshots.OnContent(box_value(i18n::Tr(L"配置自动快照")));snapshots.OffContent(box_value(i18n::Tr(L"配置自动快照")));snapshots.Toggled([this](auto&&,auto&&){if(applying)return;OnSnapshots(snapshots.IsOn());});panel.Children().Append(snapshots);
  TextBlock snapHint;snapHint.Text(i18n::Tr(L"每天首次及每 20 次保存各留一份，保留最近 5 份，配置损坏可自动恢复。"));snapHint.FontSize(11);snapHint.Opacity(0.6);snapHint.TextWrapping(TextWrapping::Wrap);panel.Children().Append(snapHint);
+ auto guideLink=HyperlinkButton();guideLink.Content(box_value(i18n::Tr(L"查看新手引导")));guideLink.Margin(Thickness{0,2,0,0});guideLink.Padding(Thickness{0});guideLink.Click([this](auto&&,auto&&){owner.ShowGuide();});panel.Children().Append(guideLink);
  panel.Children().Append(Caption(i18n::Tr(L"整理规则")));
  TextBlock ruleIntro;ruleIntro.Text(i18n::Tr(L"按扩展名或文件名关键词，把桌面文件以引用方式归入分区——原文件始终保持在桌面。"));ruleIntro.FontSize(12);ruleIntro.TextWrapping(TextWrapping::Wrap);ruleIntro.Opacity(0.8);panel.Children().Append(ruleIntro);
  rulesPanel=StackPanel();rulesPanel.Spacing(4);rulesPanel.Padding(Thickness{0,6,0,0});panel.Children().Append(rulesPanel);
@@ -48,7 +49,7 @@ SettingsWindow::SettingsWindow(Controller& c):owner(c){
  panel.Children().Append(ruleBar);
  RebuildRules();
  panel.Children().Append(Caption(i18n::Tr(L"关于")));
- TextBlock about;about.Text(i18n::Tr(L"GuoDesk v0.7.0 · 桌面分区整理\n引用式入口：只存引用，不动原文件\n缺失入口可右键重新定位\n便签与待办：托盘右键开启，本地保存\n\nMIT License · cloudlight369"));about.FontSize(12);about.TextWrapping(TextWrapping::Wrap);about.Opacity(0.8);panel.Children().Append(about);
+ TextBlock about;about.Text(i18n::Tr(L"GuoDesk v0.8.0 · 桌面分区整理\n引用式入口：只存引用，不动原文件\n缺失入口可右键重新定位\n便签与待办：托盘右键开启，待办可设截止日期提醒\n时钟：托盘右键开启，右键时钟查看日历\n\nMIT License · cloudlight369"));about.FontSize(12);about.TextWrapping(TextWrapping::Wrap);about.Opacity(0.8);panel.Children().Append(about);
  scroll.Content(panel);window.Content(scroll);
  window.Closed([this](auto&&,auto&&){if(closing)return;closing=true;window.DispatcherQueue().TryEnqueue([this]{owner.CloseSettings();});});
  window.Activate();
