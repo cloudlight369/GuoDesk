@@ -2,7 +2,7 @@
 namespace guodesk {
 struct Entry { std::wstring id, path; std::wstring stack; };
 struct Stack { std::wstring id, name; };
-struct Zone { std::wstring id, name=L"常用"; int x=120,y=120,width=440,height=360; bool collapsed=false; std::vector<Entry> entries; std::wstring mappedFolder; std::wstring viewMode=L"grid"; int nameLines=2; std::wstring sortKey; bool sortDescending=false; int tileSize=1; std::wstring mon; int mx=0,my=0; std::vector<Stack> stacks; std::wstring group; int groupTab=0; bool capsule=false; };
+struct Zone { std::wstring id, name=L"常用"; int x=120,y=120,width=440,height=360; bool collapsed=false; std::vector<Entry> entries; std::wstring mappedFolder; std::wstring viewMode=L"grid"; int nameLines=2; std::wstring sortKey; bool sortDescending=false; int tileSize=1; std::wstring mon; int mx=0,my=0; std::vector<Stack> stacks; std::wstring group; int groupTab=0; bool capsule=false; bool browseInPlace=true; std::wstring browseFolder; };
 struct Settings { std::wstring theme; bool compact=false; std::wstring language; std::wstring hotkey=L"Ctrl+Alt+G"; bool snapshots=true; bool guideDone=false; std::wstring hotkeySearch; bool performance=false; std::wstring syncUrl,syncUser,syncPass; bool syncAuto=false; };
 struct Rule { std::wstring id, name; std::vector<std::wstring> exts, keywords; std::wstring targetZone; };
 struct TodoItem { std::wstring id, text; bool done=false; long long due=0; bool reminded=false; };
@@ -49,7 +49,11 @@ void RemoveNotePage(Widgets& widgets);
 std::wstring NewId();
 std::wstring PathKey(std::wstring const& path);
 bool AddEntry(Zone& zone,std::wstring const& path);
+std::vector<Entry> ListMapped(std::wstring const& folder);
 void SyncMapped(Zone& zone);
+bool UnderRoot(std::wstring const& root,std::wstring const& path);
+std::vector<std::wstring> Crumbs(std::wstring const& root,std::wstring const& current);
+std::wstring CrumbParent(std::wstring const& root,std::wstring const& current);
 void Clamp(Zone& zone,RECT const& area);
 void DefaultRules(Layout& layout);
 std::vector<std::wstring> ListLooseFiles(std::wstring const& folder);

@@ -232,6 +232,26 @@ void RunTests(std::filesystem::path const& output){std::ofstream report(output);
  expect(!qkL.zones.empty()&&qkL.zones[0].mappedFolder==KnownFolder(L"downloads"),"quick zone maps known folder");
  std::string tjson=Serialize(tplL);Layout tback=Deserialize(tjson);
  expect(tback.zones.size()==tplL.zones.size()&&tback.zones[0].mappedFolder==tplL.zones[0].mappedFolder,"template zones serialize roundtrip");
+ auto bdir=std::filesystem::temp_directory_path()/NewId();std::filesystem::create_directories(bdir/L"sub1"/L"inner");std::filesystem::create_directories(bdir/L"other");std::ofstream(bdir/L"a.txt");std::ofstream(bdir/L"desktop.ini");
+ auto root=bdir.wstring(),inner=(bdir/L"sub1"/L"inner").wstring(),sub1=(bdir/L"sub1").wstring(),outside=(bdir/L"other").wstring(),elsewhere=(std::filesystem::temp_directory_path()/NewId()).wstring();
+ auto listed=ListMapped(root);expect(listed.size()==3,"list mapped includes folders and files");expect(PathKey(listed[0].path)==PathKey(outside)&&PathKey(listed[1].path)==PathKey(sub1),"list mapped dirs first sorted");expect(listed[2].stack.empty(),"list mapped entries bare");
+ ListMapped(root+L"\\missing");expect(ListMapped(root+L"\\missing").empty(),"list mapped missing folder empty");expect(ListMapped(L"").empty(),"list mapped empty root empty");
+ expect(UnderRoot(root,inner),"under root nested");expect(UnderRoot(root,sub1),"under root direct");expect(!UnderRoot(root,root),"root not under itself");expect(!UnderRoot(root,(bdir.parent_path()/L"unrelated").wstring()),"sibling folder outside root");expect(UnderRoot(root,inner+L"\\.."),"inside via dotdot");expect(!UnderRoot(root,L""),"empty path not under root");expect(!UnderRoot(L"",inner),"empty root has no children");
+ auto big=std::wstring(root);for(auto& c:big)if(c>=L'A'&&c<=L'Z')c=c-L'A'+L'a';
+ auto lowered=std::wstring(inner);for(auto& c:lowered)if(c>=L'A'&&c<=L'Z')c=c-L'A'+L'a';
+ expect(UnderRoot(big,lowered),"case insensitive comparison");expect(UnderRoot(root,lowered),"mixed case child under original root");
+ auto chain=Crumbs(root,inner);expect(chain.size()==3,"crumbs chain per level");expect(PathKey(chain.front())==PathKey(root)&&PathKey(chain.back())==PathKey(inner),"crumbs endpoints exact");expect(PathKey(chain[1])==PathKey(sub1),"crumbs middle level");
+ expect(Crumbs(root,L"").size()==1&&PathKey(Crumbs(root,L"").front())==PathKey(root),"crumbs empty current is root only");expect(Crumbs(root,elsewhere).size()==1,"crumbs outside is root only");
+ expect(PathKey(CrumbParent(root,inner))==PathKey(sub1),"crumb parent of inner");expect(PathKey(CrumbParent(root,sub1))==PathKey(root),"crumb parent of first level");expect(CrumbParent(root,root).empty()&&CrumbParent(root,L"").empty(),"crumb parent at root empty");expect(CrumbParent(root,elsewhere).empty(),"crumb parent outside empty");
+
+ Zone bz;bz.id=NewId();bz.browseInPlace=false;Layout bl{{bz}};auto bback=Deserialize(Serialize(bl));expect(!bback.zones[0].browseInPlace,"browseInPlace false roundtrip");
+ Zone bz2;bz2.id=NewId();Layout bl2{{bz2}};expect(Deserialize(Serialize(bl2)).zones[0].browseInPlace,"browseInPlace default true roundtrip");
+ Zone bx;bx.id=NewId();bx.mappedFolder=root;bx.browseFolder=sub1;Layout fl{{bx}};auto fback=Deserialize(Serialize(fl));expect(fback.zones[0].browseFolder==sub1,"browseFolder roundtrip");
+ Zone bx2=bx;bx2.browseFolder=elsewhere;Layout fl2{{bx2}};expect(Deserialize(Serialize(fl2)).zones[0].browseFolder.empty(),"browseFolder outside root dropped");
+ Zone bx3=bx;bx3.mappedFolder.clear();Layout fl3{{bx3}};expect(Deserialize(Serialize(fl3)).zones[0].browseFolder.empty(),"browseFolder without mapping dropped");
+ Zone bx4=bx;bx4.browseInPlace=false;Layout fl4{{bx4}};expect(Deserialize(Serialize(fl4)).zones[0].browseFolder.empty(),"browseFolder with browsing off dropped");
+ expect(Deserialize("{\"version\":1,\"zones\":[{\"id\":\"a\",\"name\":\"n\",\"x\":0,\"y\":0,\"width\":280,\"height\":160,\"collapsed\":false,\"entries\":[]}]}").zones[0].browseInPlace,"legacy zone defaults browseInPlace true");
+ std::filesystem::remove_all(bdir);
 report<<"TOTAL "<<passed<<" passed\n";
 }
 }

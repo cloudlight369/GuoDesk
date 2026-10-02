@@ -10,6 +10,7 @@ class DeskWindow {
  POINT dragStart{}; RECT dragOrigin{};
  winrt::Microsoft::UI::Xaml::Controls::Grid root{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::StackPanel tabsPanel{nullptr}; winrt::Microsoft::UI::Xaml::Controls::Grid barGrid{nullptr};
+ winrt::Microsoft::UI::Xaml::Controls::StackPanel crumbBar{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::TextBox title{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::TextBlock status{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::GridView grid{nullptr};
@@ -28,6 +29,7 @@ class DeskWindow {
  void Menu(winrt::Microsoft::UI::Xaml::FrameworkElement const& target);
  void EntryMenu(std::wstring const& path,std::wstring const& key,std::wstring const& stackId);
  void RebuildTabs(); void SwitchTab(int index);
+ void Navigate(std::wstring const& folder); void RenderCrumbs();
  void SetCapsule(bool on); void ExpandCapsule(); void ShrinkCapsule();
  void ApplyPerformance();
 public:
