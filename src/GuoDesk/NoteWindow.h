@@ -20,5 +20,6 @@ public:
  NoteWindow(Controller&);
  ~NoteWindow();
  void Show();
+ void Reload(){LoadPage();}
 };
 }

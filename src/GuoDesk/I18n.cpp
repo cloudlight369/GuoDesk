@@ -315,8 +315,20 @@ KV const table[]{
  {L"下载失败：请检查地址、账号密码或网络。",L"Download failed: check the URL, credentials, or network."},
  {L"云端文件不是有效的 GuoDesk 配置。",L"The cloud file is not a valid GuoDesk layout."},
  {L"自动同步上传失败：请检查网络或 WebDAV 设置。",L"Auto sync upload failed: check the network or WebDAV settings."},
- {L"GuoDesk v1.2.0 · 桌面分区整理\n引用式入口：只存引用，不动原文件\n缺失入口可右键重新定位\n便签与待办：托盘右键开启，待办可设截止日期提醒\n时钟：托盘右键开启，右键时钟查看日历\n音乐·搜索·天气：托盘右键开启\n双击 Ctrl 或自定义热键随时唤起\nWebDAV 同步：设置中配置网盘，多机同步布局\n\nMIT License · cloudlight369",
-  L"GuoDesk v1.2.0 · Desktop zone organizer\nReference-based entries: only links stored, originals untouched\nRight-click a missing entry to relocate it\nNote & To-Do: enable from the tray; to-dos support due-date reminders\nClock: enable from the tray; right-click for a calendar\nMusic · Search · Weather: enable from the tray\nSummon anytime with double-press Ctrl or a custom hotkey\nWebDAV sync: configure a cloud drive in Settings to sync layouts across machines\n\nMIT License · cloudlight369"},
+ {L"GuoDesk v1.5.0 · 桌面分区整理\n引用式入口：只存引用，不动原文件\n缺失入口可右键重新定位\n便签与待办：托盘右键开启，待办可设截止日期提醒\n时钟：托盘右键开启，右键时钟查看日历\n音乐·搜索·天气：托盘右键开启\n双击 Ctrl 或自定义热键随时唤起\n分区模板：托盘或设置一键铺好常用文件夹分区\n映射分区可就地浏览，面包屑返回\n快速捕获：Enter 记便签，Ctrl+Enter 存待办\nWebDAV 同步：设置中配置网盘，多机同步布局\n\nMIT License · cloudlight369",
+  L"GuoDesk v1.5.0 · Desktop zone organizer\nReference-based entries: only links stored, originals untouched\nRight-click a missing entry to relocate it\nNote & To-Do: enable from the tray; to-dos support due-date reminders\nClock: enable from the tray; right-click for a calendar\nMusic · Search · Weather: enable from the tray\nSummon anytime with double-press Ctrl or a custom hotkey\nZone templates: lay out known folders in one click\nBrowse mapped folders in place with breadcrumbs\nQuick capture: Enter saves to note, Ctrl+Enter adds a to-do\nWebDAV sync: configure a cloud drive in Settings to sync layouts across machines\n\nMIT License · cloudlight369"},
+ {L"快速捕获",L"Quick capture"},
+ {L"快速捕获…",L"Quick capture…"},
+ {L"已添加待办「{0}」",L"To-do added: \"{0}\""},
+ {L"已记入便签「{0}」",L"Saved to note: \"{0}\""},
+ {L"GuoDesk 快速捕获",L"GuoDesk Quick Capture"},
+ {L"记点什么，随手捕获…",L"Jot something down…"},
+ {L"Enter 存入便签 · Ctrl+Enter 存为待办 · Esc 关闭",L"Enter saves to note · Ctrl+Enter adds a to-do · Esc closes"},
+ {L"快速捕获热键",L"Quick capture hotkey"},
+ {L"按热键随时唤起捕获框：Enter 记入便签，Ctrl+Enter 存为待办。",L"Summon the capture box with a hotkey: Enter saves to your note, Ctrl+Enter adds a to-do."},
+ {L"就地浏览",L"Browse in place"},
+ {L"双击映射分区里的文件夹即可就地浏览，顶部面包屑一键返回。",L"Double-click a folder inside a mapped zone to browse in place; the breadcrumbs up top take you back."},
+ {L"随时从托盘或热键唤起捕获框：Enter 记入便签，Ctrl+Enter 存为待办。",L"Summon the capture box from the tray or a hotkey: Enter saves to your note, Ctrl+Enter adds a to-do."},
 };
 std::wstring Resolve(std::wstring const& setting){
  std::wstring lang=setting;

@@ -32,8 +32,10 @@ GuideWindow::GuideWindow(Controller& c):owner(c){
   {L"便签与待办",L"托盘右键打开便签和待办；待办可设截止日期，到期时通过托盘气泡提醒。"},
   {L"时钟与热键",L"托盘右键打开时钟，右键时钟可查看日历；设置里可配置显示/隐藏的全局热键。"},
   {L"音乐·搜索·天气",L"托盘右键打开音乐播放器、全局搜索和天气组件，全部可在桌面自由摆放。"},
+  {L"就地浏览",L"双击映射分区里的文件夹即可就地浏览，顶部面包屑一键返回。"},
+  {L"快速捕获",L"随时从托盘或热键唤起捕获框：Enter 记入便签，Ctrl+Enter 存为待办。"},
  };
- for(int i=0;i<6;++i){
+ for(int i=0;i<8;++i){
   auto row=Grid();row.Margin(Thickness{0,0,0,18});
   ColumnDefinition badgeCol;badgeCol.Width(GridLength{0,GridUnitType::Auto});row.ColumnDefinitions().Append(badgeCol);
   ColumnDefinition textCol;textCol.Width(GridLength{1,GridUnitType::Star});row.ColumnDefinitions().Append(textCol);

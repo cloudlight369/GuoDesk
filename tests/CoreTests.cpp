@@ -252,6 +252,18 @@ void RunTests(std::filesystem::path const& output){std::ofstream report(output);
  Zone bx4=bx;bx4.browseInPlace=false;Layout fl4{{bx4}};expect(Deserialize(Serialize(fl4)).zones[0].browseFolder.empty(),"browseFolder with browsing off dropped");
  expect(Deserialize("{\"version\":1,\"zones\":[{\"id\":\"a\",\"name\":\"n\",\"x\":0,\"y\":0,\"width\":280,\"height\":160,\"collapsed\":false,\"entries\":[]}]}").zones[0].browseInPlace,"legacy zone defaults browseInPlace true");
  std::filesystem::remove_all(bdir);
+ Widgets capW;
+ expect(AppendNote(capW,L"  hello\r\nworld \n"),"append note accepts trimmed text");
+ expect(capW.pages.size()==1&&capW.pages[0].text==L"hello\nworld","append note normalizes newlines");
+ expect(!AppendNote(capW,L"  \t\r\n"),"append blank rejected");
+ expect(capW.pages.size()==1&&capW.pages[0].text==L"hello\nworld","append blank changes nothing");
+ expect(AppendNote(capW,L"third"),"append second capture");
+ expect(capW.pages[0].text==L"hello\nworld\nthird","append note adds newline separated");
+ AddNotePage(capW);expect(capW.notePage==1&&AppendNote(capW,L"page two"),"append targets active page");
+ expect(capW.pages[0].text==L"hello\nworld\nthird"&&capW.pages[1].text==L"page two","append writes only active page");
+ Layout capL;capL.settings.hotkeyCapture=L"Ctrl+Alt+K";auto capR=Deserialize(Serialize(capL));expect(capR.settings.hotkeyCapture==L"Ctrl+Alt+K","capture hotkey roundtrip");
+ auto capEmpty=Deserialize(Serialize(Layout{}));expect(capEmpty.settings.hotkeyCapture.empty(),"capture hotkey default empty");
+ auto capBad=Deserialize("{\"version\":1,\"zones\":[],\"settings\":{\"hotkeyCapture\":\"Bad+\"}}");expect(capBad.settings.hotkeyCapture.empty(),"invalid capture hotkey dropped");
 report<<"TOTAL "<<passed<<" passed\n";
 }
 }
