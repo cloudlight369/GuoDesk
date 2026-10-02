@@ -280,6 +280,12 @@ void RunTests(std::filesystem::path const& output){std::ofstream report(output);
  std::vector<SearchHit> mf={{L"C:\\X\\a.txt",L"a.txt",L"",L"file"},{L"D:\\docs\\b.docx",L"b.docx",L"",L"file"},{L"",L"x",L"",L"file"}};
  auto added=ev::MergeHits(mh,mf);
  expect(mh.size()==2&&added.size()==1&&added[0].path==L"D:\\docs\\b.docx"&&added[0].kind==L"file","everything merge dedupes case-insensitively");
+ Zone cz;cz.id=L"c1";cz.color=8;Layout cl{{cz}};expect(Deserialize(Serialize(cl)).zones[0].color==8,"zone color roundtrip");
+ Zone cz0;cz0.id=L"c0";Layout cl0{{cz0}};expect(Deserialize(Serialize(cl0)).zones[0].color==0,"uncolored zone stays uncolored");
+ auto cOld=Deserialize("{\"version\":1,\"zones\":[{\"id\":\"a\",\"name\":\"n\",\"x\":0,\"y\":0,\"width\":280,\"height\":160,\"collapsed\":false,\"entries\":[]}],\"settings\":{}}");expect(cOld.zones[0].color==0,"legacy zone has no color");
+ auto cBad=Deserialize("{\"version\":1,\"zones\":[{\"id\":\"a\",\"name\":\"n\",\"x\":0,\"y\":0,\"width\":280,\"height\":160,\"collapsed\":false,\"entries\":[],\"color\":99},{\"id\":\"b\",\"name\":\"m\",\"x\":0,\"y\":0,\"width\":280,\"height\":160,\"collapsed\":false,\"entries\":[],\"color\":-3},{\"id\":\"c\",\"name\":\"o\",\"x\":0,\"y\":0,\"width\":280,\"height\":160,\"collapsed\":false,\"entries\":[],\"color\":2.5}],\"settings\":{}}");expect(cBad.zones.size()==3&&cBad.zones[0].color==0&&cBad.zones[1].color==0&&cBad.zones[2].color==0,"invalid zone colors fall back");
+ expect(ZoneColorCount()==8&&ZoneColorRGB(1)==0xE81123u&&ZoneColorRGB(8)==0xE3008Cu,"zone palette bounds");
+ expect(ZoneColorRGB(0)==0u&&ZoneColorRGB(9)==0u&&ZoneColorRGB(-1)==0u,"zone palette out-of-range is none");
 report<<"TOTAL "<<passed<<" passed\n";
 }
 }
