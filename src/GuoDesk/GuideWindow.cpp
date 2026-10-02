@@ -34,8 +34,9 @@ GuideWindow::GuideWindow(Controller& c):owner(c){
   {L"音乐·搜索·天气",L"托盘右键打开音乐播放器、全局搜索和天气组件，全部可在桌面自由摆放。"},
   {L"就地浏览",L"双击映射分区里的文件夹即可就地浏览，顶部面包屑一键返回。"},
   {L"快速捕获",L"随时从托盘或热键唤起捕获框：Enter 记入便签，Ctrl+Enter 存为待办。"},
+  {L"个性化",L"设置里可选三档文字大小与数字/模拟两种时钟样式，改动立即生效。"},
  };
- for(int i=0;i<8;++i){
+ for(int i=0;i<9;++i){
   auto row=Grid();row.Margin(Thickness{0,0,0,18});
   ColumnDefinition badgeCol;badgeCol.Width(GridLength{0,GridUnitType::Auto});row.ColumnDefinitions().Append(badgeCol);
   ColumnDefinition textCol;textCol.Width(GridLength{1,GridUnitType::Star});row.ColumnDefinitions().Append(textCol);

@@ -52,7 +52,7 @@ void SearchWindow::Rebuild(std::wstring const& q){
   ColumnDefinition c1;c1.Width(GridLength{1,GridUnitType::Star});g.ColumnDefinitions().Append(c1);
   bool widget=hit.kind==L"todo"||hit.kind==L"note";
   if(widget){
-   FontIcon glyph;glyph.FontFamily(FontFamily(L"Segoe Fluent Icons"));glyph.Glyph(hit.kind==L"todo"?L"\uE73A":L"\uE70B");glyph.FontSize(14);glyph.Margin(Thickness{2,1,12,0});glyph.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));
+   FontIcon glyph;glyph.FontFamily(FontFamily(L"Segoe Fluent Icons"));glyph.Glyph(hit.kind==L"todo"?L"\uE73A":L"\uE70B");glyph.FontSize(ScaledFont(owner.layout.settings.textSize,14));glyph.Margin(Thickness{2,1,12,0});glyph.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));
    Grid::SetColumn(glyph,0);g.Children().Append(glyph);
   }else{
    Image icon;icon.Width(20);icon.Height(20);icon.VerticalAlignment(VerticalAlignment::Top);icon.Margin(Thickness{0,1,10,0});
@@ -60,8 +60,8 @@ void SearchWindow::Rebuild(std::wstring const& q){
    try{shell::LoadIcon(hit.path,icon);}catch(...){}
   }
   StackPanel texts;texts.Spacing(1);
-  TextBlock name;name.Text(hit.name);name.FontSize(13);name.TextTrimming(TextTrimming::CharacterEllipsis);
-  TextBlock meta;meta.FontSize(11);meta.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));
+  TextBlock name;name.Text(hit.name);name.FontSize(ScaledFont(owner.layout.settings.textSize,13));name.TextTrimming(TextTrimming::CharacterEllipsis);
+  TextBlock meta;meta.FontSize(ScaledFont(owner.layout.settings.textSize,11));meta.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));
   meta.Text(widget?i18n::Tr(hit.kind==L"todo"?L"待办":L"便签"):hit.zone+L" · "+hit.path);meta.TextTrimming(TextTrimming::CharacterEllipsis);
   texts.Children().Append(name);texts.Children().Append(meta);
   Grid::SetColumn(texts,1);g.Children().Append(texts);
@@ -73,9 +73,9 @@ void SearchWindow::Rebuild(std::wstring const& q){
   Grid g;g.Padding(Thickness{4,4,4,4});
   ColumnDefinition c0;c0.Width(GridLength{0,GridUnitType::Auto});g.ColumnDefinitions().Append(c0);
   ColumnDefinition c1;c1.Width(GridLength{1,GridUnitType::Star});g.ColumnDefinitions().Append(c1);
-  FontIcon web;web.FontFamily(FontFamily(L"Segoe Fluent Icons"));web.Glyph(L"\uE721");web.FontSize(14);web.Margin(Thickness{0,2,10,0});web.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));
+  FontIcon web;web.FontFamily(FontFamily(L"Segoe Fluent Icons"));web.Glyph(L"\uE721");web.FontSize(ScaledFont(owner.layout.settings.textSize,14));web.Margin(Thickness{0,2,10,0});web.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));
   Grid::SetColumn(web,0);g.Children().Append(web);
-  TextBlock label;label.FontSize(13);label.Text(i18n::TrF(L"在浏览器中搜索「{0}」",{q}));
+  TextBlock label;label.FontSize(ScaledFont(owner.layout.settings.textSize,13));label.Text(i18n::TrF(L"在浏览器中搜索「{0}」",{q}));
   Grid::SetColumn(label,1);g.Children().Append(label);
   addRow(g);
   auto row=results.Children().GetAt(results.Children().Size()-1).as<Button>();
@@ -99,12 +99,12 @@ SearchWindow::SearchWindow(Controller& c):owner(c){
  root=Grid();
  GridLength rows[]={GridLength{0,GridUnitType::Auto},GridLength{1,GridUnitType::Star},GridLength{0,GridUnitType::Auto}};
  for(auto& r:rows){RowDefinition rd;rd.Height(r);root.RowDefinitions().Append(rd);}
- query=TextBox();query.Margin(Thickness{12,12,12,8});query.PlaceholderText(i18n::Tr(L"搜索分区内容…"));query.FontSize(14);
+ query=TextBox();query.Margin(Thickness{12,12,12,8});query.PlaceholderText(i18n::Tr(L"搜索分区内容…"));query.FontSize(ScaledFont(owner.layout.settings.textSize,14));
  Grid::SetRow(query,0);root.Children().Append(query);
  resultsHost=ScrollViewer();results=StackPanel();results.Spacing(2);results.Margin(Thickness{8,2,8,4});
  resultsHost.Content(results);resultsHost.VerticalScrollBarVisibility(ScrollBarVisibility::Auto);
  Grid::SetRow(resultsHost,1);root.Children().Append(resultsHost);
- hint=TextBlock();hint.Margin(Thickness{14,2,14,10});hint.FontSize(12);hint.TextWrapping(TextWrapping::Wrap);hint.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));
+ hint=TextBlock();hint.Margin(Thickness{14,2,14,10});hint.FontSize(ScaledFont(owner.layout.settings.textSize,12));hint.TextWrapping(TextWrapping::Wrap);hint.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));
  Grid::SetRow(hint,2);root.Children().Append(hint);
  window.Content(root);
  query.TextChanged([this](auto&&,auto&&){Rebuild(std::wstring(query.Text()));});

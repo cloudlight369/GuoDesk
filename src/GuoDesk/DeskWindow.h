@@ -61,7 +61,7 @@ public:
  void ShowNote(); void CloseNote(); void ShowTodo(); void CloseTodo();
  void ShowClock(); void CloseClock(); void ShowGuide(); void CloseGuide(); void CheckReminders();
  void ShowMusic(); void CloseMusic(); void ShowSearch(); void CloseSearch(); void ShowWeather(); void CloseWeather();
- void ShowCapture(); void CloseCapture(); bool CommitCapture(std::wstring const& text,bool asTodo);
+ void ShowCapture(); void CloseCapture(); bool CommitCapture(std::wstring const& text,bool asTodo); void RebuildWidgets();
  void SyncUploadAuto();
  void MoveEntry(std::wstring const& entry,std::wstring const& target,size_t index);
  void SyncWindows(); void MergeInto(std::wstring const& self,std::wstring const& other); void Ungroup(std::wstring const& zoneId); void AddToGroup(std::wstring const& anchorId);

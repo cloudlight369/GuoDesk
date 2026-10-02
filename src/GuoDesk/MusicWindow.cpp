@@ -57,11 +57,11 @@ void MusicWindow::RebuildList(){
   auto index=static_cast<int>(i);
   Button row;row.HorizontalAlignment(HorizontalAlignment::Stretch);row.HorizontalContentAlignment(HorizontalAlignment::Stretch);row.Padding(Thickness{10,6,10,6});row.BorderThickness(Thickness{0});row.Background(SolidColorBrush(Windows::UI::Colors::Transparent()));
   Grid g;ColumnDefinition c0;c0.Width(GridLength{0,GridUnitType::Auto});g.ColumnDefinitions().Append(c0);ColumnDefinition c1;c1.Width(GridLength{1,GridUnitType::Star});g.ColumnDefinitions().Append(c1);
-  FontIcon mark;mark.FontFamily(FontFamily(L"Segoe Fluent Icons"));mark.FontSize(11);mark.VerticalAlignment(VerticalAlignment::Center);mark.Margin(Thickness{0,0,8,0});
+  FontIcon mark;mark.FontFamily(FontFamily(L"Segoe Fluent Icons"));mark.FontSize(ScaledFont(owner.layout.settings.textSize,11));mark.VerticalAlignment(VerticalAlignment::Center);mark.Margin(Thickness{0,0,8,0});
   if(index==current){mark.Glyph(L"\uE768");mark.Foreground(SolidColorBrush(Windows::UI::Color{255,0,120,212}));}
   else{mark.Glyph(L"");mark.Margin(Thickness{19,0,0,0});}
   Grid::SetColumn(mark,0);g.Children().Append(mark);
-  TextBlock name;name.Text(TrimExt(std::filesystem::path(playlist[i]).filename().wstring()));name.FontSize(12);name.TextTrimming(TextTrimming::CharacterEllipsis);
+  TextBlock name;name.Text(TrimExt(std::filesystem::path(playlist[i]).filename().wstring()));name.FontSize(ScaledFont(owner.layout.settings.textSize,12));name.TextTrimming(TextTrimming::CharacterEllipsis);
   if(index==current)name.Foreground(SolidColorBrush(Windows::UI::Color{255,0,120,212}));
   Grid::SetColumn(name,1);g.Children().Append(name);
   row.Content(g);
@@ -115,11 +115,11 @@ MusicWindow::MusicWindow(Controller& c):owner(c){
  Border header;header.Padding(Thickness{12,8,8,6});header.Background(SolidColorBrush(Windows::UI::Colors::Transparent()));
  Grid headGrid;ColumnDefinition hc1;hc1.Width(GridLength{1,GridUnitType::Star});headGrid.ColumnDefinitions().Append(hc1);ColumnDefinition hc2;hc2.Width(GridLength{0,GridUnitType::Auto});headGrid.ColumnDefinitions().Append(hc2);
  StackPanel headRow;headRow.Orientation(Orientation::Horizontal);headRow.Spacing(8);
- FontIcon grip;grip.FontFamily(FontFamily(L"Segoe Fluent Icons"));grip.Glyph(L"\uE7C2");grip.FontSize(12);grip.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));headRow.Children().Append(grip);
- TextBlock title;title.Text(i18n::Tr(L"音乐"));title.FontSize(12);title.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));headRow.Children().Append(title);
- count=TextBlock();count.FontSize(11);count.VerticalAlignment(VerticalAlignment::Center);count.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,140,140,140}));headRow.Children().Append(count);
+ FontIcon grip;grip.FontFamily(FontFamily(L"Segoe Fluent Icons"));grip.Glyph(L"\uE7C2");grip.FontSize(ScaledFont(owner.layout.settings.textSize,12));grip.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));headRow.Children().Append(grip);
+ TextBlock title;title.Text(i18n::Tr(L"音乐"));title.FontSize(ScaledFont(owner.layout.settings.textSize,12));title.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));headRow.Children().Append(title);
+ count=TextBlock();count.FontSize(ScaledFont(owner.layout.settings.textSize,11));count.VerticalAlignment(VerticalAlignment::Center);count.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,140,140,140}));headRow.Children().Append(count);
  Grid::SetColumn(headRow,0);headGrid.Children().Append(headRow);
- auto glyphBtn=[this](wchar_t const* glyph,int size){Button b;b.Background(SolidColorBrush(Windows::UI::Colors::Transparent()));b.BorderThickness(Thickness{0});b.Padding(Thickness{6,2,6,2});b.MinWidth(0);FontIcon ic;ic.FontFamily(FontFamily(L"Segoe Fluent Icons"));ic.Glyph(glyph);ic.FontSize(size);ic.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,140,140,140}));b.Content(ic);return b;};
+ auto glyphBtn=[this](wchar_t const* glyph,int size){Button b;b.Background(SolidColorBrush(Windows::UI::Colors::Transparent()));b.BorderThickness(Thickness{0});b.Padding(Thickness{6,2,6,2});b.MinWidth(0);FontIcon ic;ic.FontFamily(FontFamily(L"Segoe Fluent Icons"));ic.Glyph(glyph);ic.FontSize(ScaledFont(owner.layout.settings.textSize,size));ic.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,140,140,140}));b.Content(ic);return b;};
  auto folderBtn=glyphBtn(L"\uE8B7",13);
  folderBtn.Click([this](auto&&,auto&&){
   auto picked=shell::Pick(hwnd,true,i18n::Tr(L"选择音乐文件夹"));
@@ -144,13 +144,13 @@ MusicWindow::MusicWindow(Controller& c):owner(c){
  };
  dragHeader(header);
  StackPanel now;now.Margin(Thickness{14,2,14,0});now.Spacing(2);
- track=TextBlock();track.FontSize(15);track.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());track.TextTrimming(TextTrimming::CharacterEllipsis);
- sub=TextBlock();sub.FontSize(11);sub.TextWrapping(TextWrapping::Wrap);sub.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));
+ track=TextBlock();track.FontSize(ScaledFont(owner.layout.settings.textSize,15));track.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());track.TextTrimming(TextTrimming::CharacterEllipsis);
+ sub=TextBlock();sub.FontSize(ScaledFont(owner.layout.settings.textSize,11));sub.TextWrapping(TextWrapping::Wrap);sub.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));
  now.Children().Append(track);now.Children().Append(sub);
  Grid::SetRow(now,1);root.Children().Append(now);
  StackPanel progRow;progRow.Margin(Thickness{14,8,14,0});progRow.Spacing(4);
  progress=ProgressBar();progress.Minimum(0);progress.Maximum(1);
- timeText=TextBlock();timeText.FontSize(11);timeText.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,140,140,140}));
+ timeText=TextBlock();timeText.FontSize(ScaledFont(owner.layout.settings.textSize,11));timeText.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,140,140,140}));
  progRow.Children().Append(progress);progRow.Children().Append(timeText);
  Grid::SetRow(progRow,2);root.Children().Append(progRow);
  StackPanel controls;controls.Orientation(Orientation::Horizontal);controls.Spacing(6);controls.Margin(Thickness{14,6,14,6});controls.HorizontalAlignment(HorizontalAlignment::Center);
@@ -161,13 +161,13 @@ MusicWindow::MusicWindow(Controller& c):owner(c){
   try{if(player.CurrentState()==Windows::Media::Playback::MediaPlayerState::Playing)player.Pause();else player.Play();}catch(...){}
  });
  auto nextBtn=glyphBtn(L"\uE893",14);nextBtn.Click([this](auto&&,auto&&){if(current+1<static_cast<int>(playlist.size()))PlayIndex(current+1,true);else if(!playlist.empty())PlayIndex(0,true);});
- auto volIcon=FontIcon();volIcon.FontFamily(FontFamily(L"Segoe Fluent Icons"));volIcon.Glyph(L"\uE767");volIcon.FontSize(12);volIcon.VerticalAlignment(VerticalAlignment::Center);volIcon.Margin(Thickness{10,0,2,0});volIcon.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,140,140,140}));
+ auto volIcon=FontIcon();volIcon.FontFamily(FontFamily(L"Segoe Fluent Icons"));volIcon.Glyph(L"\uE767");volIcon.FontSize(ScaledFont(owner.layout.settings.textSize,12));volIcon.VerticalAlignment(VerticalAlignment::Center);volIcon.Margin(Thickness{10,0,2,0});volIcon.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,140,140,140}));
  volume=Slider();volume.Minimum(0);volume.Maximum(100);volume.StepFrequency(1);volume.Width(90);volume.VerticalAlignment(VerticalAlignment::Center);volume.Value(w.musicVol);
  volume.ValueChanged([this](auto&&,auto&&){try{player.Volume(volume.Value()/100.0);}catch(...){}if(saveTimer)saveTimer.Start();});
  controls.Children().Append(prevBtn);controls.Children().Append(playBtn);controls.Children().Append(nextBtn);controls.Children().Append(volIcon);controls.Children().Append(volume);
  Grid::SetRow(controls,3);root.Children().Append(controls);
  StackPanel listArea;listArea.Margin(Thickness{6,0,6,8});
- empty=TextBlock();empty.Text(i18n::Tr(L"还没有歌曲，选择一个音乐文件夹开始播放。"));empty.FontSize(12);empty.Margin(Thickness{8,14,8,10});empty.TextWrapping(TextWrapping::Wrap);empty.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));
+ empty=TextBlock();empty.Text(i18n::Tr(L"还没有歌曲，选择一个音乐文件夹开始播放。"));empty.FontSize(ScaledFont(owner.layout.settings.textSize,12));empty.Margin(Thickness{8,14,8,10});empty.TextWrapping(TextWrapping::Wrap);empty.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));
  listPanel=StackPanel();
  listHost=ScrollViewer();listHost.Content(listPanel);listHost.VerticalScrollBarVisibility(ScrollBarVisibility::Auto);listHost.Padding(Thickness{4,0,4,0});
  listArea.Children().Append(empty);listArea.Children().Append(listHost);

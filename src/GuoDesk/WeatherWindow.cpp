@@ -117,11 +117,11 @@ void WeatherWindow::Render(WeatherNow const& w){
   ColumnDefinition c0;c0.Width(GridLength{0,GridUnitType::Auto});row.ColumnDefinitions().Append(c0);
   ColumnDefinition c1;c1.Width(GridLength{1,GridUnitType::Star});row.ColumnDefinitions().Append(c1);
   ColumnDefinition c2;c2.Width(GridLength{0,GridUnitType::Auto});row.ColumnDefinitions().Append(c2);
-  TextBlock label;label.Text(DayLabel(d.date));label.FontSize(12);label.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));
+  TextBlock label;label.Text(DayLabel(d.date));label.FontSize(ScaledFont(owner.layout.settings.textSize,12));label.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));
   Grid::SetColumn(label,0);row.Children().Append(label);
-  TextBlock ic;ic.Text(WmoEmoji(d.code));ic.FontSize(14);ic.HorizontalAlignment(HorizontalAlignment::Center);
+  TextBlock ic;ic.Text(WmoEmoji(d.code));ic.FontSize(ScaledFont(owner.layout.settings.textSize,14));ic.HorizontalAlignment(HorizontalAlignment::Center);
   Grid::SetColumn(ic,1);row.Children().Append(ic);
-  TextBlock range;wchar_t rb[32]{};swprintf_s(rb,32,L"%.0f° / %.0f°",d.lo,d.hi);range.Text(rb);range.FontSize(12);
+  TextBlock range;wchar_t rb[32]{};swprintf_s(rb,32,L"%.0f° / %.0f°",d.lo,d.hi);range.Text(rb);range.FontSize(ScaledFont(owner.layout.settings.textSize,12));
   Grid::SetColumn(range,2);row.Children().Append(range);
   days.Children().Append(row);
  }
@@ -147,7 +147,7 @@ WeatherWindow::WeatherWindow(Controller& c):owner(c){
  GridLength rows[]={GridLength{0,GridUnitType::Auto},GridLength{0,GridUnitType::Auto},GridLength{0,GridUnitType::Auto},GridLength{0,GridUnitType::Auto},GridLength{0,GridUnitType::Auto},GridLength{1,GridUnitType::Star}};
  for(auto& r:rows){RowDefinition rd;rd.Height(r);root.RowDefinitions().Append(rd);}
  auto head=Border();head.Padding(Thickness{14,10,10,2});head.Background(SolidColorBrush(Windows::UI::Colors::Transparent()));
- city=TextBlock();city.FontSize(13);city.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));
+ city=TextBlock();city.FontSize(ScaledFont(owner.layout.settings.textSize,13));city.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));
  head.Child(city);root.Children().Append(head);
  auto dragHeader=[&](FrameworkElement const& el){
   auto dragging=std::make_shared<bool>(false);auto dragStart=std::make_shared<POINT>();auto dragOrigin=std::make_shared<RECT>();
@@ -164,14 +164,14 @@ WeatherWindow::WeatherWindow(Controller& c):owner(c){
  };
  dragHeader(head);
  auto main=StackPanel();main.Orientation(Orientation::Horizontal);main.Spacing(14);main.Margin(Thickness{16,4,16,0});main.VerticalAlignment(VerticalAlignment::Top);
- icon=TextBlock();icon.FontSize(46);icon.VerticalAlignment(VerticalAlignment::Center);
+ icon=TextBlock();icon.FontSize(ScaledFont(owner.layout.settings.textSize,46));icon.VerticalAlignment(VerticalAlignment::Center);
  auto tcol=StackPanel();tcol.Spacing(0);
- temp=TextBlock();temp.FontSize(36);temp.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
- desc=TextBlock();desc.FontSize(13);desc.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));
+ temp=TextBlock();temp.FontSize(ScaledFont(owner.layout.settings.textSize,36));temp.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
+ desc=TextBlock();desc.FontSize(ScaledFont(owner.layout.settings.textSize,13));desc.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));
  tcol.Children().Append(temp);tcol.Children().Append(desc);
  main.Children().Append(icon);main.Children().Append(tcol);
  Grid::SetRow(main,1);root.Children().Append(main);
- extra=TextBlock();extra.Margin(Thickness{16,6,16,0});extra.FontSize(12);extra.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));
+ extra=TextBlock();extra.Margin(Thickness{16,6,16,0});extra.FontSize(ScaledFont(owner.layout.settings.textSize,12));extra.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));
  Grid::SetRow(extra,2);root.Children().Append(extra);
  auto divider=Border();divider.Height(1);divider.Margin(Thickness{16,10,16,2});divider.Background(SolidColorBrush(Windows::UI::Color{80,128,128,128}));
  Grid::SetRow(divider,3);root.Children().Append(divider);
@@ -180,10 +180,10 @@ WeatherWindow::WeatherWindow(Controller& c):owner(c){
  auto foot=Grid();foot.Margin(Thickness{16,2,12,10});
  ColumnDefinition f0;f0.Width(GridLength{1,GridUnitType::Star});foot.ColumnDefinitions().Append(f0);
  ColumnDefinition f1;f1.Width(GridLength{0,GridUnitType::Auto});foot.ColumnDefinitions().Append(f1);
- updated=TextBlock();updated.FontSize(11);updated.TextWrapping(TextWrapping::Wrap);updated.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));updated.VerticalAlignment(VerticalAlignment::Center);
+ updated=TextBlock();updated.FontSize(ScaledFont(owner.layout.settings.textSize,11));updated.TextWrapping(TextWrapping::Wrap);updated.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));updated.VerticalAlignment(VerticalAlignment::Center);
  Grid::SetColumn(updated,0);foot.Children().Append(updated);
  auto refreshBtn=Button();refreshBtn.Background(SolidColorBrush(Windows::UI::Colors::Transparent()));refreshBtn.BorderThickness(Thickness{0});refreshBtn.Padding(Thickness{6,2,6,2});refreshBtn.MinWidth(0);
- FontIcon ricon;ricon.FontFamily(FontFamily(L"Segoe Fluent Icons"));ricon.Glyph(L"\uE72C");ricon.FontSize(12);ricon.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,140,140,140}));
+ FontIcon ricon;ricon.FontFamily(FontFamily(L"Segoe Fluent Icons"));ricon.Glyph(L"\uE72C");ricon.FontSize(ScaledFont(owner.layout.settings.textSize,12));ricon.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,140,140,140}));
  refreshBtn.Content(ricon);
  refreshBtn.Click([this](auto&&,auto&&){resolved=false;ResolveCoords();});
  Grid::SetColumn(refreshBtn,1);foot.Children().Append(refreshBtn);

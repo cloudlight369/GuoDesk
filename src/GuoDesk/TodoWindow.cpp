@@ -32,21 +32,21 @@ void TodoWindow::Rebuild(){
  int done=0;for(auto const& t:todos)if(t.done)++done;
  count.Text(todos.empty()?L"":i18n::TrF(L"{0}/{1} 已完成",{std::to_wstring(done),std::to_wstring(todos.size())}));
  if(todos.empty()){
-  TextBlock empty;empty.Text(i18n::Tr(L"还没有待办，从下方添加一条"));empty.FontSize(12);empty.HorizontalAlignment(HorizontalAlignment::Center);empty.Margin(Thickness{0,24,0,0});empty.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,140,140,140}));list.Children().Append(empty);
+  TextBlock empty;empty.Text(i18n::Tr(L"还没有待办，从下方添加一条"));empty.FontSize(ScaledFont(owner.layout.settings.textSize,12));empty.HorizontalAlignment(HorizontalAlignment::Center);empty.Margin(Thickness{0,24,0,0});empty.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,140,140,140}));list.Children().Append(empty);
   return;
  }
  for(auto const& t:todos){
   auto id=t.id;
   Border row;row.Padding(Thickness{10,4,4,4});row.CornerRadius(CornerRadius{6,6,6,6});row.Background(ThemeBrush(L"CardBackgroundFillColorDefault",Windows::UI::Color{255,60,60,60}));
   Grid g;ColumnDefinition c1;c1.Width(GridLength{1,GridUnitType::Star});g.ColumnDefinitions().Append(c1);ColumnDefinition c2;c2.Width(GridLength{0,GridUnitType::Auto});g.ColumnDefinitions().Append(c2);ColumnDefinition c3;c3.Width(GridLength{0,GridUnitType::Auto});g.ColumnDefinitions().Append(c3);
-  CheckBox box;auto label=TextBlock();label.Text(t.text);label.TextWrapping(TextWrapping::Wrap);label.FontSize(13);label.Opacity(t.done?0.45:1.0);box.Content(label);box.IsChecked(t.done);box.MinWidth(0);box.Padding(Thickness{0});box.Margin(Thickness{0,0,0,0});
+  CheckBox box;auto label=TextBlock();label.Text(t.text);label.TextWrapping(TextWrapping::Wrap);label.FontSize(ScaledFont(owner.layout.settings.textSize,13));label.Opacity(t.done?0.45:1.0);box.Content(label);box.IsChecked(t.done);box.MinWidth(0);box.Padding(Thickness{0});box.Margin(Thickness{0,0,0,0});
   box.Checked([this,id,label](auto&&,auto&&){ToggleTodo(owner.layout.widgets,id);label.Opacity(0.45);count.Text(CountText());owner.Save();});
   box.Unchecked([this,id,label](auto&&,auto&&){ToggleTodo(owner.layout.widgets,id);label.Opacity(1.0);count.Text(CountText());owner.Save();});
   Grid::SetColumn(box,0);g.Children().Append(box);
   Button dueBtn;dueBtn.Background(SolidColorBrush(Windows::UI::Colors::Transparent()));dueBtn.BorderThickness(Thickness{0});dueBtn.Padding(Thickness{6,4,6,4});dueBtn.Margin(Thickness{0,2,0,0});dueBtn.MinWidth(0);
   auto dueRow=StackPanel();dueRow.Orientation(Orientation::Horizontal);dueRow.Spacing(4);
-  FontIcon cal;cal.FontFamily(FontFamily(L"Segoe Fluent Icons"));cal.Glyph(L"\uE787");cal.FontSize(12);cal.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,160,160,160}));
-  TextBlock dueLabel;dueLabel.FontSize(11);
+  FontIcon cal;cal.FontFamily(FontFamily(L"Segoe Fluent Icons"));cal.Glyph(L"\uE787");cal.FontSize(ScaledFont(owner.layout.settings.textSize,12));cal.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,160,160,160}));
+  TextBlock dueLabel;dueLabel.FontSize(ScaledFont(owner.layout.settings.textSize,11));
   if(t.due){dueLabel.Text(DueText(t.due));if(DueReached(t.due)&&!t.done){auto red=SolidColorBrush(Windows::UI::Color{255,232,17,35});cal.Foreground(red);dueLabel.Foreground(red);dueLabel.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());}}
   dueRow.Children().Append(cal);dueRow.Children().Append(dueLabel);dueBtn.Content(dueRow);
   MenuFlyout mf;
@@ -57,7 +57,7 @@ void TodoWindow::Rebuild(){
   dueBtn.Flyout(mf);
   Grid::SetColumn(dueBtn,1);g.Children().Append(dueBtn);
   Button del;del.Background(SolidColorBrush(Windows::UI::Colors::Transparent()));del.BorderThickness(Thickness{0});del.Padding(Thickness{6,4,6,4});del.Margin(Thickness{0,2,0,0});
-  FontIcon trash;trash.FontFamily(FontFamily(L"Segoe Fluent Icons"));trash.Glyph(L"\uE74D");trash.FontSize(12);trash.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,160,160,160}));del.Content(trash);
+  FontIcon trash;trash.FontFamily(FontFamily(L"Segoe Fluent Icons"));trash.Glyph(L"\uE74D");trash.FontSize(ScaledFont(owner.layout.settings.textSize,12));trash.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,160,160,160}));del.Content(trash);
   del.Click([this,id](auto&&,auto&&){RemoveTodo(owner.layout.widgets,id);Rebuild();owner.Save();});
   Grid::SetColumn(del,2);g.Children().Append(del);
   row.Child(g);list.Children().Append(row);
@@ -82,10 +82,10 @@ TodoWindow::TodoWindow(Controller& c):owner(c){
  Border header;header.Padding(Thickness{12,8,12,6});header.Background(SolidColorBrush(Windows::UI::Colors::Transparent()));
  Grid headGrid;ColumnDefinition hc1;hc1.Width(GridLength{1,GridUnitType::Star});headGrid.ColumnDefinitions().Append(hc1);ColumnDefinition hc2;hc2.Width(GridLength{0,GridUnitType::Auto});headGrid.ColumnDefinitions().Append(hc2);
  StackPanel headLeft;headLeft.Orientation(Orientation::Horizontal);headLeft.Spacing(8);
- FontIcon grip;grip.FontFamily(FontFamily(L"Segoe Fluent Icons"));grip.Glyph(L"\uE7C2");grip.FontSize(12);grip.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));headLeft.Children().Append(grip);
- TextBlock title;title.Text(i18n::Tr(L"待办"));title.FontSize(12);title.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));headLeft.Children().Append(title);
+ FontIcon grip;grip.FontFamily(FontFamily(L"Segoe Fluent Icons"));grip.Glyph(L"\uE7C2");grip.FontSize(ScaledFont(owner.layout.settings.textSize,12));grip.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));headLeft.Children().Append(grip);
+ TextBlock title;title.Text(i18n::Tr(L"待办"));title.FontSize(ScaledFont(owner.layout.settings.textSize,12));title.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));headLeft.Children().Append(title);
  Grid::SetColumn(headLeft,0);headGrid.Children().Append(headLeft);
- count=TextBlock();count.FontSize(12);count.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,140,140,140}));count.VerticalAlignment(VerticalAlignment::Center);Grid::SetColumn(count,1);headGrid.Children().Append(count);
+ count=TextBlock();count.FontSize(ScaledFont(owner.layout.settings.textSize,12));count.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,140,140,140}));count.VerticalAlignment(VerticalAlignment::Center);Grid::SetColumn(count,1);headGrid.Children().Append(count);
  header.Child(headGrid);root.Children().Append(header);
  auto dragging=std::make_shared<bool>(false);auto dragStart=std::make_shared<POINT>();auto dragOrigin=std::make_shared<RECT>();
  auto dragTimer=root.DispatcherQueue().CreateTimer();dragTimer.Interval(std::chrono::milliseconds(16));
@@ -97,7 +97,7 @@ TodoWindow::TodoWindow(Controller& c):owner(c){
  auto scroll=ScrollViewer();scroll.VerticalScrollBarVisibility(ScrollBarVisibility::Auto);scroll.Padding(Thickness{8,0,8,0});
  list=StackPanel();list.Spacing(4);scroll.Content(list);Grid::SetRow(scroll,1);root.Children().Append(scroll);
  auto bar=Grid();bar.Padding(Thickness{8,6,8,10});ColumnDefinition fc1;fc1.Width(GridLength{1,GridUnitType::Star});bar.ColumnDefinitions().Append(fc1);ColumnDefinition fc2;fc2.Width(GridLength{0,GridUnitType::Auto});bar.ColumnDefinitions().Append(fc2);
- input=TextBox();input.PlaceholderText(i18n::Tr(L"添加待办，回车确认"));input.FontSize(13);input.Margin(Thickness{0,0,8,0});Grid::SetColumn(input,0);bar.Children().Append(input);
+ input=TextBox();input.PlaceholderText(i18n::Tr(L"添加待办，回车确认"));input.FontSize(ScaledFont(owner.layout.settings.textSize,13));input.Margin(Thickness{0,0,8,0});Grid::SetColumn(input,0);bar.Children().Append(input);
  auto addBtn=Button();addBtn.Content(box_value(i18n::Tr(L"添加")));try{addBtn.Style(Application::Current().Resources().Lookup(box_value(L"AccentButtonStyle")).as<Style>());}catch(...){}
  addBtn.Click([this](auto&&,auto&&){Add();});Grid::SetColumn(addBtn,1);bar.Children().Append(addBtn);
  input.KeyDown([this](auto&&,Input::KeyRoutedEventArgs const& a){if(a.Key()==winrt::Windows::System::VirtualKey::Enter)Add();});

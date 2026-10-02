@@ -11,6 +11,8 @@ class SettingsWindow {
  winrt::Microsoft::UI::Xaml::Controls::ToggleSwitch performance{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::ToggleSwitch autostart{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::ComboBox lang{nullptr};
+ winrt::Microsoft::UI::Xaml::Controls::ComboBox textSize{nullptr};
+ winrt::Microsoft::UI::Xaml::Controls::ComboBox clockStyle{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::ComboBox hotkey{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::TextBlock hotkeyHint{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::TextBox hotkeyCustom{nullptr};
@@ -32,6 +34,7 @@ class SettingsWindow {
  winrt::Microsoft::UI::Xaml::Controls::ScrollViewer scroll{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::StackPanel rulesPanel{nullptr};
  void OnTheme(int index); void OnCompact(bool on); void OnPerformance(bool on); void OnAutostart(bool on); void OnLanguage(int index);
+ void OnTextSize(int index); void OnClockStyle(int index);
  void OnHotkey(int index); void OnSnapshots(bool on);
  void OnHotkeySearch(int index); void OnHotkeyCapture(int index); void OnGeoSearch(); void OnGeoSave(); void OnGeoAuto();
  void OnSyncSave(); void OnSyncUpload(); void OnSyncDownload(); void OnSyncAuto(bool on);

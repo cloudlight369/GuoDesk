@@ -3,6 +3,7 @@
 #include "I18n.h"
 #include "WebDav.h"
 #include <iostream>
+#include <cmath>
 namespace guodesk {
 void RunTests(std::filesystem::path const& output){std::ofstream report(output);int passed=0;auto expect=[&](bool ok,char const* name){report<<(ok?"PASS ":"FAIL ")<<name<<'\n';report.flush();if(!ok)throw std::runtime_error(name);++passed;};
  Zone z;z.id=NewId();z.name=L"中文 分区";expect(AddEntry(z,L"C:\\测试 文件\\Demo.lnk"),"add unicode path");expect(!AddEntry(z,L"c:\\测试 文件\\DEMO.lnk"),"case insensitive duplicate");expect(!AddEntry(z,L"C:\\测试 文件\\sub\\..\\Demo.lnk"),"normalized duplicate");
@@ -264,6 +265,12 @@ void RunTests(std::filesystem::path const& output){std::ofstream report(output);
  Layout capL;capL.settings.hotkeyCapture=L"Ctrl+Alt+K";auto capR=Deserialize(Serialize(capL));expect(capR.settings.hotkeyCapture==L"Ctrl+Alt+K","capture hotkey roundtrip");
  auto capEmpty=Deserialize(Serialize(Layout{}));expect(capEmpty.settings.hotkeyCapture.empty(),"capture hotkey default empty");
  auto capBad=Deserialize("{\"version\":1,\"zones\":[],\"settings\":{\"hotkeyCapture\":\"Bad+\"}}");expect(capBad.settings.hotkeyCapture.empty(),"invalid capture hotkey dropped");
+ Layout fontL;fontL.settings.textSize=2;fontL.settings.clockStyle=L"analog";auto fontR=Deserialize(Serialize(fontL));expect(fontR.settings.textSize==2&&fontR.settings.clockStyle==L"analog","textSize+clockStyle roundtrip");
+ auto fontDef=Deserialize(Serialize(Layout{}));expect(fontDef.settings.textSize==1&&fontDef.settings.clockStyle.empty(),"font defaults standard digital");
+ auto fontBad=Deserialize("{\"version\":1,\"zones\":[],\"settings\":{\"textSize\":7,\"clockStyle\":\"analogX\"}}");expect(fontBad.settings.textSize==1&&fontBad.settings.clockStyle.empty(),"invalid textSize/clockStyle dropped");
+ auto nearF=[](double a,double b){return std::fabs(a-b)<0.001;};
+ expect(nearF(ScaledFont(0,20),17)&&nearF(ScaledFont(1,20),20)&&nearF(ScaledFont(2,20),24),"scaled font three steps");
+ expect(nearF(ScaledFont(-3,20),17)&&nearF(ScaledFont(9,20),24),"scaled font clamps out-of-range");
 report<<"TOTAL "<<passed<<" passed\n";
 }
 }
