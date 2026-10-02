@@ -10,6 +10,8 @@ class SettingsWindow {
  winrt::Microsoft::UI::Xaml::Controls::ToggleSwitch compact{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::ToggleSwitch performance{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::ToggleSwitch autostart{nullptr};
+ winrt::Microsoft::UI::Xaml::Controls::ToggleSwitch everythingToggle{nullptr};
+ winrt::Microsoft::UI::Xaml::Controls::TextBlock evHint{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::ComboBox lang{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::ComboBox textSize{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::ComboBox clockStyle{nullptr};
@@ -33,7 +35,7 @@ class SettingsWindow {
  winrt::Microsoft::UI::Xaml::Controls::TextBlock syncHint{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::ScrollViewer scroll{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::StackPanel rulesPanel{nullptr};
- void OnTheme(int index); void OnCompact(bool on); void OnPerformance(bool on); void OnAutostart(bool on); void OnLanguage(int index);
+ void OnTheme(int index); void OnCompact(bool on); void OnPerformance(bool on); void OnAutostart(bool on); void OnLanguage(int index); void OnEverything(bool on);
  void OnTextSize(int index); void OnClockStyle(int index);
  void OnHotkey(int index); void OnSnapshots(bool on);
  void OnHotkeySearch(int index); void OnHotkeyCapture(int index); void OnGeoSearch(); void OnGeoSave(); void OnGeoAuto();

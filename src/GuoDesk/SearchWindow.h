@@ -11,8 +11,10 @@ class SearchWindow {
  winrt::Microsoft::UI::Xaml::Controls::ScrollViewer resultsHost{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::TextBlock hint{nullptr};
  std::vector<SearchHit> hits;
+ std::shared_ptr<bool> alive=std::make_shared<bool>(true); unsigned evGen=0;
  winrt::Microsoft::UI::Xaml::Media::Brush ThemeBrush(wchar_t const* key,winrt::Windows::UI::Color fallback);
  void Rebuild(std::wstring const& q);
+ void AppendEverything(std::wstring const& q);
  void OpenPath(std::wstring const& path);
  void OpenHit(SearchHit const& hit);
  void SaveGeometry();

@@ -1,8 +1,10 @@
 #include "pch.h"
 #include "SearchWindow.h"
 #include "DeskWindow.h"
+#include "EvSearch.h"
 #include "Shell.h"
 #include "I18n.h"
+#include <thread>
 using namespace winrt;
 using namespace Microsoft::UI::Xaml;
 using namespace Microsoft::UI::Xaml::Controls;
@@ -81,6 +83,36 @@ void SearchWindow::Rebuild(std::wstring const& q){
   auto row=results.Children().GetAt(results.Children().Size()-1).as<Button>();
   row.Click([this,q](auto&&,auto&&){OpenPath(WebUrl(q));});
  }
+ AppendEverything(q);
+}
+void SearchWindow::AppendEverything(std::wstring const& q){
+ if(!ev::ShouldQuery(q,owner.layout.settings.everything))return;
+ auto gen=++evGen;auto weak=std::weak_ptr<bool>(alive);auto dq=window.DispatcherQueue();
+ std::thread([this,weak,dq,q,gen]{
+  auto files=ev::Query(q,25);
+  dq.TryEnqueue([this,weak,files,gen]{
+   if(weak.lock()==nullptr||closing||gen!=evGen||files.empty())return;
+   auto added=ev::MergeHits(hits,files);
+   auto idx=results.Children().Size();if(idx>0)--idx;
+   for(auto const& hit:added){
+    Grid g;g.Padding(Thickness{4,4,4,4});
+    ColumnDefinition c0;c0.Width(GridLength{0,GridUnitType::Auto});g.ColumnDefinitions().Append(c0);
+    ColumnDefinition c1;c1.Width(GridLength{1,GridUnitType::Star});g.ColumnDefinitions().Append(c1);
+    Image icon;icon.Width(20);icon.Height(20);icon.VerticalAlignment(VerticalAlignment::Top);icon.Margin(Thickness{0,1,10,0});
+    Grid::SetColumn(icon,0);g.Children().Append(icon);
+    try{shell::LoadIcon(hit.path,icon);}catch(...){}
+    StackPanel texts;texts.Spacing(1);
+    TextBlock name;name.Text(hit.name);name.FontSize(ScaledFont(owner.layout.settings.textSize,13));name.TextTrimming(TextTrimming::CharacterEllipsis);
+    TextBlock meta;meta.FontSize(ScaledFont(owner.layout.settings.textSize,11));meta.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));meta.Text(L"Everything · "+hit.path);meta.TextTrimming(TextTrimming::CharacterEllipsis);
+    texts.Children().Append(name);texts.Children().Append(meta);
+    Grid::SetColumn(texts,1);g.Children().Append(texts);
+    Button row;row.HorizontalAlignment(HorizontalAlignment::Stretch);row.HorizontalContentAlignment(HorizontalAlignment::Stretch);row.Padding(Thickness{6,4,6,4});row.BorderThickness(Thickness{0});row.Background(SolidColorBrush(Windows::UI::Colors::Transparent()));row.Content(g);
+    row.Click([this,hit](auto&&,auto&&){OpenHit(hit);});
+    results.Children().InsertAt(idx++,row);
+   }
+   hint.Visibility(Visibility::Collapsed);
+  });
+ }).detach();
 }
 void SearchWindow::SaveGeometry(){
  if(!IsWindow(hwnd))return;
@@ -122,6 +154,7 @@ SearchWindow::SearchWindow(Controller& c):owner(c){
  });
  window.Closed([this](auto&&,auto&&){
   if(closing)return;closing=true;
+  *alive=false;
   SaveGeometry();
   window.DispatcherQueue().TryEnqueue([this]{owner.CloseSearch();});
  });

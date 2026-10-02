@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "Core.h"
+#include "EvSearch.h"
 #include "I18n.h"
 #include "WebDav.h"
 #include <iostream>
@@ -271,6 +272,14 @@ void RunTests(std::filesystem::path const& output){std::ofstream report(output);
  auto nearF=[](double a,double b){return std::fabs(a-b)<0.001;};
  expect(nearF(ScaledFont(0,20),17)&&nearF(ScaledFont(1,20),20)&&nearF(ScaledFont(2,20),24),"scaled font three steps");
  expect(nearF(ScaledFont(-3,20),17)&&nearF(ScaledFont(9,20),24),"scaled font clamps out-of-range");
+ Layout evL;evL.settings.everything=false;auto evR=Deserialize(Serialize(evL));expect(!evR.settings.everything,"everything toggle roundtrip");
+ auto evDef=Deserialize(Serialize(Layout{}));expect(evDef.settings.everything,"everything enabled by default");
+ auto evOld=Deserialize("{\"version\":1,\"zones\":[],\"settings\":{}}");expect(evOld.settings.everything,"legacy layout keeps everything default");
+ expect(ev::ShouldQuery(L"ab",true)&&!ev::ShouldQuery(L"a",true)&&!ev::ShouldQuery(L"abc",false),"everything query gate");
+ std::vector<SearchHit> mh={{L"C:\\x\\a.txt",L"a.txt",L"资料",L""}};
+ std::vector<SearchHit> mf={{L"C:\\X\\a.txt",L"a.txt",L"",L"file"},{L"D:\\docs\\b.docx",L"b.docx",L"",L"file"},{L"",L"x",L"",L"file"}};
+ auto added=ev::MergeHits(mh,mf);
+ expect(mh.size()==2&&added.size()==1&&added[0].path==L"D:\\docs\\b.docx"&&added[0].kind==L"file","everything merge dedupes case-insensitively");
 report<<"TOTAL "<<passed<<" passed\n";
 }
 }

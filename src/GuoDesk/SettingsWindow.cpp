@@ -5,6 +5,7 @@
 #include "I18n.h"
 #include "WeatherWindow.h"
 #include "WebDav.h"
+#include "EvSearch.h"
 using namespace winrt;
 using namespace Microsoft::UI::Xaml;
 using namespace Microsoft::UI::Xaml::Controls;
@@ -35,6 +36,8 @@ SettingsWindow::SettingsWindow(Controller& c):owner(c){
  TextBlock clockHint;clockHint.Text(i18n::Tr(L"时钟组件的显示样式。"));clockHint.FontSize(11);clockHint.Opacity(0.6);panel.Children().Append(clockHint);
  panel.Children().Append(Caption(i18n::Tr(L"常规")));
  autostart=ToggleSwitch();autostart.OnContent(box_value(i18n::Tr(L"开机自动启动")));autostart.OffContent(box_value(i18n::Tr(L"开机自动启动")));autostart.Toggled([this](auto&&,auto&&){if(applying)return;OnAutostart(autostart.IsOn());});panel.Children().Append(autostart);
+ everythingToggle=ToggleSwitch();everythingToggle.OnContent(box_value(i18n::Tr(L"Everything 本地文件搜索")));everythingToggle.OffContent(box_value(i18n::Tr(L"Everything 本地文件搜索")));everythingToggle.Toggled([this](auto&&,auto&&){if(applying)return;OnEverything(everythingToggle.IsOn());});panel.Children().Append(everythingToggle);
+ evHint=TextBlock();evHint.FontSize(11);evHint.Opacity(0.6);evHint.TextWrapping(TextWrapping::Wrap);panel.Children().Append(evHint);
  panel.Children().Append(Caption(i18n::Tr(L"全局热键")));
  hotkey=ComboBox();hotkey.HorizontalAlignment(HorizontalAlignment::Stretch);for(wchar_t const* p:{L"双击 Ctrl",L"Ctrl+Alt+G",L"Ctrl+Alt+Z",L"Ctrl+Shift+Space",L"Win+Z",L"自定义…",L"禁用"}){ComboBoxItem it;it.Content(box_value(i18n::Tr(p)));hotkey.Items().Append(it);}
  hotkey.SelectionChanged([this](auto&&,auto&&){if(applying)return;OnHotkey(hotkey.SelectedIndex());});panel.Children().Append(hotkey);
@@ -118,7 +121,7 @@ SettingsWindow::SettingsWindow(Controller& c):owner(c){
  panel.Children().Append(ruleBar);
  RebuildRules();
  panel.Children().Append(Caption(i18n::Tr(L"关于")));
- TextBlock about;about.Text(i18n::Tr(L"GuoDesk v1.6.0 · 桌面分区整理\n引用式入口：只存引用，不动原文件\n缺失入口可右键重新定位\n便签与待办：托盘右键开启，待办可设截止日期提醒\n时钟：托盘右键开启，右键时钟查看日历\n音乐·搜索·天气：托盘右键开启\n双击 Ctrl 或自定义热键随时唤起\n分区模板：托盘或设置一键铺好常用文件夹分区\n映射分区可就地浏览，面包屑返回\n快速捕获：Enter 记便签，Ctrl+Enter 存待办\n组件字号三档可调，时钟支持数字与模拟表盘\nWebDAV 同步：设置中配置网盘，多机同步布局\n\nMIT License · cloudlight369"));about.FontSize(12);about.TextWrapping(TextWrapping::Wrap);about.Opacity(0.8);panel.Children().Append(about);
+ TextBlock about;about.Text(i18n::Tr(L"GuoDesk v1.7.0 · 桌面分区整理\n引用式入口：只存引用，不动原文件\n缺失入口可右键重新定位\n便签与待办：托盘右键开启，待办可设截止日期提醒\n时钟：托盘右键开启，右键时钟查看日历\n音乐·搜索·天气：托盘右键开启\n双击 Ctrl 或自定义热键随时唤起\n分区模板：托盘或设置一键铺好常用文件夹分区\n映射分区可就地浏览，面包屑返回\n快速捕获：Enter 记便签，Ctrl+Enter 存待办\n组件字号三档可调，时钟支持数字与模拟表盘\n搜索窗可直连 Everything，秒级检索本地文件\nWebDAV 同步：设置中配置网盘，多机同步布局\n\nMIT License · cloudlight369"));about.FontSize(12);about.TextWrapping(TextWrapping::Wrap);about.Opacity(0.8);panel.Children().Append(about);
  scroll.Content(panel);window.Content(scroll);
  window.Closed([this](auto&&,auto&&){if(closing)return;closing=true;window.DispatcherQueue().TryEnqueue([this]{owner.CloseSettings();});});
  window.Activate();
@@ -126,6 +129,7 @@ SettingsWindow::SettingsWindow(Controller& c):owner(c){
 void SettingsWindow::OnTheme(int index){auto& s=owner.layout.settings;s.theme=index==1?L"Light":index==2?L"Dark":L"";owner.ApplySettings();owner.Save();}
 void SettingsWindow::OnCompact(bool on){owner.layout.settings.compact=on;owner.ApplySettings();owner.Save();}
 void SettingsWindow::OnPerformance(bool on){owner.layout.settings.performance=on;for(auto& w:owner.windows)w->ApplySettings();owner.Save();}
+void SettingsWindow::OnEverything(bool on){owner.layout.settings.everything=on;owner.Save();}
 void SettingsWindow::OnAutostart(bool on){SetAutostart(on);bool actual=AutostartEnabled();if(actual!=on){applying=true;autostart.IsOn(actual);applying=false;}}
 void SettingsWindow::OnLanguage(int index){owner.layout.settings.language=index==1?L"zh-CN":index==2?L"en-US":L"";owner.Save();}
 void SettingsWindow::OnTextSize(int index){index=std::clamp(index,0,2);if(index==owner.layout.settings.textSize)return;owner.layout.settings.textSize=index;owner.Save();owner.RebuildWidgets();}
@@ -187,7 +191,7 @@ void SettingsWindow::OnSyncDownload(){
   });
  }).detach();
 }
-void SettingsWindow::Apply(){applying=true;auto const& s=owner.layout.settings;theme.SelectedIndex(s.theme==L"Light"?1:s.theme==L"Dark"?2:0);compact.IsOn(s.compact);performance.IsOn(s.performance);autostart.IsOn(AutostartEnabled());lang.SelectedIndex(s.language==L"en-US"?2:s.language==L"zh-CN"?1:0);hotkey.SelectedIndex(s.hotkey==L"DoubleCtrl"?0:s.hotkey==L"Ctrl+Alt+G"?1:s.hotkey==L"Ctrl+Alt+Z"?2:s.hotkey==L"Ctrl+Shift+Space"?3:s.hotkey==L"Win+Z"?4:s.hotkey.empty()?6:5);hotkeyCustom.Text(s.hotkey==L"DoubleCtrl"?i18n::Tr(L"双击 Ctrl"):s.hotkey);hotkeySearch.SelectedIndex(s.hotkeySearch==L"Ctrl+Alt+F"?1:s.hotkeySearch==L"Ctrl+Shift+F"?2:s.hotkeySearch==L"Alt+Q"?3:0);hotkeyCapture.SelectedIndex(s.hotkeyCapture==L"Ctrl+Alt+V"?1:s.hotkeyCapture==L"Ctrl+Shift+V"?2:s.hotkeyCapture==L"Alt+C"?3:0);textSize.SelectedIndex(s.textSize<0?0:s.textSize>2?2:s.textSize);clockStyle.SelectedIndex(s.clockStyle==L"analog"?1:0);weatherCity.Text(owner.layout.widgets.weatherCity);snapshots.IsOn(s.snapshots);syncUrl.Text(s.syncUrl);syncUser.Text(s.syncUser);try{syncPass.Password(webdav::UnprotectSecret(s.syncPass));}catch(...){}syncAuto.IsOn(s.syncAuto);if(syncHint){syncHint.Foreground(nullptr);syncHint.Text(L"");}hotkeyHint.Visibility(Visibility::Collapsed);hotkeySearchHint.Visibility(Visibility::Collapsed);hotkeyCaptureHint.Visibility(Visibility::Collapsed);applying=false;}
+void SettingsWindow::Apply(){applying=true;auto const& s=owner.layout.settings;theme.SelectedIndex(s.theme==L"Light"?1:s.theme==L"Dark"?2:0);compact.IsOn(s.compact);performance.IsOn(s.performance);autostart.IsOn(AutostartEnabled());everythingToggle.IsOn(s.everything);evHint.Text(ev::Available()?i18n::Tr(L"已检测到 Everything，搜索窗会附带本地文件结果。"):i18n::Tr(L"未检测到正在运行的 Everything，安装并启动后搜索窗可附带本地文件结果。"));lang.SelectedIndex(s.language==L"en-US"?2:s.language==L"zh-CN"?1:0);hotkey.SelectedIndex(s.hotkey==L"DoubleCtrl"?0:s.hotkey==L"Ctrl+Alt+G"?1:s.hotkey==L"Ctrl+Alt+Z"?2:s.hotkey==L"Ctrl+Shift+Space"?3:s.hotkey==L"Win+Z"?4:s.hotkey.empty()?6:5);hotkeyCustom.Text(s.hotkey==L"DoubleCtrl"?i18n::Tr(L"双击 Ctrl"):s.hotkey);hotkeySearch.SelectedIndex(s.hotkeySearch==L"Ctrl+Alt+F"?1:s.hotkeySearch==L"Ctrl+Shift+F"?2:s.hotkeySearch==L"Alt+Q"?3:0);hotkeyCapture.SelectedIndex(s.hotkeyCapture==L"Ctrl+Alt+V"?1:s.hotkeyCapture==L"Ctrl+Shift+V"?2:s.hotkeyCapture==L"Alt+C"?3:0);textSize.SelectedIndex(s.textSize<0?0:s.textSize>2?2:s.textSize);clockStyle.SelectedIndex(s.clockStyle==L"analog"?1:0);weatherCity.Text(owner.layout.widgets.weatherCity);snapshots.IsOn(s.snapshots);syncUrl.Text(s.syncUrl);syncUser.Text(s.syncUser);try{syncPass.Password(webdav::UnprotectSecret(s.syncPass));}catch(...){}syncAuto.IsOn(s.syncAuto);if(syncHint){syncHint.Foreground(nullptr);syncHint.Text(L"");}hotkeyHint.Visibility(Visibility::Collapsed);hotkeySearchHint.Visibility(Visibility::Collapsed);hotkeyCaptureHint.Visibility(Visibility::Collapsed);applying=false;}
 static std::string ReadTextFile(std::filesystem::path const& p){std::ifstream f(p,std::ios::binary);if(!f)throw std::runtime_error("Cannot read file");return {std::istreambuf_iterator<char>(f),{}};}
 void SettingsWindow::OnExport(){owner.Save();auto target=shell::SaveFile(hwnd,L"guodesk-layout.json");if(target.empty())return;try{std::filesystem::copy_file(owner.store.Directory()/L"layout.json",target,std::filesystem::copy_options::overwrite_existing);}catch(...){MessageBoxW(hwnd,i18n::Tr(L"导出失败：请检查目标位置是否可写。").c_str(),L"GuoDesk",MB_OK|MB_ICONERROR);return;}if(!owner.windows.empty())owner.windows.front()->Notify(i18n::TrF(L"已导出到 {0}",{target}));}
 void SettingsWindow::OnImport(){auto picked=shell::Pick(hwnd,false,i18n::Tr(L"选择要导入的 GuoDesk 配置"));if(picked.size()!=1)return;std::string text;try{text=ReadTextFile(std::filesystem::path(picked[0]));}catch(...){MessageBoxW(hwnd,i18n::Tr(L"导入失败：文件不是有效的 GuoDesk 配置。").c_str(),L"GuoDesk",MB_OK|MB_ICONERROR);return;}Layout next;try{next=Deserialize(text);}catch(...){MessageBoxW(hwnd,i18n::Tr(L"导入失败：文件不是有效的 GuoDesk 配置。").c_str(),L"GuoDesk",MB_OK|MB_ICONERROR);return;}owner.ImportLayout(std::move(next));Controller* c=&owner;winrt::Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread().TryEnqueue([c](){c->CloseSettings();});}
