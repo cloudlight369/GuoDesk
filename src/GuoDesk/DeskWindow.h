@@ -31,7 +31,9 @@ class DeskWindow {
  void RebuildTabs(); void SwitchTab(int index);
  void Navigate(std::wstring const& folder); void RenderCrumbs();
  void SetCapsule(bool on); void ExpandCapsule(); void ShrinkCapsule();
- void ApplyPerformance();
+ void ApplyPerformance(); void ApplyBackground();
+ winrt::Microsoft::UI::Xaml::Controls::Border dimLayer{nullptr};
+ std::wstring bgPath; int bgDim=-1; bool bgPerf=false; bool bgDesk=false;
 public:
  std::wstring id; std::wstring viewId;
  Zone& View();

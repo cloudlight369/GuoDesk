@@ -286,6 +286,12 @@ void RunTests(std::filesystem::path const& output){std::ofstream report(output);
  auto cBad=Deserialize("{\"version\":1,\"zones\":[{\"id\":\"a\",\"name\":\"n\",\"x\":0,\"y\":0,\"width\":280,\"height\":160,\"collapsed\":false,\"entries\":[],\"color\":99},{\"id\":\"b\",\"name\":\"m\",\"x\":0,\"y\":0,\"width\":280,\"height\":160,\"collapsed\":false,\"entries\":[],\"color\":-3},{\"id\":\"c\",\"name\":\"o\",\"x\":0,\"y\":0,\"width\":280,\"height\":160,\"collapsed\":false,\"entries\":[],\"color\":2.5}],\"settings\":{}}");expect(cBad.zones.size()==3&&cBad.zones[0].color==0&&cBad.zones[1].color==0&&cBad.zones[2].color==0,"invalid zone colors fall back");
  expect(ZoneColorCount()==8&&ZoneColorRGB(1)==0xE81123u&&ZoneColorRGB(8)==0xE3008Cu,"zone palette bounds");
  expect(ZoneColorRGB(0)==0u&&ZoneColorRGB(9)==0u&&ZoneColorRGB(-1)==0u,"zone palette out-of-range is none");
+ Zone bgz1;bgz1.id=L"b1";bgz1.background=L"C:\\pics\\a.png";bgz1.dim=2;Layout bgl1{{bgz1}};auto bgback=Deserialize(Serialize(bgl1));expect(bgback.zones[0].background==L"C:\\pics\\a.png"&&bgback.zones[0].dim==2,"background and dim roundtrip");
+ Zone bgz2;bgz2.id=L"b2";Layout bgl2{{bgz2}};expect(Deserialize(Serialize(bgl2)).zones[0].dim==1,"dim defaults to medium");
+ auto bgBad=Deserialize("{\"version\":1,\"zones\":[{\"id\":\"a\",\"name\":\"n\",\"x\":0,\"y\":0,\"width\":280,\"height\":160,\"collapsed\":false,\"entries\":[],\"background\":\"C:\\\\a.txt\",\"dim\":7},{\"id\":\"b\",\"name\":\"m\",\"x\":0,\"y\":0,\"width\":280,\"height\":160,\"collapsed\":false,\"entries\":[],\"background\":\"C:\\\\p\\\\b.JPG\",\"dim\":-1},{\"id\":\"c\",\"name\":\"o\",\"x\":0,\"y\":0,\"width\":280,\"height\":160,\"collapsed\":false,\"entries\":[],\"background\":\"C:\\\\p\\\\c.webp\",\"dim\":0}],\"settings\":{}}");
+ expect(bgBad.zones[0].background.empty()&&bgBad.zones[0].dim==1&&bgBad.zones[1].background==L"C:\\p\\b.JPG"&&bgBad.zones[1].dim==1&&bgBad.zones[2].background==L"C:\\p\\c.webp"&&bgBad.zones[2].dim==0,"invalid background/dim self-heal");
+ expect(IsImagePath(L"a.png")&&IsImagePath(L"C:\\x\\b.webp")&&IsImagePath(L"x.TIFF"),"image path accepts pictures");
+ expect(!IsImagePath(L"C:\\x\\b.txt")&&!IsImagePath(L"noext")&&!IsImagePath(L"C:\\a.b\\c")&&!IsImagePath(L"")&&!IsImagePath(L"x.jpegx"),"image path rejects others");
 report<<"TOTAL "<<passed<<" passed\n";
 }
 }

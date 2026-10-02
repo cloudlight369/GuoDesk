@@ -1,4 +1,5 @@
 #include "pch.h"
+#include <shlwapi.h>
 #include "DeskWindow.h"
 #include "TidyWindow.h"
 #include "NoteWindow.h"
@@ -71,7 +72,21 @@ DeskWindow::~DeskWindow(){closing=true;if(IsWindow(hwnd)){RemoveWindowSubclass(h
 void DeskWindow::ApplyPerformance(){
  bool perf=owner.layout.settings.performance;
  try{window.SystemBackdrop(perf?winrt::Microsoft::UI::Xaml::Media::SystemBackdrop{nullptr}:winrt::Microsoft::UI::Xaml::Media::MicaBackdrop());}catch(...){}
- root.Background(perf||desktop?ThemeBrush(L"ApplicationPageBackgroundThemeBrush",Windows::UI::Color{255,32,32,32}):Brush{nullptr});
+ ApplyBackground();
+}
+void DeskWindow::ApplyBackground(){
+ auto& v=View();bool perf=owner.layout.settings.performance;
+ if(v.background==bgPath&&v.dim==bgDim&&perf==bgPerf&&desktop==bgDesk)return;
+ bgPath=v.background;bgDim=v.dim;bgPerf=perf;bgDesk=desktop;
+ Brush next{nullptr};bool isImg=false;
+ if(!bgPath.empty()&&IsImagePath(bgPath)&&GetFileAttributesW(bgPath.c_str())!=INVALID_FILE_ATTRIBUTES){
+  try{wchar_t url[1024];DWORD c=1024;if(SUCCEEDED(UrlCreateFromPathW(bgPath.c_str(),url,&c,0))){winrt::Microsoft::UI::Xaml::Media::Imaging::BitmapImage img;img.UriSource(winrt::Windows::Foundation::Uri(url));ImageBrush ib;ib.ImageSource(img);ib.Stretch(Stretch::Fill);next=ib;isImg=true;}}catch(...){}
+ }
+ if(!isImg)next=(perf||desktop)?ThemeBrush(L"ApplicationPageBackgroundThemeBrush",Windows::UI::Color{255,32,32,32}):Brush{nullptr};
+ root.Background(next);
+ if(!dimLayer){Border d;d.IsHitTestVisible(false);Grid::SetRowSpan(d,5);dimLayer=d;root.Children().InsertAt(0,d);}
+ uint8_t a=isImg?(bgDim==0?0:bgDim==1?72:146):0;
+ dimLayer.Background(SolidColorBrush(Windows::UI::Color{a,0,0,0}));
 }
 void DeskWindow::ApplySettings(){auto const& theme=owner.layout.settings.theme;root.RequestedTheme(theme==L"Dark"?ElementTheme::Dark:theme==L"Light"?ElementTheme::Light:ElementTheme::Default);ApplyPerformance();status.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,160,160,160}));Refresh();}
 void DeskWindow::Notify(std::wstring const& text){status.Text(text);}
@@ -121,6 +136,9 @@ void DeskWindow::Menu(FrameworkElement const& target){auto& z=Model();auto& v=Vi
   {MenuFlyoutItem none;none.Text(i18n::Tr(L"无"));none.Click([this](auto&&,auto&&){View().color=0;Refresh();owner.Save();});colors.Items().Append(none);}
   for(int k=1;k<=ZoneColorCount();++k){MenuFlyoutItem it;it.Text(i18n::Tr(names[k-1]));it.Icon(swatchIcon(ZoneColorRGB(k)));auto cc=k;it.Click([this,cc](auto&&,auto&&){View().color=cc;Refresh();owner.Save();});colors.Items().Append(it);}
   menu.Items().Append(colors);}
+ menu.Items().Append(MenuItem(v.background.empty()?i18n::Tr(L"设置背景图…"):i18n::Tr(L"更换背景图…"),[this]{auto picked=shell::Pick(hwnd,false);if(picked.empty())return;if(!IsImagePath(picked.front())){Notify(i18n::Tr(L"请选择图片文件（png / jpg / bmp / gif / webp / tif）"));return;}View().background=picked.front();ApplyBackground();owner.Save();}));
+ if(!v.background.empty()){menu.Items().Append(MenuItem(i18n::TrF(L"背景明暗：{0}（点击切换）",{std::wstring(i18n::Tr(v.dim==0?L"无":v.dim==1?L"适中":L"较暗"))}),[this]{auto& m=View();m.dim=(m.dim+1)%3;ApplyBackground();owner.Save();}));
+ menu.Items().Append(MenuItem(i18n::Tr(L"清除背景图"),[this]{View().background.clear();ApplyBackground();owner.Save();}));}
  menu.Items().Append(MenuItem(z.capsule?i18n::Tr(L"关闭胶囊模式"):i18n::Tr(L"胶囊模式（悬停展开）"),[this]{auto key=id;root.DispatcherQueue().TryEnqueue([this,key]{SetCapsule(!Model().capsule);Place();owner.Save();});}));
  if(z.group.empty()){MenuFlyoutSubItem merge;merge.Text(i18n::Tr(L"合并到标签组…"));for(auto const& o:owner.layout.zones){if(o.id==id)continue;merge.Items().Append(MenuItem(o.name,[this,tid=o.id]{auto key=id;root.DispatcherQueue().TryEnqueue([this,key,tid]{owner.MergeInto(key,tid);});}));}if(merge.Items().Size()>0)menu.Items().Append(merge);}
  else{MenuFlyoutSubItem join;join.Text(i18n::Tr(L"把其他分区并入此组…"));for(auto const& o:owner.layout.zones){if(o.group==z.group)continue;join.Items().Append(MenuItem(o.name,[this,tid=o.id]{auto key=id;root.DispatcherQueue().TryEnqueue([this,key,tid]{owner.MergeInto(key,tid);});}));}if(join.Items().Size()>0)menu.Items().Append(join);menu.Items().Append(MenuItem(i18n::TrF(L"把「{0}」移出标签组",{v.name}),[this]{auto key=viewId;root.DispatcherQueue().TryEnqueue([this,key]{owner.Ungroup(key);});}));}
