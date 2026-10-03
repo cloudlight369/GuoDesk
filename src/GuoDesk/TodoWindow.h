@@ -9,6 +9,9 @@ class TodoWindow {
  winrt::Microsoft::UI::Xaml::Controls::StackPanel list{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::TextBlock count{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::TextBox input{nullptr};
+ winrt::Microsoft::UI::Xaml::Controls::ComboBox filter{nullptr};
+ winrt::Microsoft::UI::Xaml::Controls::Button clearDone{nullptr};
+ int filterKind=0;
  winrt::Microsoft::UI::Xaml::Media::Brush ThemeBrush(wchar_t const* key,winrt::Windows::UI::Color fallback);
  void Rebuild();
  std::wstring CountText();

@@ -65,7 +65,7 @@ public:
  Store store; Layout layout; UndoStack undo; std::vector<std::unique_ptr<DeskWindow>> windows; bool desktopMode=false; HWND host{};
  explicit Controller(std::filesystem::path root={}); ~Controller();
  void Start(); void Save(); void ImportLayout(Layout&& next,wchar_t const* notice=L"导入完成，界面已按新配置重建。"); void HealTopology(); void Add(); void Remove(std::wstring const& id); void Refresh(); void Show(); void HideAll(); void ToggleAll(); bool ApplyHotkey(); void Quit(); void ToggleDesktop();
- void PushUndo(std::wstring const& label); std::string UndoMark(); void UndoPush(std::wstring const& label,std::string mark); void Undo();
+ void PushUndo(std::wstring const& label); std::string UndoMark(); void UndoPush(std::wstring const& label,std::string mark); void Undo(); void Toast(std::wstring const& title,std::wstring const& text);
  void QuickZone(std::wstring const& tag); void UseTemplate(ZoneTemplate const& tpl);
  void ShowSettings(); void CloseSettings(); void ApplySettings();
  void ShowTidy(); void CloseTidy();
