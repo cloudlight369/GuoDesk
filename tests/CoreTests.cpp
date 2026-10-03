@@ -326,6 +326,14 @@ void RunTests(std::filesystem::path const& output){std::ofstream report(output);
  expect(wPlain.valid&&wPlain.hours.empty()&&wPlain.isDay,"legacy payload without hourly stays valid");
  Layout wsk;wsk.widgets.weatherSkin=1;expect(Deserialize(Serialize(wsk)).widgets.weatherSkin==1,"weather skin roundtrip");
  auto wskLegacy=Deserialize("{\"version\":1,\"zones\":[],\"widgets\":{\"weatherSkin\":7}}");expect(wskLegacy.widgets.weatherSkin==0,"invalid weather skin self-heals to standard");
+ std::vector<std::wstring> shv;PushSearchHistory(shv,L" report ");PushSearchHistory(shv,L"pdf");PushSearchHistory(shv,L" report ");PushSearchHistory(shv,L"   ");
+ expect(shv.size()==2&&shv[0]==L"report"&&shv[1]==L"pdf","search history dedupes, trims and moves to front");
+ for(int i=0;i<25;++i)PushSearchHistory(shv,std::wstring(L"q")+std::to_wstring(i));
+ expect(shv.size()==20&&shv.front()==L"q24","search history stays bounded");
+ std::vector<std::wstring> sfv;expect(ToggleSearchFavorite(sfv,L"todo"),"favorite added");expect(!ToggleSearchFavorite(sfv,L" todo "),"favorite toggles off after trim match");expect(sfv.empty()&&!ToggleSearchFavorite(sfv,L""),"empty favorite ignored");
+ Layout shL;shL.settings.searchHistory={L"a",L"b"};shL.settings.searchFavorites={L"keep"};auto shBack=Deserialize(Serialize(shL));expect(shBack.settings.searchHistory==std::vector<std::wstring>({L"a",L"b"})&&shBack.settings.searchFavorites==std::vector<std::wstring>({L"keep"}),"search history and favorites roundtrip");
+ auto shLegacy=Deserialize("{\"version\":1,\"zones\":[],\"settings\":{}}");expect(shLegacy.settings.searchHistory.empty()&&shLegacy.settings.searchFavorites.empty(),"legacy config has no search history");
+ auto shMixed=Deserialize("{\"version\":1,\"zones\":[],\"settings\":{\"searchHistory\":[\"ok\",5,\"\",\"x\"]}}");expect(shMixed.settings.searchHistory==std::vector<std::wstring>({L"ok",L"x"}),"non-string history entries dropped");
 report<<"TOTAL "<<passed<<" passed\n";
 }
 }

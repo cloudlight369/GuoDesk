@@ -10,6 +10,7 @@ class SearchWindow {
  winrt::Microsoft::UI::Xaml::Controls::StackPanel results{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::ScrollViewer resultsHost{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::TextBlock hint{nullptr};
+ winrt::Microsoft::UI::Xaml::Controls::Button favToggle{nullptr};
  std::vector<SearchHit> hits;
  std::shared_ptr<bool> alive=std::make_shared<bool>(true); unsigned evGen=0;
  winrt::Microsoft::UI::Xaml::Media::Brush ThemeBrush(wchar_t const* key,winrt::Windows::UI::Color fallback);
@@ -17,6 +18,7 @@ class SearchWindow {
  void AppendEverything(std::wstring const& q);
  void OpenPath(std::wstring const& path);
  void OpenHit(SearchHit const& hit);
+ void NoteQuery(); void UpdateFavGlyph(std::wstring const& q);
  void SaveGeometry();
 public:
  SearchWindow(Controller&);

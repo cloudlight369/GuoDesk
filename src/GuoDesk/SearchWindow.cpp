@@ -29,7 +29,24 @@ static std::wstring WebUrl(std::wstring const& q){
  return L"https://www.bing.com/search?q="+enc;
 }
 void SearchWindow::OpenPath(std::wstring const& path){shell::Open(hwnd,path);}
+void SearchWindow::NoteQuery(){
+ auto q=std::wstring(query.Text());
+ auto& st=owner.layout.settings;
+ auto before=st.searchHistory;
+ PushSearchHistory(st.searchHistory,q);
+ if(st.searchHistory!=before)owner.Save();
+}
+void SearchWindow::UpdateFavGlyph(std::wstring const& q){
+ if(!favToggle)return;
+ auto const& sf=owner.layout.settings.searchFavorites;
+ bool on=std::find(sf.begin(),sf.end(),q)!=sf.end();
+ FontIcon ic;ic.FontFamily(FontFamily(L"Segoe Fluent Icons"));ic.Glyph(on?L"\uE735":L"\uE734");ic.FontSize(ScaledFont(owner.layout.settings.textSize,16));
+ ic.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));
+ favToggle.Content(ic);
+ ToolTipService::SetToolTip(favToggle,box_value(i18n::Tr(L"收藏当前搜索词")));
+}
 void SearchWindow::OpenHit(SearchHit const& hit){
+ NoteQuery();
  if(hit.kind==L"todo"){owner.ShowTodo();return;}
  if(hit.kind==L"note"){owner.ShowNote();return;}
  if(!hit.path.empty())OpenPath(hit.path);
@@ -37,8 +54,36 @@ void SearchWindow::OpenHit(SearchHit const& hit){
 void SearchWindow::Rebuild(std::wstring const& q){
  results.Children().Clear();hits.clear();
  if(q.empty()){
-  hint.Visibility(Visibility::Visible);
-  hint.Text(i18n::Tr(L"输入关键词，搜索分区内容、待办和便签。回车打开第一项。"));
+  auto favs=owner.layout.settings.searchFavorites;
+  auto hist=owner.layout.settings.searchHistory;
+  if(favs.empty()&&hist.empty()){
+   hint.Visibility(Visibility::Visible);
+   hint.Text(i18n::Tr(L"输入关键词，搜索分区内容、待办和便签。回车打开第一项。"));
+   return;
+  }
+  hint.Visibility(Visibility::Collapsed);
+  auto section=[&](wchar_t const* title){TextBlock t;t.Text(i18n::Tr(title));t.FontSize(ScaledFont(owner.layout.settings.textSize,11));t.Opacity(0.6);t.Margin(Thickness{10,8,10,2});results.Children().Append(t);};
+  auto jump=[&](std::wstring const& text,wchar_t const* glyph){
+   Grid g;g.Padding(Thickness{4,4,4,4});
+   ColumnDefinition c0;c0.Width(GridLength{0,GridUnitType::Auto});g.ColumnDefinitions().Append(c0);
+   ColumnDefinition c1;c1.Width(GridLength{1,GridUnitType::Star});g.ColumnDefinitions().Append(c1);
+   FontIcon ic;ic.FontFamily(FontFamily(L"Segoe Fluent Icons"));ic.Glyph(glyph);ic.FontSize(ScaledFont(owner.layout.settings.textSize,14));ic.Margin(Thickness{2,1,12,0});ic.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));
+   Grid::SetColumn(ic,0);g.Children().Append(ic);
+   TextBlock name;name.Text(text);name.FontSize(ScaledFont(owner.layout.settings.textSize,13));name.TextTrimming(TextTrimming::CharacterEllipsis);
+   Grid::SetColumn(name,1);g.Children().Append(name);
+   Button row;row.HorizontalAlignment(HorizontalAlignment::Stretch);row.HorizontalContentAlignment(HorizontalAlignment::Stretch);row.Padding(Thickness{6,4,6,4});row.BorderThickness(Thickness{0});row.Background(SolidColorBrush(Windows::UI::Colors::Transparent()));row.Content(g);
+   row.Click([this,text](auto&&,auto&&){query.Text(text);});
+   results.Children().Append(row);
+  };
+  if(!favs.empty()){section(L"收藏");for(auto const& f:favs)jump(f,L"\uE735");}
+  if(!hist.empty()){
+   section(L"最近搜索");
+   for(auto const& h:hist)jump(h,L"\uE823");
+   TextBlock cl;cl.Text(i18n::Tr(L"清除最近搜索"));cl.FontSize(ScaledFont(owner.layout.settings.textSize,11));cl.Opacity(0.6);cl.Margin(Thickness{10,6,10,2});
+   Button clearBtn;clearBtn.HorizontalAlignment(HorizontalAlignment::Left);clearBtn.Background(SolidColorBrush(Windows::UI::Colors::Transparent()));clearBtn.BorderThickness(Thickness{0});clearBtn.Padding(Thickness{4,2,4,2});clearBtn.MinWidth(0);clearBtn.Content(cl);
+   clearBtn.Click([this](auto&&,auto&&){owner.layout.settings.searchHistory.clear();owner.Save();Rebuild(std::wstring(query.Text()));});
+   results.Children().Append(clearBtn);
+  }
   return;
  }
  SearchZones(owner.layout,q,hits);
@@ -81,7 +126,7 @@ void SearchWindow::Rebuild(std::wstring const& q){
   Grid::SetColumn(label,1);g.Children().Append(label);
   addRow(g);
   auto row=results.Children().GetAt(results.Children().Size()-1).as<Button>();
-  row.Click([this,q](auto&&,auto&&){OpenPath(WebUrl(q));});
+  row.Click([this,q](auto&&,auto&&){NoteQuery();OpenPath(WebUrl(q));});
  }
  AppendEverything(q);
 }
@@ -131,15 +176,22 @@ SearchWindow::SearchWindow(Controller& c):owner(c){
  root=Grid();
  GridLength rows[]={GridLength{0,GridUnitType::Auto},GridLength{1,GridUnitType::Star},GridLength{0,GridUnitType::Auto}};
  for(auto& r:rows){RowDefinition rd;rd.Height(r);root.RowDefinitions().Append(rd);}
- query=TextBox();query.Margin(Thickness{12,12,12,8});query.PlaceholderText(i18n::Tr(L"搜索分区内容…"));query.FontSize(ScaledFont(owner.layout.settings.textSize,14));
- Grid::SetRow(query,0);root.Children().Append(query);
+ auto qBar=Grid();
+ ColumnDefinition q0;q0.Width(GridLength{1,GridUnitType::Star});qBar.ColumnDefinitions().Append(q0);
+ ColumnDefinition q1;q1.Width(GridLength{0,GridUnitType::Auto});qBar.ColumnDefinitions().Append(q1);
+ query=TextBox();query.Margin(Thickness{12,12,4,8});query.PlaceholderText(i18n::Tr(L"搜索分区内容…"));query.FontSize(ScaledFont(owner.layout.settings.textSize,14));
+ favToggle=Button();favToggle.Background(SolidColorBrush(Windows::UI::Colors::Transparent()));favToggle.BorderThickness(Thickness{0});favToggle.Padding(Thickness{6,2,6,2});favToggle.MinWidth(0);favToggle.VerticalAlignment(VerticalAlignment::Center);favToggle.Margin(Thickness{4,12,12,8});
+ favToggle.Click([this](auto&&,auto&&){auto q=std::wstring(query.Text());if(q.empty())return;ToggleSearchFavorite(owner.layout.settings.searchFavorites,q);owner.Save();UpdateFavGlyph(q);});
+ Grid::SetColumn(query,0);Grid::SetColumn(favToggle,1);
+ qBar.Children().Append(query);qBar.Children().Append(favToggle);
+ Grid::SetRow(qBar,0);root.Children().Append(qBar);
  resultsHost=ScrollViewer();results=StackPanel();results.Spacing(2);results.Margin(Thickness{8,2,8,4});
  resultsHost.Content(results);resultsHost.VerticalScrollBarVisibility(ScrollBarVisibility::Auto);
  Grid::SetRow(resultsHost,1);root.Children().Append(resultsHost);
  hint=TextBlock();hint.Margin(Thickness{14,2,14,10});hint.FontSize(ScaledFont(owner.layout.settings.textSize,12));hint.TextWrapping(TextWrapping::Wrap);hint.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));
  Grid::SetRow(hint,2);root.Children().Append(hint);
  window.Content(root);
- query.TextChanged([this](auto&&,auto&&){Rebuild(std::wstring(query.Text()));});
+ query.TextChanged([this](auto&&,auto&&){auto q=std::wstring(query.Text());UpdateFavGlyph(q);Rebuild(q);});
  query.KeyDown([this](auto&&,Input::KeyRoutedEventArgs const& a){
   if(a.Key()==Windows::System::VirtualKey::Enter){
    a.Handled(true);
@@ -168,6 +220,7 @@ SearchWindow::SearchWindow(Controller& c):owner(c){
  int x=w.searchX,y=w.searchY,wd=560,ht=440;SetWindowPos(hwnd,nullptr,x,y,wd,ht,SWP_NOZORDER);
  MONITORINFO mi{sizeof(mi)};GetMonitorInfoW(MonitorFromWindow(hwnd,MONITOR_DEFAULTTONEAREST),&mi);
  if(y>mi.rcWork.bottom-80||y<mi.rcWork.top-20||x>mi.rcWork.right-80||x<mi.rcWork.left-40){x=std::clamp(x,(int)mi.rcWork.left,(int)mi.rcWork.right-100);y=std::clamp(y,(int)mi.rcWork.top,(int)mi.rcWork.bottom-80);SetWindowPos(hwnd,nullptr,x,y,0,0,SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE);}
+ UpdateFavGlyph(L"");
  Rebuild(L"");
  window.Activate();
 }
