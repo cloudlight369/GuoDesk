@@ -6,7 +6,7 @@ struct Stack { std::wstring id, name; };
 struct Zone { std::wstring id, name=L"常用"; int x=120,y=120,width=440,height=360; bool collapsed=false; std::vector<Entry> entries; std::wstring mappedFolder; std::wstring viewMode=L"grid"; int nameLines=2; std::wstring sortKey; bool sortDescending=false; int tileSize=1; std::wstring mon; int mx=0,my=0; std::vector<Stack> stacks; std::wstring group; int groupTab=0; bool capsule=false; bool browseInPlace=true; std::wstring browseFolder; int color=0; std::wstring background; int dim=1; std::vector<std::wstring> pins; int opacity=100; };
 struct Settings { std::wstring theme; bool compact=false; std::wstring language; std::wstring hotkey=L"Ctrl+Alt+G"; bool snapshots=true; bool guideDone=false; std::wstring hotkeySearch; std::wstring hotkeyCapture; std::wstring hotkeyUndo=L"Ctrl+Alt+U"; bool performance=false; std::wstring syncUrl,syncUser,syncPass; bool syncAuto=false; int textSize=1; std::wstring clockStyle; bool everything=true; bool tabHover=true; bool memTrim=true; std::wstring revealHotkey; std::vector<std::wstring> searchHistory,searchFavorites; };
 struct Rule { std::wstring id, name; std::vector<std::wstring> exts, keywords; std::wstring targetZone; };
-struct TodoItem { std::wstring id, text; bool done=false; long long due=0; bool reminded=false; int flag=0; };
+struct TodoItem { std::wstring id, text; bool done=false; long long due=0; bool reminded=false; int flag=0; int repeat=0; };
 struct NotePage { std::wstring text; int color=0; };
 struct Widgets {
  bool noteVisible=false,todoVisible=false,clockVisible=false,noteTop=false,musicVisible=false,weatherVisible=false,appGridVisible=false;
@@ -107,7 +107,8 @@ std::vector<ZoneTemplate> BuiltInTemplates();
 int ApplyTemplate(Layout& layout,ZoneTemplate const& tpl,RECT const& work);
 int AddQuickZone(Layout& layout,std::wstring const& tag,RECT const& work);
 TodoItem* AddTodo(Widgets& widgets,std::wstring const& text);
-void ToggleTodo(Widgets& widgets,std::wstring const& id);
+long long NextDue(long long due,int repeat,long long today);
+int ToggleTodo(Widgets& widgets,std::wstring const& id);
 void RemoveTodo(Widgets& widgets,std::wstring const& id);
 std::wstring NewStackName(Zone const& zone);
 std::wstring CreateStack(Zone& zone);

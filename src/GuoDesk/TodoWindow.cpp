@@ -9,6 +9,7 @@ using namespace Microsoft::UI::Xaml::Controls;
 using namespace Microsoft::UI::Xaml::Media;
 namespace guodesk {
 static std::wstring TodoExePath(){wchar_t buf[MAX_PATH]{};GetModuleFileNameW(nullptr,buf,MAX_PATH);return buf;}
+static wchar_t const* kRepeatName340[]={L"不重复",L"每天",L"每周",L"每两周",L"每月"};
 static Brush ResolveTodoBrush(wchar_t const* key,Windows::UI::Color fallback,bool dark){
  try{return Application::Current().Resources().Lookup(box_value(key)).as<Brush>();}catch(...){}
  struct Entry{wchar_t const* key;Windows::UI::Color light;Windows::UI::Color dark;};
@@ -45,14 +46,14 @@ void TodoWindow::Rebuild(){
   Grid g;ColumnDefinition c0;c0.Width(GridLength{0,GridUnitType::Auto});g.ColumnDefinitions().Append(c0);ColumnDefinition c1;c1.Width(GridLength{1,GridUnitType::Star});g.ColumnDefinitions().Append(c1);ColumnDefinition c2;c2.Width(GridLength{0,GridUnitType::Auto});g.ColumnDefinitions().Append(c2);ColumnDefinition c3;c3.Width(GridLength{0,GridUnitType::Auto});g.ColumnDefinitions().Append(c3);
   if(t.flag){unsigned rgb=TodoFlagRGB(t.flag);Border dot;dot.Width(8);dot.Height(8);dot.CornerRadius(CornerRadius{4,4,4,4});dot.Background(SolidColorBrush(Windows::UI::Color{255,static_cast<BYTE>((rgb>>16)&0xFF),static_cast<BYTE>((rgb>>8)&0xFF),static_cast<BYTE>(rgb&0xFF)}));dot.VerticalAlignment(VerticalAlignment::Center);dot.Margin(Thickness{2,0,6,0});Grid::SetColumn(dot,0);g.Children().Append(dot);}
   CheckBox box;auto label=TextBlock();label.Text(t.text);label.TextWrapping(TextWrapping::Wrap);label.FontSize(ScaledFont(owner.layout.settings.textSize,13));label.Opacity(t.done?0.45:1.0);box.Content(label);box.IsChecked(t.done);box.MinWidth(0);box.Padding(Thickness{0});box.Margin(Thickness{0,0,0,0});
-  box.Checked([this,id,label](auto&&,auto&&){ToggleTodo(owner.layout.widgets,id);label.Opacity(0.45);count.Text(CountText());owner.Save();});
+  box.Checked([this,id,label](auto&&,auto&&){if(ToggleTodo(owner.layout.widgets,id)==2){Rebuild();owner.Save();return;}label.Opacity(0.45);count.Text(CountText());owner.Save();});
   box.Unchecked([this,id,label](auto&&,auto&&){ToggleTodo(owner.layout.widgets,id);label.Opacity(1.0);count.Text(CountText());owner.Save();});
   Grid::SetColumn(box,1);g.Children().Append(box);
   Button dueBtn;dueBtn.Background(SolidColorBrush(Windows::UI::Colors::Transparent()));dueBtn.BorderThickness(Thickness{0});dueBtn.Padding(Thickness{6,4,6,4});dueBtn.Margin(Thickness{0,2,0,0});dueBtn.MinWidth(0);
   auto dueRow=StackPanel();dueRow.Orientation(Orientation::Horizontal);dueRow.Spacing(4);
   FontIcon cal;cal.FontFamily(FontFamily(L"Segoe Fluent Icons"));cal.Glyph(L"\uE787");cal.FontSize(ScaledFont(owner.layout.settings.textSize,12));cal.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,160,160,160}));
   TextBlock dueLabel;dueLabel.FontSize(ScaledFont(owner.layout.settings.textSize,11));
-  if(t.due){dueLabel.Text(DueText(t.due));if(DueReached(t.due)&&!t.done){auto red=SolidColorBrush(Windows::UI::Color{255,232,17,35});cal.Foreground(red);dueLabel.Foreground(red);dueLabel.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());}}
+  if(t.due||t.repeat){std::wstring s=t.repeat?std::wstring(i18n::Tr(kRepeatName340[t.repeat])):std::wstring();if(t.due){auto d=DueText(t.due);s=s.empty()?d:s+L" · "+d;}dueLabel.Text(s);if(DueReached(t.due)&&!t.done){auto red=SolidColorBrush(Windows::UI::Color{255,232,17,35});cal.Foreground(red);dueLabel.Foreground(red);dueLabel.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());}}
   dueRow.Children().Append(cal);dueRow.Children().Append(dueLabel);dueBtn.Content(dueRow);
   MenuFlyout mf;
   auto mk=[&](wchar_t const* key,int days){MenuFlyoutItem mi;mi.Text(i18n::Tr(key));mi.Click([this,id,days](auto&&,auto&&){SetTodoDue(owner.layout.widgets,id,days<0?0:DueFromOffset(days));Rebuild();owner.Save();});mf.Items().Append(mi);};
@@ -68,6 +69,11 @@ void TodoWindow::Rebuild(){
   MenuFlyout flagMenu;
   auto mkf=[&](wchar_t const* key,int f){MenuFlyoutItem mi;mi.Text(i18n::Tr(key));if(f){unsigned rgb=TodoFlagRGB(f);FontIcon sq;sq.Glyph(L"\u25A0");sq.FontFamily(FontFamily(L"Segoe UI Symbol"));sq.FontSize(12);sq.Foreground(SolidColorBrush(Windows::UI::Color{255,static_cast<BYTE>((rgb>>16)&0xFF),static_cast<BYTE>((rgb>>8)&0xFF),static_cast<BYTE>(rgb&0xFF)}));mi.Icon(sq);}mi.Click([this,id,f](auto&&,auto&&){for(auto& t:owner.layout.widgets.todos)if(t.id==id)t.flag=f;Rebuild();owner.Save();});flagMenu.Items().Append(mi);};
   mkf(L"无标记",0);mkf(L"红色 · 紧急",1);mkf(L"黄色 · 重要",2);mkf(L"绿色 · 低",3);
+  MenuFlyoutSeparator rsep;flagMenu.Items().Append(rsep);
+  MenuFlyoutSubItem repSub;repSub.Text(i18n::Tr(L"重复"));ToolTipService::SetToolTip(repSub,box_value(i18n::Tr(L"周期待办完成后会自动顺延")));
+  auto mkr=[&](int r){MenuFlyoutItem mi;mi.Text(i18n::Tr(kRepeatName340[r]));if(r){FontIcon ri;ri.FontFamily(FontFamily(L"Segoe Fluent Icons"));ri.Glyph(L"\uE72C");ri.FontSize(12);mi.Icon(ri);}mi.Click([this,id,r](auto&&,auto&&){for(auto& t:owner.layout.widgets.todos)if(t.id==id){t.repeat=r;if(r>0&&t.due==0)t.due=DueFromOffset(r==1?0:r==2?7:r==3?14:30);}Rebuild();owner.Save();});repSub.Items().Append(mi);};
+  mkr(0);mkr(1);mkr(2);mkr(3);mkr(4);
+  flagMenu.Items().Append(repSub);
   row.ContextFlyout(flagMenu);
   row.Child(g);list.Children().Append(row);
  }

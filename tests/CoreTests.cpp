@@ -415,6 +415,26 @@ void RunTests(std::filesystem::path const& output){std::ofstream report(output);
  auto luH=LunarFromSolar(2026,10,10);expect(luH.valid&&luH.month==9&&luH.day==1&&LunarText(luH)==L"九月初一","month rolls over to next lunar month");
  auto luBad=LunarFromSolar(2060,1,1);expect(!luBad.valid&&LunarText(luBad).empty(),"out of range dates are invalid");
  expect(!LunarFromSolar(1899,12,31).valid,"dates before the table are invalid");
+ expect(NextDue(20261003,1,20261003)==20261004,"next due daily adds one day");
+ expect(NextDue(20261003,2,20261003)==20261010,"next due weekly adds seven days");
+ expect(NextDue(20261020,3,20261020)==20261103,"next due biweekly crosses into next month");
+ expect(NextDue(20261001,1,20261005)==20261005,"next due daily catches up to today from overdue");
+ expect(NextDue(20260131,4,20260201)==20260228,"monthly clamps day 31 to feb 28");
+ expect(NextDue(20240131,4,20240201)==20240229,"monthly clamps to leap feb 29");
+ expect(NextDue(20261215,4,20261215)==20270115,"monthly rolls into next year");
+ expect(NextDue(20260131,4,20260601)==20260628,"monthly chain keeps clamped drift");
+ expect(NextDue(20261003,0,20261003)==20261003&&NextDue(20261003,9,20261003)==20261003,"invalid repeat kinds leave due untouched");
+ Widgets rw340;AddTodo(rw340,L"喝水");AddTodo(rw340,L"交周报");
+ rw340.todos[0].repeat=1;rw340.todos[0].due=20261003;rw340.todos[0].reminded=true;rw340.todos[1].repeat=0;
+ expect(ToggleTodo(rw340,rw340.todos[0].id)==2&&!rw340.todos[0].done&&rw340.todos[0].due>20261003&&!rw340.todos[0].reminded,"checking a repeating todo rolls its due instead of completing");
+ expect(ToggleTodo(rw340,rw340.todos[1].id)==1&&rw340.todos[1].done,"plain todo still toggles done");
+ expect(ToggleTodo(rw340,L"nope")==0,"toggling unknown id reports no change");
+ rw340.todos[0].done=true;expect(ToggleTodo(rw340,rw340.todos[0].id)==1&&!rw340.todos[0].done,"repeating todo can untoggle from done");
+ Layout rl340;rl340.widgets=rw340;auto rt340=Deserialize(Serialize(rl340));
+ expect(rt340.widgets.todos[0].repeat==1&&rt340.widgets.todos[0].due==rw340.todos[0].due&&rt340.widgets.todos[1].repeat==0,"todo repeat roundtrip");
+ auto rLegacy=Deserialize("{\"version\":1,\"zones\":[],\"widgets\":{\"todos\":[{\"id\":\"a\",\"text\":\"t\"}]}}");expect(rLegacy.widgets.todos.size()==1&&rLegacy.widgets.todos[0].repeat==0,"legacy todo without repeat defaults none");
+ auto rBad=Deserialize("{\"version\":1,\"zones\":[],\"widgets\":{\"todos\":[{\"id\":\"a\",\"text\":\"t\",\"repeat\":9}]}}");expect(rBad.widgets.todos[0].repeat==0,"out of range repeat self heals");
+ expect(ToggleTodo(rw340,rw340.todos[0].id)==2&&rw340.todos[0].due>DueFromOffset(0),"monthly-free daily todo rolls past today");
 report<<"TOTAL "<<passed<<" passed\n";
 }
 }
