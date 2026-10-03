@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "Core.h"
+#include "Shell.h"
 #include "EvSearch.h"
 #include "I18n.h"
 #include "WebDav.h"
@@ -311,6 +312,8 @@ void RunTests(std::filesystem::path const& output){std::ofstream report(output);
  auto usBad=Deserialize("{\"version\":1,\"zones\":[],\"settings\":{\"hotkeyUndo\":\"NotAKey!!\"}}");expect(usBad.settings.hotkeyUndo.empty(),"invalid undo hotkey dropped");
  Layout um;um.settings.memTrim=false;expect(!Deserialize(Serialize(um)).settings.memTrim,"mem trim can be disabled");
  auto umLegacy=Deserialize("{\"version\":1,\"zones\":[],\"settings\":{}}");expect(umLegacy.settings.memTrim,"legacy config keeps mem trim default on");
+ std::wstring dragPath=L"C:\\a b.txt";auto hd=shell::MakeHdrop({dragPath});expect(hd.size()==sizeof(DROPFILES)+(dragPath.size()+1+1)*sizeof(wchar_t),"HDROP payload size and double terminator");auto* dfp=reinterpret_cast<DROPFILES*>(hd.data());expect(dfp->pFiles==static_cast<DWORD>(sizeof(DROPFILES))&&dfp->fWide,"HDROP wide header offset");expect(std::wstring(reinterpret_cast<wchar_t*>(hd.data()+sizeof(DROPFILES)))==dragPath,"HDROP path roundtrip");
+ auto hdTwo=shell::MakeHdrop({L"C:\\x",L"D:\\y"});expect(hdTwo.size()==sizeof(DROPFILES)+(4+1+4+1+1)*sizeof(wchar_t),"HDROP multi-path terminator");
 report<<"TOTAL "<<passed<<" passed\n";
 }
 }

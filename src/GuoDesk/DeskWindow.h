@@ -33,8 +33,10 @@ class DeskWindow {
  void RebuildTabs(); void SwitchTab(int index);
  void Navigate(std::wstring const& folder); void RenderCrumbs();
  void SetCapsule(bool on); void ExpandCapsule(); void ShrinkCapsule(); void ApplyPerformance(); void ApplyBackground();
+ void AttachDrag(winrt::Microsoft::UI::Xaml::FrameworkElement const& el,std::wstring const& path);
  winrt::Microsoft::UI::Xaml::Controls::Border dimLayer{nullptr};
  std::wstring bgPath; int bgDim=-1; bool bgPerf=false; bool bgDesk=false;
+ bool rootDragHooked=false; bool dragArmed=false; long dragSX=0; long dragSY=0; std::wstring dragPath;
 public:
  std::wstring id; std::wstring viewId; bool menuOpen=false; std::shared_ptr<bool> alive{std::make_shared<bool>(true)};
  Zone& View();

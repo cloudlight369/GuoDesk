@@ -3,6 +3,8 @@
 #include "I18n.h"
 #include <robuffer.h>
 #include <shlwapi.h>
+#include <ole2.h>
+#include <oleidl.h>
 using namespace winrt;
 namespace guodesk::shell {
 HWND Handle(Microsoft::UI::Xaml::Window const& w){HWND h{};check_hresult(w.as<IWindowNative>()->get_WindowHandle(&h));return h;}
@@ -73,5 +75,47 @@ fire_and_forget LoadIcon(std::wstring path,Microsoft::UI::Xaml::Controls::Image 
   cache.insert_or_assign(path,bitmap);
   image.Source(bitmap);
  }catch(...){}
+}
+std::vector<char> MakeHdrop(std::vector<std::wstring> const& paths){
+ std::vector<char> blob(sizeof(DROPFILES),0);
+ auto* df=reinterpret_cast<DROPFILES*>(blob.data());
+ df->pFiles=static_cast<DWORD>(sizeof(DROPFILES));df->fWide=TRUE;
+ for(auto const& path:paths){for(wchar_t c:path){auto* b=reinterpret_cast<char*>(&c);blob.insert(blob.end(),b,b+sizeof(wchar_t));}blob.insert(blob.end(),2,0);}
+ blob.insert(blob.end(),2,0);
+ return blob;
+}
+struct DragSource final : IDataObject,IDropSource {
+ LONG refs{1};std::vector<char> blob;
+ explicit DragSource(std::vector<char>&& b):blob(std::move(b)){}
+ STDMETHOD(QueryInterface)(REFIID riid,void** out)override{if(riid==IID_IUnknown||riid==IID_IDataObject)*out=static_cast<IDataObject*>(this);else if(riid==IID_IDropSource)*out=static_cast<IDropSource*>(this);else{*out=nullptr;return E_NOINTERFACE;}AddRef();return S_OK;}
+ STDMETHOD_(ULONG,AddRef)()override{return InterlockedIncrement(&refs);}
+ STDMETHOD_(ULONG,Release)()override{auto r=InterlockedDecrement(&refs);if(!r)delete this;return r;}
+ STDMETHOD(QueryContinueDrag)(BOOL escape,DWORD keyState)override{if(escape)return DRAGDROP_S_CANCEL;if(!(keyState&MK_LBUTTON))return DRAGDROP_S_DROP;return S_OK;}
+ STDMETHOD(GiveFeedback)(DWORD){return DRAGDROP_S_USEDEFAULTCURSORS;}
+ STDMETHOD(GetData)(FORMATETC* f,STGMEDIUM* m)override{if(f->cfFormat!=CF_HDROP||f->tymed!=TYMED_HGLOBAL||f->dwAspect!=DVASPECT_CONTENT)return DV_E_FORMATETC;HGLOBAL g=GlobalAlloc(GMEM_MOVEABLE,blob.size());if(!g)return E_OUTOFMEMORY;CopyMemory(GlobalLock(g),blob.data(),blob.size());GlobalUnlock(g);m->tymed=TYMED_HGLOBAL;m->hGlobal=g;m->pUnkForRelease=nullptr;return S_OK;}
+ STDMETHOD(GetDataHere)(FORMATETC* f,STGMEDIUM* m)override{return GetData(f,m);}
+ STDMETHOD(QueryGetData)(FORMATETC* f)override{return f->cfFormat==CF_HDROP&&f->tymed==TYMED_HGLOBAL&&f->dwAspect==DVASPECT_CONTENT?S_OK:DV_E_FORMATETC;}
+ STDMETHOD(GetCanonicalFormatEtc)(FORMATETC*,FORMATETC* out)override{out->ptd=nullptr;return DATA_S_SAMEFORMATETC;}
+ STDMETHOD(SetData)(FORMATETC*,STGMEDIUM*,BOOL)override{return E_NOTIMPL;}
+ STDMETHOD(EnumFormatEtc)(DWORD dir,IEnumFORMATETC** e)override{if(dir!=DATADIR_GET)return E_NOTIMPL;FORMATETC fe{CF_HDROP,nullptr,DVASPECT_CONTENT,-1,TYMED_HGLOBAL};return SHCreateStdEnumFmtEtc(1,&fe,e);}
+ STDMETHOD(DAdvise)(FORMATETC*,DWORD,IAdviseSink*,DWORD*)override{return E_NOTIMPL;}
+ STDMETHOD(DUnadvise)(DWORD)override{return E_NOTIMPL;}
+ STDMETHOD(EnumDAdvise)(IEnumSTATDATA**)override{return E_NOTIMPL;}
+};
+HRESULT DragOut(HWND hwnd,std::wstring const& path){
+ static bool active=false;
+ if(active)return S_FALSE;
+ active=true;
+ auto blob=MakeHdrop({path});
+ auto* source=new DragSource(std::move(blob));
+ HRESULT init=OleInitialize(nullptr);
+ if(hwnd)SetCapture(hwnd);
+ DWORD effect=DROPEFFECT_LINK;
+ HRESULT r=DoDragDrop(source,source,DROPEFFECT_LINK|DROPEFFECT_COPY,&effect);
+ if(hwnd)ReleaseCapture();
+ if(init==S_OK)OleUninitialize();
+ source->Release();
+ active=false;
+ return r;
 }
 }
