@@ -8,6 +8,7 @@ void Open(HWND owner,std::wstring const& path);
 void Reveal(HWND owner,std::wstring const& path);
 int EntryContextMenu(HWND hwnd,std::wstring const& path,std::vector<std::wstring> const& custom);
 std::wstring Name(std::wstring const& path);
+std::vector<AppShortcut> EnumerateApps();
 std::vector<char> MakeHdrop(std::vector<std::wstring> const& paths);
 HRESULT DragOut(HWND,std::vector<std::wstring> const& paths);
 void Fit(Zone& zone);

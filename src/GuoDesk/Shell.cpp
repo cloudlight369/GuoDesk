@@ -39,6 +39,32 @@ int EntryContextMenu(HWND hwnd,std::wstring const& path,std::vector<std::wstring
  return result;
 }
 std::wstring Name(std::wstring const& path){SHFILEINFOW info{};if(SHGetFileInfoW(path.c_str(),0,&info,sizeof(info),SHGFI_DISPLAYNAME))return info.szDisplayName;return std::filesystem::path(path).filename().wstring();}
+std::vector<AppShortcut> EnumerateApps(){
+ std::vector<AppShortcut> out;std::set<std::wstring> seen;
+ auto known=[](KNOWNFOLDERID const& id){PWSTR p{};std::wstring r;if(SUCCEEDED(SHGetKnownFolderPath(id,0,nullptr,&p))){r=p;CoTaskMemFree(p);}return r;};
+ auto scan=[&](std::filesystem::path const& root){
+  std::error_code ec;std::filesystem::recursive_directory_iterator it(root,std::filesystem::directory_options::skip_permission_denied,ec);
+  if(ec)return;
+  for(auto const& e:it){
+   try{
+    if(out.size()>=512)break;
+    std::error_code fe;if(!e.is_regular_file(fe)||fe)continue;
+    auto lext=e.path().extension().wstring();CharLowerBuffW(lext.data(),static_cast<DWORD>(lext.size()));if(lext!=L".lnk")continue;
+    std::wstring lk=e.path().wstring();CharLowerBuffW(lk.data(),static_cast<DWORD>(lk.size()));if(!seen.insert(lk).second)continue;
+    com_ptr<IShellLinkW> link;if(FAILED(CoCreateInstance(CLSID_ShellLink,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(link.put()))))continue;
+    com_ptr<IPersistFile> pf;if(FAILED(link->QueryInterface(IID_PPV_ARGS(pf.put())))||FAILED(pf->Load(e.path().c_str(),0)))continue;
+    WCHAR target[1024]{};WIN32_FIND_DATAW fd{};if(FAILED(link->GetPath(target,static_cast<DWORD>(sizeof(target)/sizeof(WCHAR)),&fd,SLGP_SHORTPATH))||target[0]==0)continue;
+    WCHAR args[512]{};link->GetArguments(args,static_cast<DWORD>(sizeof(args)/sizeof(WCHAR)));
+    AppShortcut a;a.name=e.path().stem().wstring();a.linkPath=e.path().wstring();a.target=target;a.arguments=args;
+    if(ShouldListApp(a.name,a.target))out.push_back(std::move(a));
+   }catch(...){}
+  }
+ };
+ auto user=known(FOLDERID_StartMenu);if(!user.empty())scan(std::filesystem::path(user)/L"Programs");
+ auto common=known(FOLDERID_CommonStartMenu);if(!common.empty())scan(std::filesystem::path(common)/L"Programs");
+ SortAppsByName(out);
+ return out;
+}
 void Fit(Zone& z){RECT r{z.x,z.y,z.x+z.width,z.y+z.height};MONITORINFO info{sizeof(info)};GetMonitorInfoW(MonitorFromRect(&r,MONITOR_DEFAULTTONEAREST),&info);Clamp(z,info.rcWork);}
 HWND DesktopHost(){HWND result{};EnumWindows([](HWND h,LPARAM p)->BOOL{if(FindWindowExW(h,nullptr,L"SHELLDLL_DefView",nullptr)){*reinterpret_cast<HWND*>(p)=h;return FALSE;}return TRUE;},reinterpret_cast<LPARAM>(&result));return result;}
 bool Attach(HWND window,HWND host){if(!IsWindow(host))return false;RECT r{};GetWindowRect(window,&r);auto style=GetWindowLongPtrW(window,GWL_STYLE);SetWindowLongPtrW(window,GWL_STYLE,((style&~WS_POPUP)&~WS_THICKFRAME)|WS_CHILD);SetLastError(0);auto old=SetParent(window,host);if(!old&&GetLastError()){SetWindowLongPtrW(window,GWL_STYLE,style);return false;}POINT p{r.left,r.top};ScreenToClient(host,&p);SetWindowPos(window,HWND_TOP,p.x,p.y,r.right-r.left,r.bottom-r.top,SWP_FRAMECHANGED|SWP_NOACTIVATE);return GetParent(window)==host;}
