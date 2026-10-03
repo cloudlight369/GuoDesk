@@ -30,6 +30,7 @@ class SettingsWindow {
  winrt::Microsoft::UI::Xaml::Controls::ComboBox weatherResults{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::Button weatherSave{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::TextBlock weatherHint{nullptr};
+ winrt::Microsoft::UI::Xaml::Controls::ComboBox weatherSkin{nullptr};
  std::vector<GeoPlace> geo;
  winrt::Microsoft::UI::Xaml::Controls::ToggleSwitch snapshots{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::TextBox syncUrl{nullptr};
@@ -40,7 +41,7 @@ class SettingsWindow {
  winrt::Microsoft::UI::Xaml::Controls::ScrollViewer scroll{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::StackPanel rulesPanel{nullptr};
  void OnTheme(int index); void OnCompact(bool on); void OnPerformance(bool on); void OnAutostart(bool on); void OnLanguage(int index); void OnEverything(bool on);
- void OnTextSize(int index); void OnClockStyle(int index);
+ void OnTextSize(int index); void OnClockStyle(int index); void OnWeatherSkin(int index);
  void OnHotkey(int index); void OnSnapshots(bool on);
  void OnHotkeySearch(int index); void OnHotkeyCapture(int index); void OnHotkeyUndo(int index); void OnTabHover(bool on); void OnMemTrim(bool on); void OnGeoSearch(); void OnGeoSave(); void OnGeoAuto();
  void OnSyncSave(); void OnSyncUpload(); void OnSyncDownload(); void OnSyncAuto(bool on);

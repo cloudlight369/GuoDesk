@@ -59,6 +59,32 @@ static std::wstring DayLabel(long long date){
  return weekdays[out.wDayOfWeek%7];
 }
 void WeatherWindow::SetStatus(std::wstring const& text){updated.Text(text);}
+static Windows::UI::Color SkinColor(unsigned rgb){return Windows::UI::Color{255,static_cast<BYTE>((rgb>>16)&0xFF),static_cast<BYTE>((rgb>>8)&0xFF),static_cast<BYTE>(rgb&0xFF)};}
+void WeatherWindow::ApplySkin(int code,bool night){
+ Windows::UI::Color light{255,245,247,250},dim{255,220,226,234};
+ if(owner.layout.widgets.weatherSkin!=1){
+  skinMode=0;
+  root.Background(SolidColorBrush(Windows::UI::Colors::Transparent()));
+  city.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));
+  temp.Foreground(ThemeBrush(L"TextFillColorPrimary",Windows::UI::Color{255,0,0,0}));
+  desc.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));
+  extra.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));
+  updated.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));
+  return;
+ }
+ skinMode=1;
+ int idx=WeatherSkinForCode(code,night);
+ LinearGradientBrush g;g.StartPoint(Windows::Foundation::Point{0.f,0.f});g.EndPoint(Windows::Foundation::Point{0.f,1.f});
+ GradientStop s1;s1.Color(SkinColor(WeatherSkinTop(idx)));s1.Offset(0.f);
+ GradientStop s2;s2.Color(SkinColor(WeatherSkinBottom(idx)));s2.Offset(1.f);
+ g.GradientStops().Append(s1);g.GradientStops().Append(s2);
+ root.Background(g);
+ city.Foreground(SolidColorBrush(dim));
+ temp.Foreground(SolidColorBrush(light));
+ desc.Foreground(SolidColorBrush(light));
+ extra.Foreground(SolidColorBrush(dim));
+ updated.Foreground(SolidColorBrush(dim));
+}
 void WeatherWindow::ResolveCoords(){
  auto& wg=owner.layout.widgets;
  if(wg.weatherLat>=-90&&wg.weatherLat<=90&&wg.weatherLon>=-180&&wg.weatherLon<=180){
@@ -89,7 +115,7 @@ void WeatherWindow::Fetch(){
  SetStatus(i18n::Tr(L"正在更新…"));
  std::thread([weakAlive,dq,this,la,lo](){
   wchar_t path[512]{};
-  swprintf_s(path,512,L"/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,relative_humidity_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=4",la,lo);
+  swprintf_s(path,512,L"/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,relative_humidity_2m,weather_code,is_day&daily=weather_code,temperature_2m_max,temperature_2m_min&hourly=temperature_2m,weather_code&timezone=auto&forecast_days=7",la,lo);
   auto json=HttpGetJson(L"api.open-meteo.com",path,true);
   auto data=ParseWeatherJson(std::wstring(winrt::to_hstring(json)));
   dq.TryEnqueue([weakAlive,dq,this,data]{
@@ -103,6 +129,7 @@ void WeatherWindow::Fetch(){
  }).detach();
 }
 void WeatherWindow::Render(WeatherNow const& w){
+ ApplySkin(w.code,!w.isDay);
  city.Text(cityName.empty()?i18n::Tr(L"天气"):cityName);
  icon.Text(WmoEmoji(w.code));
  wchar_t buf[24]{};swprintf_s(buf,24,L"%.0f°",w.temp);temp.Text(buf);
@@ -111,17 +138,29 @@ void WeatherWindow::Render(WeatherNow const& w){
  if(w.humidity>0)swprintf_s(ebuf,80,L"%.0f° / %.0f° · %s %d%%",w.hi,w.lo,i18n::Tr(L"湿度").c_str(),w.humidity);
  else swprintf_s(ebuf,80,L"%.0f° / %.0f°",w.hi,w.lo);
  extra.Text(ebuf);
+ hours.Children().Clear();
+ Windows::UI::Color light{255,245,247,250};
+ for(auto const& h:w.hours){
+  auto col=StackPanel();col.Width(44);col.Spacing(2);
+  TextBlock ht;wchar_t tb[8]{};swprintf_s(tb,8,L"%02lld",h.key%100);ht.Text(tb);ht.HorizontalAlignment(HorizontalAlignment::Center);ht.FontSize(ScaledFont(owner.layout.settings.textSize,11));ht.Foreground(SolidColorBrush(skinMode?light:Windows::UI::Color{255,120,120,120}));
+  TextBlock hi;hi.Text(WmoEmoji(h.code));hi.FontSize(ScaledFont(owner.layout.settings.textSize,14));hi.HorizontalAlignment(HorizontalAlignment::Center);
+  TextBlock ht2;wchar_t hb[12]{};swprintf_s(hb,12,L"%.0f°",h.temp);ht2.Text(hb);ht2.HorizontalAlignment(HorizontalAlignment::Center);ht2.FontSize(ScaledFont(owner.layout.settings.textSize,11));ht2.Foreground(SolidColorBrush(skinMode?light:Windows::UI::Color{255,120,120,120}));
+  col.Children().Append(ht);col.Children().Append(hi);col.Children().Append(ht2);
+  hours.Children().Append(col);
+ }
+ hours.Visibility(w.hours.empty()?Visibility::Collapsed:Visibility::Visible);
  days.Children().Clear();
  for(auto const& d:w.days){
   auto row=Grid();row.Margin(Thickness{0,4,0,4});
   ColumnDefinition c0;c0.Width(GridLength{0,GridUnitType::Auto});row.ColumnDefinitions().Append(c0);
   ColumnDefinition c1;c1.Width(GridLength{1,GridUnitType::Star});row.ColumnDefinitions().Append(c1);
   ColumnDefinition c2;c2.Width(GridLength{0,GridUnitType::Auto});row.ColumnDefinitions().Append(c2);
-  TextBlock label;label.Text(DayLabel(d.date));label.FontSize(ScaledFont(owner.layout.settings.textSize,12));label.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));
+  TextBlock label;label.Text(DayLabel(d.date));label.FontSize(ScaledFont(owner.layout.settings.textSize,12));label.Foreground(SolidColorBrush(skinMode?light:Windows::UI::Color{255,120,120,120}));
   Grid::SetColumn(label,0);row.Children().Append(label);
   TextBlock ic;ic.Text(WmoEmoji(d.code));ic.FontSize(ScaledFont(owner.layout.settings.textSize,14));ic.HorizontalAlignment(HorizontalAlignment::Center);
   Grid::SetColumn(ic,1);row.Children().Append(ic);
   TextBlock range;wchar_t rb[32]{};swprintf_s(rb,32,L"%.0f° / %.0f°",d.lo,d.hi);range.Text(rb);range.FontSize(ScaledFont(owner.layout.settings.textSize,12));
+  range.Foreground(SolidColorBrush(skinMode?light:Windows::UI::Color{255,120,120,120}));
   Grid::SetColumn(range,2);row.Children().Append(range);
   days.Children().Append(row);
  }
@@ -144,7 +183,7 @@ WeatherWindow::WeatherWindow(Controller& c):owner(c){
  try{auto presenter=window.AppWindow().Presenter().as<Microsoft::UI::Windowing::OverlappedPresenter>();presenter.SetBorderAndTitleBar(true,false);window.AppWindow().IsShownInSwitchers(false);}catch(...){}
  auto& w=owner.layout.widgets;
  root=Grid();
- GridLength rows[]={GridLength{0,GridUnitType::Auto},GridLength{0,GridUnitType::Auto},GridLength{0,GridUnitType::Auto},GridLength{0,GridUnitType::Auto},GridLength{0,GridUnitType::Auto},GridLength{1,GridUnitType::Star}};
+ GridLength rows[]={GridLength{0,GridUnitType::Auto},GridLength{0,GridUnitType::Auto},GridLength{0,GridUnitType::Auto},GridLength{0,GridUnitType::Auto},GridLength{0,GridUnitType::Auto},GridLength{1,GridUnitType::Star},GridLength{0,GridUnitType::Auto}};
  for(auto& r:rows){RowDefinition rd;rd.Height(r);root.RowDefinitions().Append(rd);}
  auto head=Border();head.Padding(Thickness{14,10,10,2});head.Background(SolidColorBrush(Windows::UI::Colors::Transparent()));
  city=TextBlock();city.FontSize(ScaledFont(owner.layout.settings.textSize,13));city.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));
@@ -175,8 +214,12 @@ WeatherWindow::WeatherWindow(Controller& c):owner(c){
  Grid::SetRow(extra,2);root.Children().Append(extra);
  auto divider=Border();divider.Height(1);divider.Margin(Thickness{16,10,16,2});divider.Background(SolidColorBrush(Windows::UI::Color{80,128,128,128}));
  Grid::SetRow(divider,3);root.Children().Append(divider);
+ hours=StackPanel();hours.Orientation(Orientation::Horizontal);hours.Margin(Thickness{16,6,16,0});
+ auto hoursHost=ScrollViewer();hoursHost.HorizontalScrollMode(ScrollMode::Enabled);hoursHost.VerticalScrollMode(ScrollMode::Disabled);hoursHost.VerticalScrollBarVisibility(ScrollBarVisibility::Disabled);hoursHost.HorizontalScrollBarVisibility(ScrollBarVisibility::Hidden);hoursHost.Height(64);hoursHost.Content(hours);
+ Grid::SetRow(hoursHost,4);root.Children().Append(hoursHost);
  days=StackPanel();days.Margin(Thickness{16,4,16,0});
- Grid::SetRow(days,4);root.Children().Append(days);
+ auto daysHost=ScrollViewer();daysHost.VerticalScrollBarVisibility(ScrollBarVisibility::Auto);daysHost.Content(days);
+ Grid::SetRow(daysHost,5);root.Children().Append(daysHost);
  auto foot=Grid();foot.Margin(Thickness{16,2,12,10});
  ColumnDefinition f0;f0.Width(GridLength{1,GridUnitType::Star});foot.ColumnDefinitions().Append(f0);
  ColumnDefinition f1;f1.Width(GridLength{0,GridUnitType::Auto});foot.ColumnDefinitions().Append(f1);
@@ -187,7 +230,7 @@ WeatherWindow::WeatherWindow(Controller& c):owner(c){
  refreshBtn.Content(ricon);
  refreshBtn.Click([this](auto&&,auto&&){resolved=false;ResolveCoords();});
  Grid::SetColumn(refreshBtn,1);foot.Children().Append(refreshBtn);
- Grid::SetRow(foot,5);root.Children().Append(foot);
+ Grid::SetRow(foot,6);root.Children().Append(foot);
  window.Content(root);
  window.Closed([this](auto&&,auto&&){
   if(closing)return;closing=true;
@@ -203,7 +246,7 @@ WeatherWindow::WeatherWindow(Controller& c):owner(c){
  window.Activate();
 }
 void WeatherWindow::Show(){window.Activate();}
-void WeatherWindow::Reload(){resolved=false;ResolveCoords();}
+void WeatherWindow::Reload(){resolved=false;if(owner.layout.widgets.weatherSkin!=1)ApplySkin(0,false);ResolveCoords();}
 WeatherWindow::~WeatherWindow(){
  closing=true;*alive=false;
  if(refresh)refresh.Stop();if(dragTimer)dragTimer.Stop();

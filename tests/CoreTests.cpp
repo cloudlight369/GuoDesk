@@ -314,6 +314,18 @@ void RunTests(std::filesystem::path const& output){std::ofstream report(output);
  auto umLegacy=Deserialize("{\"version\":1,\"zones\":[],\"settings\":{}}");expect(umLegacy.settings.memTrim,"legacy config keeps mem trim default on");
  std::wstring dragPath=L"C:\\a b.txt";auto hd=shell::MakeHdrop({dragPath});expect(hd.size()==sizeof(DROPFILES)+(dragPath.size()+1+1)*sizeof(wchar_t),"HDROP payload size and double terminator");auto* dfp=reinterpret_cast<DROPFILES*>(hd.data());expect(dfp->pFiles==static_cast<DWORD>(sizeof(DROPFILES))&&dfp->fWide,"HDROP wide header offset");expect(std::wstring(reinterpret_cast<wchar_t*>(hd.data()+sizeof(DROPFILES)))==dragPath,"HDROP path roundtrip");
  auto hdTwo=shell::MakeHdrop({L"C:\\x",L"D:\\y"});expect(hdTwo.size()==sizeof(DROPFILES)+(4+1+4+1+1)*sizeof(wchar_t),"HDROP multi-path terminator");
+ expect(WeatherSkinCount()==7&&WeatherSkinForCode(0,false)==0&&WeatherSkinForCode(0,true)==1,"clear day and night use different skins");
+ expect(WeatherSkinForCode(3,false)==2&&WeatherSkinForCode(63,false)==3&&WeatherSkinForCode(75,false)==4&&WeatherSkinForCode(86,false)==4&&WeatherSkinForCode(95,false)==5&&WeatherSkinForCode(45,false)==6,"weather codes map to cloud rain snow thunder fog");
+ expect(WeatherSkinForCode(80,false)==3,"showers map to rain not snow");
+ expect((WeatherSkinTop(0)&0xFFFFFF)==0x3A7BD3&&(WeatherSkinBottom(4)&0xFFFFFF)==0xE3EEF7&&WeatherSkinTop(99)==WeatherSkinTop(2),"skin palette bounds");
+ auto wRain=ParseWeatherJson(L"{\"current\":{\"temperature_2m\":21.5,\"weather_code\":61,\"is_day\":0},\"daily\":{\"time\":[\"2026-10-03\",\"2026-10-04\"],\"weather_code\":[61,3],\"temperature_2m_max\":[24,22],\"temperature_2m_min\":[15,13]},\"hourly\":{\"time\":[\"2026-10-03T13:00\",\"2026-10-03T14:00\",\"2026-10-03T15:00\",\"2026-10-04T14:00\"],\"weather_code\":[61,63,3,0],\"temperature_2m\":[20,19,18,17]}}",2026100314LL);
+ expect(wRain.valid&&!wRain.isDay,"is_day parsed as night");
+ expect(wRain.hours.size()==3&&wRain.hours[0].key==2026100314LL&&wRain.hours[0].code==63,"hourly picks current hour onward");
+ expect(wRain.hours[1].key==2026100315LL&&wRain.hours[1].temp==18&&wRain.hours[2].key==2026100414LL,"next hours parsed in order");
+ auto wPlain=ParseWeatherJson(L"{\"current\":{\"temperature_2m\":9,\"weather_code\":3},\"daily\":{\"time\":[\"2026-10-03\"],\"weather_code\":[3],\"temperature_2m_max\":[10],\"temperature_2m_min\":[2]}}");
+ expect(wPlain.valid&&wPlain.hours.empty()&&wPlain.isDay,"legacy payload without hourly stays valid");
+ Layout wsk;wsk.widgets.weatherSkin=1;expect(Deserialize(Serialize(wsk)).widgets.weatherSkin==1,"weather skin roundtrip");
+ auto wskLegacy=Deserialize("{\"version\":1,\"zones\":[],\"widgets\":{\"weatherSkin\":7}}");expect(wskLegacy.widgets.weatherSkin==0,"invalid weather skin self-heals to standard");
 report<<"TOTAL "<<passed<<" passed\n";
 }
 }

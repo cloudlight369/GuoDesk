@@ -17,7 +17,7 @@ struct Widgets {
  int weatherX=660,weatherY=520,weatherW=250,weatherH=340;
  int searchX=560,searchY=260;
  std::wstring musicFolder; int musicIndex=0; int musicVol=65;
- std::wstring weatherCity; double weatherLat=999,weatherLon=999;
+ std::wstring weatherCity; double weatherLat=999,weatherLon=999; int weatherSkin=0;
  std::wstring noteMon,todoMon,clockMon,musicMon,weatherMon,searchMon; int noteMX=0,noteMY=0,todoMX=0,todoMY=0,clockMX=0,clockMY=0,musicMX=0,musicMY=0,weatherMX=0,weatherMY=0,searchMX=0,searchMY=0;
  std::vector<NotePage> pages;
  std::vector<TodoItem> todos;
@@ -41,7 +41,8 @@ struct ZoneTemplate { std::wstring id, name; std::vector<TemplateZone> zones; };
 struct PlanItem { std::wstring path, rule, zone; };
 struct SearchHit { std::wstring path, name, zone, kind; };
 struct WeatherDay { int code=0; double lo=0,hi=0; long long date=0; };
-struct WeatherNow { bool valid=false; double temp=0,hi=0,lo=0; int humidity=0; int code=0; std::wstring city; std::vector<WeatherDay> days; };
+struct WeatherHour { long long key=0; int code=0; double temp=0; };
+struct WeatherNow { bool valid=false; double temp=0,hi=0,lo=0; int humidity=0; int code=0; bool isDay=true; std::wstring city; std::vector<WeatherDay> days; std::vector<WeatherHour> hours; };
 struct GeoPlace { std::wstring name,country; double lat=0,lon=0; };
 enum class SortKey { Name, Type, Date, Size };
 struct Hotkey { unsigned mods=0, vk=0; };
@@ -101,7 +102,12 @@ void SearchWidgets(Layout const& layout,std::wstring const& query,std::vector<Se
 inline bool IsDoubleCtrlHotkey(std::wstring const& text){return text==L"DoubleCtrl";}
 std::wstring WmoText(int code);
 std::wstring WmoEmoji(int code);
-WeatherNow ParseWeatherJson(std::wstring const& json);
+int WeatherSkinCount();
+unsigned WeatherSkinTop(int skin);
+unsigned WeatherSkinBottom(int skin);
+int WeatherSkinForCode(int code,bool night);
+long long NowHourKey();
+WeatherNow ParseWeatherJson(std::wstring const& json,long long nowKey=0);
 std::vector<GeoPlace> ParseGeoJson(std::wstring const& json);
 GeoPlace ParseIpLocJson(std::wstring const& json);
 std::string Serialize(Layout const& layout);
