@@ -1,4 +1,5 @@
 #pragma once
+#include <map>
 namespace guodesk {
 struct Entry { std::wstring id, path; std::wstring stack; };
 struct Stack { std::wstring id, name; };
@@ -22,7 +23,7 @@ struct Widgets {
  std::vector<NotePage> pages;
  std::vector<TodoItem> todos;
 };
-struct Layout { std::vector<Zone> zones; Settings settings; std::vector<Rule> rules; Widgets widgets; };
+struct Layout { std::vector<Zone> zones; Settings settings; std::vector<Rule> rules; Widgets widgets; std::wstring topologyLast; std::map<std::wstring,std::string> topologyArchives; };
 struct UndoFrame { std::wstring label; std::string snapshot; };
 class UndoStack {
  std::vector<UndoFrame> frames; size_t limit;
@@ -53,6 +54,9 @@ std::wstring HotkeyToString(Hotkey const& hotkey);
 void SortEntries(Zone& zone,SortKey key,bool descending);
 std::vector<MonitorArea> EnumMonitorAreas();
 void Reanchor(RECT& rect,std::wstring& mon,int& mx,int& my);
+std::wstring TopologySignature(std::vector<MonitorArea> const& areas);
+bool ArchiveTopology(std::map<std::wstring,std::string>& archives,std::wstring const& key,std::string const& body,size_t maxArchives=6,size_t maxBytes=262144);
+bool TakeTopology(std::map<std::wstring,std::string> const& archives,std::wstring const& key,std::string& out);
 long long DueFromOffset(int days);
 double ScaledFont(int textSize,double base);
 int ZoneColorCount();
