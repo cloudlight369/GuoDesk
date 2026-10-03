@@ -22,6 +22,9 @@ class SettingsWindow {
  winrt::Microsoft::UI::Xaml::Controls::TextBlock hotkeySearchHint{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::ComboBox hotkeyCapture{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::TextBlock hotkeyCaptureHint{nullptr};
+ winrt::Microsoft::UI::Xaml::Controls::ComboBox hotkeyUndo{nullptr};
+ winrt::Microsoft::UI::Xaml::Controls::TextBlock hotkeyUndoHint{nullptr};
+ winrt::Microsoft::UI::Xaml::Controls::ToggleSwitch tabHover{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::TextBox weatherCity{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::ComboBox weatherResults{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::Button weatherSave{nullptr};
@@ -38,7 +41,7 @@ class SettingsWindow {
  void OnTheme(int index); void OnCompact(bool on); void OnPerformance(bool on); void OnAutostart(bool on); void OnLanguage(int index); void OnEverything(bool on);
  void OnTextSize(int index); void OnClockStyle(int index);
  void OnHotkey(int index); void OnSnapshots(bool on);
- void OnHotkeySearch(int index); void OnHotkeyCapture(int index); void OnGeoSearch(); void OnGeoSave(); void OnGeoAuto();
+ void OnHotkeySearch(int index); void OnHotkeyCapture(int index); void OnHotkeyUndo(int index); void OnTabHover(bool on); void OnGeoSearch(); void OnGeoSave(); void OnGeoAuto();
  void OnSyncSave(); void OnSyncUpload(); void OnSyncDownload(); void OnSyncAuto(bool on);
  void RebuildRules(); void EditRule(std::wstring ruleId);
  void OnExport(); void OnImport();

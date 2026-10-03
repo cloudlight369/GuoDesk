@@ -78,5 +78,5 @@ ClockWindow::ClockWindow(Controller& c):owner(c){
  window.Activate();
 }
 void ClockWindow::Show(){Update();window.Activate();}
-ClockWindow::~ClockWindow(){closing=true;if(tick)tick.Stop();if(IsWindow(hwnd))window.Close();}
+ClockWindow::~ClockWindow(){closing=true;if(tick)tick.Stop();try{window.Closed(nullptr);}catch(...){}if(IsWindow(hwnd))window.Close();}
 }

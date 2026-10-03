@@ -292,6 +292,23 @@ void RunTests(std::filesystem::path const& output){std::ofstream report(output);
  expect(bgBad.zones[0].background.empty()&&bgBad.zones[0].dim==1&&bgBad.zones[1].background==L"C:\\p\\b.JPG"&&bgBad.zones[1].dim==1&&bgBad.zones[2].background==L"C:\\p\\c.webp"&&bgBad.zones[2].dim==0,"invalid background/dim self-heal");
  expect(IsImagePath(L"a.png")&&IsImagePath(L"C:\\x\\b.webp")&&IsImagePath(L"x.TIFF"),"image path accepts pictures");
  expect(!IsImagePath(L"C:\\x\\b.txt")&&!IsImagePath(L"noext")&&!IsImagePath(L"C:\\a.b\\c")&&!IsImagePath(L"")&&!IsImagePath(L"x.jpegx"),"image path rejects others");
+ UndoStack ua;expect(ua.Empty()&&ua.Count()==0&&ua.Limit()==20,"undo stack starts empty");
+ UndoFrame ufr;expect(!ua.Pop(ufr),"undo pop on empty stack reports nothing");
+ ua.Push(L"step1",Serialize(Layout{}));ua.Push(L"step2",Serialize(Layout{}));
+ expect(ua.Count()==2&&ua.TopLabel()==L"step2"&&ua.Pop(ufr)&&ufr.label==L"step2","undo pops newest first");
+ expect(ua.Count()==1&&ua.Pop(ufr)&&ufr.label==L"step1"&&ua.Empty(),"undo pops in reverse order");
+ ua.Push(L"ignored",std::string{});expect(ua.Empty(),"undo ignores empty snapshots");
+ UndoStack ub(3);for(int i=1;i<=5;++i)ub.Push(std::to_wstring(i),Serialize(Layout{}));
+ expect(ub.Count()==3&&ub.TopLabel()==L"5","undo history stays bounded");
+ expect(ub.Pop(ufr)&&ufr.label==L"5"&&ub.Pop(ufr)&&ufr.label==L"4"&&ub.Pop(ufr)&&ufr.label==L"3"&&ub.Empty(),"undo evicts oldest frames");
+ UndoStack uc(0);uc.Push(L"a",Serialize(Layout{}));uc.Push(L"b",Serialize(Layout{}));expect(uc.Count()==1&&uc.TopLabel()==L"b","undo limit of zero falls back to one");
+ uc.Push(L"c",Serialize(Layout{}));uc.Clear();expect(uc.Empty()&&uc.TopLabel().empty(),"undo clear drops history");
+ Zone uz;uz.id=L"u1";uz.name=L"撤";Layout ul{{uz}};ul.settings.hotkeyUndo=L"Ctrl+Alt+Z";ul.settings.tabHover=false;
+ UndoStack ud;ud.Push(L"delete",Serialize(ul));UndoFrame uf2;expect(ud.Pop(uf2)&&Deserialize(uf2.snapshot).zones.size()==1,"undo snapshot restores layout");
+ Layout us;us.settings.hotkeyUndo=L"Ctrl+Alt+U";us.settings.tabHover=true;auto usBack=Deserialize(Serialize(us));expect(usBack.settings.hotkeyUndo==L"Ctrl+Alt+U"&&usBack.settings.tabHover,"undo hotkey and hover tab roundtrip");
+ Layout usOff;usOff.settings.hotkeyUndo=L"";usOff.settings.tabHover=false;expect(Deserialize(Serialize(usOff)).settings.hotkeyUndo.empty()&&!Deserialize(Serialize(usOff)).settings.tabHover,"undo hotkey can be disabled");
+ auto usLegacy=Deserialize("{\"version\":1,\"zones\":[],\"settings\":{}}");expect(usLegacy.settings.hotkeyUndo==L"Ctrl+Alt+U"&&usLegacy.settings.tabHover,"legacy config keeps undo defaults");
+ auto usBad=Deserialize("{\"version\":1,\"zones\":[],\"settings\":{\"hotkeyUndo\":\"NotAKey!!\"}}");expect(usBad.settings.hotkeyUndo.empty(),"invalid undo hotkey dropped");
 report<<"TOTAL "<<passed<<" passed\n";
 }
 }

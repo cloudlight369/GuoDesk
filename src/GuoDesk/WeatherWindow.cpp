@@ -207,6 +207,7 @@ void WeatherWindow::Reload(){resolved=false;ResolveCoords();}
 WeatherWindow::~WeatherWindow(){
  closing=true;*alive=false;
  if(refresh)refresh.Stop();if(dragTimer)dragTimer.Stop();
+ try{window.Closed(nullptr);}catch(...){}
  if(IsWindow(hwnd))window.Close();
 }
 }

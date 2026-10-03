@@ -200,6 +200,7 @@ MusicWindow::~MusicWindow(){
  closing=true;*alive=false;
  if(tick)tick.Stop();if(dragTimer)dragTimer.Stop();if(saveTimer)saveTimer.Stop();
  try{player.Pause();player.Source(nullptr);}catch(...){}
+ try{window.Closed(nullptr);}catch(...){}
  if(IsWindow(hwnd))window.Close();
 }
 }

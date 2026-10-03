@@ -103,5 +103,5 @@ NoteWindow::NoteWindow(Controller& c):owner(c){
  window.Activate();
 }
 void NoteWindow::Show(){window.Activate();}
-NoteWindow::~NoteWindow(){closing=true;if(IsWindow(hwnd))window.Close();}
+NoteWindow::~NoteWindow(){closing=true;try{window.Closed(nullptr);}catch(...){}if(IsWindow(hwnd))window.Close();}
 }

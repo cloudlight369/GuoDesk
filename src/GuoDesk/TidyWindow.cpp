@@ -78,5 +78,5 @@ void TidyWindow::Build(){
  window.Title(i18n::TrF(L"GuoDesk 整理预览 · {0} 项",{std::to_wstring(plan.size())}));
 }
 void TidyWindow::Show(){Build();window.Activate();}
-TidyWindow::~TidyWindow(){closing=true;if(IsWindow(hwnd))window.Close();}
+TidyWindow::~TidyWindow(){closing=true;try{window.Closed(nullptr);}catch(...){}if(IsWindow(hwnd))window.Close();}
 }

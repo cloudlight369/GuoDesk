@@ -111,5 +111,5 @@ TodoWindow::TodoWindow(Controller& c):owner(c){
  window.Activate();
 }
 void TodoWindow::Show(){Rebuild();window.Activate();}
-TodoWindow::~TodoWindow(){closing=true;if(IsWindow(hwnd))window.Close();}
+TodoWindow::~TodoWindow(){closing=true;try{window.Closed(nullptr);}catch(...){}if(IsWindow(hwnd))window.Close();}
 }

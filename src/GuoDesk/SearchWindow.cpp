@@ -172,5 +172,5 @@ SearchWindow::SearchWindow(Controller& c):owner(c){
  window.Activate();
 }
 void SearchWindow::Show(){window.Activate();SetForegroundWindow(hwnd);}
-SearchWindow::~SearchWindow(){closing=true;if(IsWindow(hwnd))window.Close();}
+SearchWindow::~SearchWindow(){closing=true;try{window.Closed(nullptr);}catch(...){}if(IsWindow(hwnd))window.Close();}
 }

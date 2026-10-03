@@ -23,6 +23,8 @@ class DeskWindow {
  winrt::Microsoft::UI::Xaml::Controls::FontIcon pillGlyph{nullptr};
  winrt::Microsoft::UI::Dispatching::DispatcherQueueTimer embedTimer{nullptr};
  winrt::Microsoft::UI::Dispatching::DispatcherQueueTimer hoverTimer{nullptr};
+ winrt::Microsoft::UI::Dispatching::DispatcherQueueTimer hoverTabTimer{nullptr}; int hoverTabPending=-1;
+ void HoverTabSwitch(int index);
  static LRESULT CALLBACK Subclass(HWND,UINT,WPARAM,LPARAM,UINT_PTR,DWORD_PTR);
  std::vector<RECT> Peers(); void SnapResize(RECT&,int); void DragUpdate();
  winrt::fire_and_forget Drop(winrt::Microsoft::UI::Xaml::DragEventArgs args,size_t position,std::wstring stackId={});
@@ -30,8 +32,7 @@ class DeskWindow {
  void EntryMenu(std::wstring const& path,std::wstring const& key,std::wstring const& stackId);
  void RebuildTabs(); void SwitchTab(int index);
  void Navigate(std::wstring const& folder); void RenderCrumbs();
- void SetCapsule(bool on); void ExpandCapsule(); void ShrinkCapsule();
- void ApplyPerformance(); void ApplyBackground();
+ void SetCapsule(bool on); void ExpandCapsule(); void ShrinkCapsule(); void ApplyPerformance(); void ApplyBackground();
  winrt::Microsoft::UI::Xaml::Controls::Border dimLayer{nullptr};
  std::wstring bgPath; int bgDim=-1; bool bgPerf=false; bool bgDesk=false;
 public:
@@ -54,9 +55,10 @@ class Controller {
  static LRESULT CALLBACK MessageProc(HWND,UINT,WPARAM,LPARAM);
  void AddTray(); void InstallCtrlHook(); void RemoveCtrlHook();
 public:
- Store store; Layout layout; std::vector<std::unique_ptr<DeskWindow>> windows; bool desktopMode=false; HWND host{};
+ Store store; Layout layout; UndoStack undo; std::vector<std::unique_ptr<DeskWindow>> windows; bool desktopMode=false; HWND host{};
  explicit Controller(std::filesystem::path root={}); ~Controller();
  void Start(); void Save(); void ImportLayout(Layout&& next); void Add(); void Remove(std::wstring const& id); void Refresh(); void Show(); void HideAll(); void ToggleAll(); bool ApplyHotkey(); void Quit(); void ToggleDesktop();
+ void PushUndo(std::wstring const& label); std::string UndoMark(); void UndoPush(std::wstring const& label,std::string mark); void Undo();
  void QuickZone(std::wstring const& tag); void UseTemplate(ZoneTemplate const& tpl);
  void ShowSettings(); void CloseSettings(); void ApplySettings();
  void ShowTidy(); void CloseTidy();

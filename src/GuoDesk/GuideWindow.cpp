@@ -61,5 +61,5 @@ GuideWindow::GuideWindow(Controller& c):owner(c){
  SetWindowPos(hwnd,nullptr,0,0,560,640,SWP_NOMOVE|SWP_NOZORDER);
 }
 void GuideWindow::Show(){window.Activate();}
-GuideWindow::~GuideWindow(){closing=true;if(IsWindow(hwnd))window.Close();}
+GuideWindow::~GuideWindow(){closing=true;try{window.Closed(nullptr);}catch(...){}if(IsWindow(hwnd))window.Close();}
 }

@@ -55,5 +55,5 @@ CaptureWindow::CaptureWindow(Controller& c):owner(c){
  window.DispatcherQueue().TryEnqueue([this]{body.Focus(FocusState::Programmatic);});
 }
 void CaptureWindow::Show(){POINT cur{};GetCursorPos(&cur);HMONITOR hm=MonitorFromPoint(cur,MONITOR_DEFAULTTONEAREST);MONITORINFO mi{sizeof(mi)};GetMonitorInfoW(hm,&mi);int x=mi.rcWork.left+((mi.rcWork.right-mi.rcWork.left)-560)/2,y=mi.rcWork.top+(mi.rcWork.bottom-mi.rcWork.top)/6;RECT c{};GetWindowRect(hwnd,&c);int w=c.right-c.left,h=c.bottom-c.top;if(hm!=MonitorFromRect(&c,MONITOR_DEFAULTTONULL))SetWindowPos(hwnd,nullptr,x,y,w,h,SWP_NOZORDER);else SetWindowPos(hwnd,HWND_TOPMOST,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_SHOWWINDOW);window.Activate();body.Focus(FocusState::Programmatic);}
-CaptureWindow::~CaptureWindow(){closing=true;if(IsWindow(hwnd))window.Close();}
+CaptureWindow::~CaptureWindow(){closing=true;try{window.Closed(nullptr);}catch(...){}if(IsWindow(hwnd))window.Close();}
 }
