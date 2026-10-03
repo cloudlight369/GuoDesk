@@ -54,8 +54,9 @@ class SettingsWindow;
 class Controller {
  HWND messageWindow{}; NOTIFYICONDATAW tray{}; UINT taskbarCreated{}; HANDLE mutex{}; bool quitting=false; std::map<std::wstring,std::wstring> mappedStamp; std::shared_ptr<bool> syncAlive{std::make_shared<bool>(true)};
  HHOOK ctrlHook=nullptr;
+ HHOOK revealHook=nullptr; bool revealShowing=false;
  static LRESULT CALLBACK MessageProc(HWND,UINT,WPARAM,LPARAM);
- void AddTray(); void InstallCtrlHook(); void RemoveCtrlHook();
+ void AddTray(); void InstallCtrlHook(); void RemoveCtrlHook(); void InstallRevealHook(); void RemoveRevealHook(); void RevealBegin(); void RevealEnd();
 public:
  Store store; Layout layout; UndoStack undo; std::vector<std::unique_ptr<DeskWindow>> windows; bool desktopMode=false; HWND host{};
  explicit Controller(std::filesystem::path root={}); ~Controller();

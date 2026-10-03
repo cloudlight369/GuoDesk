@@ -360,6 +360,10 @@ void RunTests(std::filesystem::path const& output){std::ofstream report(output);
  expect(tpJunk.topologyLast==L"x"&&tpJunk.topologyArchives.empty(),"invalid archive entries dropped");
  auto tpBad=Deserialize("{\"version\":1,\"zones\":[],\"topology\":5}");
  expect(tpBad.topologyLast.empty(),"junk topology ignored");
+ Layout rvL;rvL.settings.revealHotkey=L"Ctrl+Alt+Space";auto rvBack=Deserialize(Serialize(rvL));expect(rvBack.settings.revealHotkey==L"Ctrl+Alt+Space","reveal hotkey roundtrips");
+ expect(Deserialize("{\"version\":1,\"zones\":[],\"settings\":{}}").settings.revealHotkey.empty(),"legacy config has no reveal hotkey");
+ expect(Deserialize("{\"version\":1,\"zones\":[],\"settings\":{\"revealHotkey\":\"Foo Bar\"}}").settings.revealHotkey.empty(),"invalid reveal hotkey cleared");
+ expect(Deserialize("{\"version\":1,\"zones\":[],\"settings\":{\"revealHotkey\":\"\"}}").settings.revealHotkey.empty(),"empty reveal hotkey stays empty");
 report<<"TOTAL "<<passed<<" passed\n";
 }
 }

@@ -348,6 +348,8 @@ KV const table[]{
  {L"清除最近搜索",L"Clear recent searches"},
  {L"收藏当前搜索词",L"Favorite this search"},
  {L"检测到显示器变化，已恢复该显示器的布局。",L"Display change detected. Restored the layout saved for this monitor setup."},
+ {L"透桌面热键",L"Reveal-desktop hotkey"},
+ {L"按住热键期间临时隐藏所有分区，松开即恢复，方便直接操作桌面。",L"Hold the hotkey to temporarily hide all zones and click the desktop directly; release to restore them."},
  {L"跟随天气状况",L"Follow the weather"},
  {L"状况皮肤会按晴、雨、雪、雷暴等切换背景渐变色。",L"The condition skin tints the background gradient by sun, rain, snow or thunder."},
  {L"时钟组件的显示样式。",L"Display style of the clock widget."},
