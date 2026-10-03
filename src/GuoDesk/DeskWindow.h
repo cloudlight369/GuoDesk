@@ -16,6 +16,7 @@ class DeskWindow {
  winrt::Microsoft::UI::Xaml::Controls::GridView grid{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::ScrollViewer listHost{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::StackPanel listPanel{nullptr};
+ winrt::Microsoft::UI::Xaml::Controls::StackPanel pinBar{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::Button chevron{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::Border pill{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::TextBlock pillName{nullptr};
@@ -31,7 +32,7 @@ class DeskWindow {
  void Menu(winrt::Microsoft::UI::Xaml::FrameworkElement const& target);
  void EntryMenu(std::wstring const& path,std::wstring const& key,std::wstring const& stackId);
  void RebuildTabs(); void SwitchTab(int index);
- void Navigate(std::wstring const& folder); void RenderCrumbs();
+ void Navigate(std::wstring const& folder); void RenderCrumbs(); void RebuildPins();
  void SetCapsule(bool on); void ExpandCapsule(); void ShrinkCapsule(); void ApplyPerformance(); void ApplyBackground();
  void AttachDrag(winrt::Microsoft::UI::Xaml::FrameworkElement const& el,std::wstring const& path);
  winrt::Microsoft::UI::Xaml::Controls::Border dimLayer{nullptr};
