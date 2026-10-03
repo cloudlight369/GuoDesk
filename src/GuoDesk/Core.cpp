@@ -364,6 +364,14 @@ bool ToggleSearchFavorite(std::vector<std::wstring>& favorites,std::wstring cons
  if(favorites.size()>limit)favorites.resize(limit);
  return true;
 }
+bool ToggleSelect(std::vector<std::wstring>& keys,std::wstring const& key,size_t limit){
+ if(key.empty())return false;
+ auto it=std::find(keys.begin(),keys.end(),key);
+ if(it!=keys.end()){keys.erase(it);return false;}
+ keys.push_back(key);
+ if(keys.size()>limit)keys.erase(keys.begin());
+ return true;
+}
 std::wstring WmoText(int code){
  struct E{int code;wchar_t const* text;};
  static const E table[]{{0,L"晴"},{1,L"大部晴朗"},{2,L"局部多云"},{3,L"阴"},{45,L"雾"},{48,L"雾凇"},{51,L"轻毛毛雨"},{53,L"毛毛雨"},{55,L"浓毛毛雨"},{56,L"冻毛毛雨"},{57,L"强冻毛毛雨"},{61,L"小雨"},{63,L"中雨"},{65,L"大雨"},{66,L"冻雨"},{67,L"强冻雨"},{71,L"小雪"},{73,L"中雪"},{75,L"大雪"},{77,L"雪粒"},{80,L"小阵雨"},{81,L"阵雨"},{82,L"强阵雨"},{85,L"小阵雪"},{86,L"阵雪"},{95,L"雷暴"},{96,L"雷暴伴冰雹"},{99,L"强雷暴伴冰雹"}};

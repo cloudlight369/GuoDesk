@@ -110,6 +110,7 @@ void SearchWidgets(Layout const& layout,std::wstring const& query,std::vector<Se
 inline bool IsDoubleCtrlHotkey(std::wstring const& text){return text==L"DoubleCtrl";}
 void PushSearchHistory(std::vector<std::wstring>& history,std::wstring const& query,size_t limit=20);
 bool ToggleSearchFavorite(std::vector<std::wstring>& favorites,std::wstring const& query,size_t limit=50);
+bool ToggleSelect(std::vector<std::wstring>& keys,std::wstring const& key,size_t limit=50);
 std::wstring WmoText(int code);
 std::wstring WmoEmoji(int code);
 int WeatherSkinCount();

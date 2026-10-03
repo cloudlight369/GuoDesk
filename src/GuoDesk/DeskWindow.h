@@ -35,6 +35,9 @@ class DeskWindow {
  void Navigate(std::wstring const& folder); void RenderCrumbs(); void RebuildPins();
  void SetCapsule(bool on); void ExpandCapsule(); void ShrinkCapsule(); void ApplyPerformance(); void ApplyBackground();
  void AttachDrag(winrt::Microsoft::UI::Xaml::FrameworkElement const& el,std::wstring const& path);
+ std::vector<std::wstring> selected;
+ bool IsSel(std::wstring const& path); void ToggleSel(std::wstring const& path);
+ winrt::Microsoft::UI::Xaml::Media::Brush ItemFill(std::wstring const& path);
  winrt::Microsoft::UI::Xaml::Controls::Border dimLayer{nullptr};
  std::wstring bgPath; int bgDim=-1; bool bgPerf=false; bool bgDesk=false;
  bool rootDragHooked=false; bool dragArmed=false; long dragSX=0; long dragSY=0; std::wstring dragPath;

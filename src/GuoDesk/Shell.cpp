@@ -102,11 +102,11 @@ struct DragSource final : IDataObject,IDropSource {
  STDMETHOD(DUnadvise)(DWORD)override{return E_NOTIMPL;}
  STDMETHOD(EnumDAdvise)(IEnumSTATDATA**)override{return E_NOTIMPL;}
 };
-HRESULT DragOut(HWND hwnd,std::wstring const& path){
+HRESULT DragOut(HWND hwnd,std::vector<std::wstring> const& paths){
  static bool active=false;
- if(active)return S_FALSE;
+ if(active||paths.empty())return S_FALSE;
  active=true;
- auto blob=MakeHdrop({path});
+ auto blob=MakeHdrop(paths);
  auto* source=new DragSource(std::move(blob));
  HRESULT init=OleInitialize(nullptr);
  if(hwnd)SetCapture(hwnd);
