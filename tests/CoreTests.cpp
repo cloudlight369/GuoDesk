@@ -364,6 +364,21 @@ void RunTests(std::filesystem::path const& output){std::ofstream report(output);
  expect(Deserialize("{\"version\":1,\"zones\":[],\"settings\":{}}").settings.revealHotkey.empty(),"legacy config has no reveal hotkey");
  expect(Deserialize("{\"version\":1,\"zones\":[],\"settings\":{\"revealHotkey\":\"Foo Bar\"}}").settings.revealHotkey.empty(),"invalid reveal hotkey cleared");
  expect(Deserialize("{\"version\":1,\"zones\":[],\"settings\":{\"revealHotkey\":\"\"}}").settings.revealHotkey.empty(),"empty reveal hotkey stays empty");
+ auto luA=LunarFromSolar(2026,10,3);expect(luA.valid&&luA.year==2026&&luA.month==8&&luA.day==23&&!luA.leap,"lunar 2026-10-03 is month 8 day 23");
+ expect(LunarText(luA)==L"八月廿三","lunar text formats month and day");
+ auto luB=LunarFromSolar(2026,2,17);expect(luB.valid&&luB.month==1&&luB.day==1,"2026 spring festival lands on month 1 day 1");
+ expect(LunarText(luB)==L"正月初一","lunar text uses zheng yue and chu yi");
+ expect(HolidayText(2026,2,17,luB)==L"春节","spring festival holiday");
+ auto luC=LunarFromSolar(2026,9,25);expect(luC.valid&&luC.month==8&&luC.day==15&&HolidayText(2026,9,25,luC)==L"中秋节","mid autumn holiday");
+ auto luD=LunarFromSolar(2025,7,25);expect(luD.valid&&luD.leap&&luD.month==6&&luD.day==1&&LunarText(luD)==L"闰六月初一","leap month is detected and labelled");
+ auto luE=LunarFromSolar(2026,2,16);expect(luE.valid&&luE.month==12&&HolidayText(2026,2,16,luE)==L"除夕","new year eve from lunar last day");
+ auto luF=LunarFromSolar(2024,2,9);expect(luF.valid&&luF.month==12&&luF.day==30&&HolidayText(2024,2,9,luF)==L"除夕","new year eve on day 30 works too");
+ auto luG=LunarFromSolar(2026,10,1);expect(luG.valid&&luG.month==8&&luG.day==21&&HolidayText(2026,10,1,luG)==L"国庆节","national day beats lunar text");
+ expect(HolidayText(2026,4,5,LunarFromSolar(2026,4,5))==L"清明节","qingming formula gives apr 5 in 2026");
+ expect(HolidayText(2026,4,4,LunarFromSolar(2026,4,4)).empty(),"day before qingming has no holiday");
+ auto luH=LunarFromSolar(2026,10,10);expect(luH.valid&&luH.month==9&&luH.day==1&&LunarText(luH)==L"九月初一","month rolls over to next lunar month");
+ auto luBad=LunarFromSolar(2060,1,1);expect(!luBad.valid&&LunarText(luBad).empty(),"out of range dates are invalid");
+ expect(!LunarFromSolar(1899,12,31).valid,"dates before the table are invalid");
 report<<"TOTAL "<<passed<<" passed\n";
 }
 }

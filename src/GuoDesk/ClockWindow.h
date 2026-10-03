@@ -10,6 +10,7 @@ class ClockWindow {
  winrt::Microsoft::UI::Xaml::Shapes::Rectangle hourHand{nullptr},minuteHand{nullptr},secondHand{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::TextBlock time{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::TextBlock date{nullptr};
+ winrt::Microsoft::UI::Xaml::Controls::TextBlock lunar{nullptr};
  winrt::Microsoft::UI::Dispatching::DispatcherQueueTimer tick{nullptr};
  winrt::Microsoft::UI::Xaml::Media::Brush ThemeBrush(wchar_t const* key,winrt::Windows::UI::Color fallback);
  void Update(); void BuildFace(); void Rotate(winrt::Microsoft::UI::Xaml::Shapes::Rectangle const& hand,double angle);

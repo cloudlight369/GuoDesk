@@ -217,6 +217,72 @@ long long DueFromOffset(int days){
 }
 bool DueReached(long long due){return due>0&&due<=DueFromOffset(0);}
 double ScaledFont(int textSize,double base){double f=textSize<=0?0.85:textSize>=2?1.2:1.0;return base*f;}
+static const unsigned kLunarInfo[150]={
+0x04bd8,0x04ae0,0x0a570,0x054d5,0x0d260,0x0d950,0x16554,0x056a0,0x09ad0,0x055d2,0x04ae0,0x0a5b6,0x0a4d0,0x0d250,0x1d255,
+0x0b540,0x0d6a0,0x18da3,0x095b0,0x14977,0x04970,0x0a4b0,0x1b0b6,0x06a50,0x06d40,0x1ab54,0x02b60,0x09570,0x052f2,0x04970,
+0x06566,0x0d4a0,0x0ea50,0x16a95,0x05ad0,0x02b60,0x186e3,0x092e0,0x1c8d7,0x0c950,0x0d4a0,0x1d8a6,0x0b550,0x056a0,0x1a5b4,
+0x025d0,0x092d0,0x0d2b2,0x0a950,0x0b557,0x06ca0,0x0b550,0x15355,0x04db0,0x025b0,0x18573,0x052b0,0x0a9a8,0x0e950,0x06aa0,
+0x0aea6,0x0ab50,0x04b60,0x0aae4,0x0a570,0x05260,0x0f263,0x0d950,0x05b57,0x056a0,0x096d0,0x04dd5,0x04ad0,0x0a4d0,0x0d4d4,
+0x0d250,0x0d558,0x0b540,0x0b6a0,0x195a6,0x095b0,0x049b0,0x0a974,0x0a4b0,0x0b27a,0x06a50,0x06d40,0x1ad47,0x0ab60,0x09570,
+0x04af5,0x04970,0x064b0,0x074a3,0x0ea50,0x06b58,0x05ac0,0x0ab60,0x096e5,0x092e0,0x0c960,0x0d954,0x0d4a0,0x0da50,0x07552,
+0x056a0,0x0abb7,0x025d0,0x092d0,0x0cab5,0x0a950,0x0b4a0,0x0bca4,0x0ad50,0x055d9,0x04ba0,0x0a5b0,0x15176,0x05270,0x0a930,
+0x07954,0x06aa0,0x0ad50,0x05b52,0x04b60,0x0a6e6,0x0a4f0,0x05260,0x0ea65,0x0d520,0x0daa0,0x076a3,0x096d0,0x04afb,0x04ad0,
+0x0a4d0,0x1d0b6,0x0d250,0x0d520,0x0dd45,0x0b5a0,0x056d0,0x055b2,0x049b0,0x0a577,0x0a4b0,0x0aa50,0x1b255,0x06d20,0x0ada0};
+static int LunarLeapMonth(int y){return kLunarInfo[y-1900]&0xf;}
+static int LunarMonthDays(int y,int m){return (kLunarInfo[y-1900]&(0x10000>>m))?30:29;}
+static int LunarLeapDays(int y){int lp=LunarLeapMonth(y);return lp&&lp<=12?((kLunarInfo[y-1900]&0x10000)?30:29):0;}
+static int LunarYearDays(int y){int sum=348;for(unsigned i=0x8000;i>0x8;i>>=1)sum+=(kLunarInfo[y-1900]&i)?1:0;return sum+LunarLeapDays(y);}
+static long DaysFromCivil(int y,int m,int d){y-=m<=2;long era=(y>=0?y:y-399)/400;unsigned long yoe=(unsigned long)(y-era*400);unsigned long doy=(153u*(m+(m>2?-3:9))+2)/5+d-1;unsigned long doe=yoe*365+yoe/4-yoe/100+doy;return era*146097+(long)doe-719468;}
+LunarDate LunarFromSolar(int year,int month,int day){
+ LunarDate out;
+ if(year<1900||year>2050||month<1||month>12||day<1||day>31)return out;
+ long offset=DaysFromCivil(year,month,day)-DaysFromCivil(1900,1,31);
+ if(offset<0)return out;
+ int y=1900;
+ for(;y<=2049;++y){int dy=LunarYearDays(y);if(offset<dy)break;offset-=dy;}
+ if(y>2049)return out;
+ int leap=LunarLeapMonth(y),m=1;bool isLeap=false;
+ for(;m<=12;++m){
+  int dm=LunarMonthDays(y,m);
+  if(offset<dm)break;
+  offset-=dm;
+  if(m==leap){int ld=LunarLeapDays(y);if(offset<ld){isLeap=true;break;}offset-=ld;}
+ }
+ out.year=y;out.month=m;out.day=static_cast<int>(offset)+1;out.leap=isLeap;out.valid=true;
+ return out;
+}
+std::wstring LunarText(LunarDate const& date){
+ if(!date.valid||date.month<1||date.month>12||date.day<1||date.day>30)return {};
+ static const wchar_t* mn[12]={L"正月",L"二月",L"三月",L"四月",L"五月",L"六月",L"七月",L"八月",L"九月",L"十月",L"冬月",L"腊月"};
+ std::wstring dn;
+ if(date.day==10)dn=L"初十";else if(date.day==20)dn=L"二十";else if(date.day==30)dn=L"三十";
+ else{static const wchar_t* up[3]={L"初",L"十",L"廿"};static const wchar_t* low[10]={L"一",L"二",L"三",L"四",L"五",L"六",L"七",L"八",L"九",L"十"};dn=std::wstring(up[date.day/10])+low[date.day%10-1];}
+ return (date.leap?L"闰":L"")+std::wstring(mn[date.month-1])+dn;
+}
+static int QingmingDay(int y){int yy=y%100;double c=y<2000?4.81:5.59;return static_cast<int>(yy*0.2422+c)-yy/4;}
+std::wstring HolidayText(int year,int month,int day,LunarDate const& lunar){
+ if(lunar.valid&&!lunar.leap){
+  if(lunar.month==1&&lunar.day==1)return L"春节";
+  if(lunar.month==1&&lunar.day==15)return L"元宵节";
+  if(lunar.month==2&&lunar.day==2)return L"龙抬头";
+  if(lunar.month==5&&lunar.day==5)return L"端午节";
+  if(lunar.month==7&&lunar.day==7)return L"七夕";
+  if(lunar.month==8&&lunar.day==15)return L"中秋节";
+  if(lunar.month==9&&lunar.day==9)return L"重阳节";
+  if(lunar.month==12&&lunar.day==8)return L"腊八";
+  if(lunar.month==12&&lunar.day==LunarMonthDays(lunar.year,12))return L"除夕";
+ }
+ if(month==1&&day==1)return L"元旦";
+ if(month==3&&day==8)return L"妇女节";
+ if(month==4&&day==QingmingDay(year))return L"清明节";
+ if(month==5&&day==1)return L"劳动节";
+ if(month==5&&day==4)return L"青年节";
+ if(month==6&&day==1)return L"儿童节";
+ if(month==8&&day==1)return L"建军节";
+ if(month==9&&day==10)return L"教师节";
+ if(month==10&&day==1)return L"国庆节";
+ return {};
+}
 int ZoneColorCount(){return 8;}
 unsigned ZoneColorRGB(int color){static const unsigned pal[8]={0xE81123,0xF7630C,0xFFB900,0x13A10E,0x00B7C3,0x0078D4,0x8764B8,0xE3008C};return color>=1&&color<=8?pal[color-1]:0u;}
 bool IsImagePath(std::wstring const& path){auto f=path.find_last_of(L'.');if(f==std::wstring::npos||f+1>=path.size())return false;auto ext=path.substr(f+1);if(ext.size()>5||ext.find_first_of(L"\\/")!=std::wstring::npos)return false;for(auto& c:ext)c=towlower(c);return ext==L"png"||ext==L"jpg"||ext==L"jpeg"||ext==L"bmp"||ext==L"gif"||ext==L"webp"||ext==L"tif"||ext==L"tiff";}

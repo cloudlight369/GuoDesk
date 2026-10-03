@@ -44,6 +44,11 @@ void ClockWindow::Update(){
  else{wchar_t buf[16]{};swprintf_s(buf,16,L"%02d:%02d",st.wHour,st.wMinute);time.Text(buf);}
  static wchar_t const* weekdays[]{L"星期日",L"星期一",L"星期二",L"星期三",L"星期四",L"星期五",L"星期六"};
  date.Text(i18n::TrF(L"{0}年{1}月{2}日 · {3}",{std::to_wstring(st.wYear),std::to_wstring(st.wMonth),std::to_wstring(st.wDay),i18n::Tr(weekdays[st.wDayOfWeek%7])}));
+ auto ln=LunarFromSolar(st.wYear,st.wMonth,st.wDay);
+ auto text=LunarText(ln);
+ if(ln.valid){auto hol=HolidayText(st.wYear,st.wMonth,st.wDay,ln);if(!hol.empty())text+=L" · "+hol;}
+ lunar.Text(text);
+ lunar.Visibility(text.empty()?Visibility::Collapsed:Visibility::Visible);
 }
 ClockWindow::ClockWindow(Controller& c):owner(c){
  window=Window();window.Title(i18n::Tr(L"GuoDesk 时钟"));hwnd=shell::Handle(window);
@@ -54,11 +59,14 @@ ClockWindow::ClockWindow(Controller& c):owner(c){
  root=Grid();
  RowDefinition timeRow;timeRow.Height(GridLength{1,GridUnitType::Star});root.RowDefinitions().Append(timeRow);
  RowDefinition dateRow;dateRow.Height(GridLength{0,GridUnitType::Auto});root.RowDefinitions().Append(dateRow);
+ RowDefinition lunarRow;lunarRow.Height(GridLength{0,GridUnitType::Auto});root.RowDefinitions().Append(lunarRow);
  analog=owner.layout.settings.clockStyle==L"analog";
  if(analog){face=Canvas();Grid::SetRow(face,0);root.Children().Append(face);}
  else{time=TextBlock();time.FontSize(ScaledFont(owner.layout.settings.textSize,42));time.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());time.HorizontalAlignment(HorizontalAlignment::Center);time.VerticalAlignment(VerticalAlignment::Center);Grid::SetRow(time,0);root.Children().Append(time);}
  date=TextBlock();date.FontSize(ScaledFont(owner.layout.settings.textSize,12));date.Margin(Thickness{0,0,0,10});date.HorizontalAlignment(HorizontalAlignment::Center);date.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));
  Grid::SetRow(date,1);root.Children().Append(date);
+ lunar=TextBlock();lunar.FontSize(ScaledFont(owner.layout.settings.textSize,11));lunar.Margin(Thickness{0,0,0,10});lunar.HorizontalAlignment(HorizontalAlignment::Center);lunar.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,150,150,150}));
+ Grid::SetRow(lunar,2);root.Children().Append(lunar);
  auto dragging=std::make_shared<bool>(false);auto dragStart=std::make_shared<POINT>();auto dragOrigin=std::make_shared<RECT>();
  auto dragTimer=root.DispatcherQueue().CreateTimer();dragTimer.Interval(std::chrono::milliseconds(16));
  auto EndDrag=[this,dragging,dragTimer](){if(!*dragging)return;*dragging=false;dragTimer.Stop();RECT r{};GetWindowRect(hwnd,&r);auto& w=owner.layout.widgets;w.clockX=r.left;w.clockY=r.top;MONITORINFOEXW mi{sizeof(mi)};GetMonitorInfoW(MonitorFromWindow(hwnd,MONITOR_DEFAULTTONEAREST),&mi);w.clockMon=mi.szDevice;w.clockMX=r.left-mi.rcWork.left;w.clockMY=r.top-mi.rcWork.top;owner.Save();};

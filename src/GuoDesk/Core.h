@@ -59,6 +59,10 @@ bool ArchiveTopology(std::map<std::wstring,std::string>& archives,std::wstring c
 bool TakeTopology(std::map<std::wstring,std::string> const& archives,std::wstring const& key,std::string& out);
 long long DueFromOffset(int days);
 double ScaledFont(int textSize,double base);
+struct LunarDate { int year=0,month=0,day=0; bool leap=false; bool valid=false; };
+LunarDate LunarFromSolar(int year,int month,int day);
+std::wstring LunarText(LunarDate const& date);
+std::wstring HolidayText(int year,int month,int day,LunarDate const& lunar);
 int ZoneColorCount();
 unsigned ZoneColorRGB(int color);
 bool IsImagePath(std::wstring const& path);
