@@ -8,6 +8,7 @@ using namespace Microsoft::UI::Xaml;
 using namespace Microsoft::UI::Xaml::Controls;
 using namespace Microsoft::UI::Xaml::Media;
 namespace guodesk {
+namespace SMTC=winrt::Windows::Media::Control;
 static std::wstring MusicExePath(){wchar_t buf[MAX_PATH]{};GetModuleFileNameW(nullptr,buf,MAX_PATH);return buf;}
 static Brush ResolveMusicBrush(wchar_t const* key,Windows::UI::Color fallback,bool dark){
  try{return Application::Current().Resources().Lookup(box_value(key)).as<Brush>();}catch(...){}
@@ -110,7 +111,7 @@ MusicWindow::MusicWindow(Controller& c):owner(c){
  try{auto presenter=window.AppWindow().Presenter().as<Microsoft::UI::Windowing::OverlappedPresenter>();presenter.SetBorderAndTitleBar(true,false);window.AppWindow().IsShownInSwitchers(false);}catch(...){}
  auto& w=owner.layout.widgets;
  root=Grid();
- GridLength rows[]={GridLength{0,GridUnitType::Auto},GridLength{0,GridUnitType::Auto},GridLength{0,GridUnitType::Auto},GridLength{0,GridUnitType::Auto},GridLength{1,GridUnitType::Star}};
+ GridLength rows[]={GridLength{0,GridUnitType::Auto},GridLength{0,GridUnitType::Auto},GridLength{0,GridUnitType::Auto},GridLength{0,GridUnitType::Auto},GridLength{0,GridUnitType::Auto},GridLength{1,GridUnitType::Star}};
  for(auto& r:rows){RowDefinition rd;rd.Height(r);root.RowDefinitions().Append(rd);}
  Border header;header.Padding(Thickness{12,8,8,6});header.Background(SolidColorBrush(Windows::UI::Colors::Transparent()));
  Grid headGrid;ColumnDefinition hc1;hc1.Width(GridLength{1,GridUnitType::Star});headGrid.ColumnDefinitions().Append(hc1);ColumnDefinition hc2;hc2.Width(GridLength{0,GridUnitType::Auto});headGrid.ColumnDefinitions().Append(hc2);
@@ -166,12 +167,27 @@ MusicWindow::MusicWindow(Controller& c):owner(c){
  volume.ValueChanged([this](auto&&,auto&&){try{player.Volume(volume.Value()/100.0);}catch(...){}if(saveTimer)saveTimer.Start();});
  controls.Children().Append(prevBtn);controls.Children().Append(playBtn);controls.Children().Append(nextBtn);controls.Children().Append(volIcon);controls.Children().Append(volume);
  Grid::SetRow(controls,3);root.Children().Append(controls);
+ smtcPanel=Border();smtcPanel.Margin(Thickness{10,2,10,4});smtcPanel.Padding(Thickness{12,6,12,8});smtcPanel.CornerRadius({8});smtcPanel.Background(SolidColorBrush(Windows::UI::Color{20,128,128,128}));smtcPanel.Visibility(Visibility::Collapsed);
+ Grid smtcGrid;ColumnDefinition sc1;sc1.Width(GridLength{1,GridUnitType::Star});smtcGrid.ColumnDefinitions().Append(sc1);ColumnDefinition sc2;sc2.Width(GridLength{0,GridUnitType::Auto});smtcGrid.ColumnDefinitions().Append(sc2);
+ StackPanel smtcInfo;smtcInfo.Spacing(2);
+ TextBlock smtcLabel;smtcLabel.Text(i18n::Tr(L"系统正在播放"));smtcLabel.FontSize(ScaledFont(owner.layout.settings.textSize,10));smtcLabel.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,140,140,140}));smtcInfo.Children().Append(smtcLabel);
+ smtcTrack=TextBlock();smtcTrack.FontSize(ScaledFont(owner.layout.settings.textSize,13));smtcTrack.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());smtcTrack.TextTrimming(TextTrimming::CharacterEllipsis);smtcInfo.Children().Append(smtcTrack);
+ smtcSub=TextBlock();smtcSub.FontSize(ScaledFont(owner.layout.settings.textSize,11));smtcSub.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));smtcInfo.Children().Append(smtcSub);
+ Grid::SetColumn(smtcInfo,0);smtcGrid.Children().Append(smtcInfo);
+ StackPanel smtcBtns;smtcBtns.Orientation(Orientation::Horizontal);smtcBtns.Spacing(2);smtcBtns.VerticalAlignment(VerticalAlignment::Center);
+ auto sPrev=glyphBtn(L"\uE892",13);sPrev.Click([this](auto&&,auto&&){SmtcCmd(0);});
+ auto sPlay=glyphBtn(L"\uE768",15);smtcPlayGlyph=sPlay.Content().as<FontIcon>();sPlay.Click([this](auto&&,auto&&){SmtcCmd(1);});
+ auto sNext=glyphBtn(L"\uE893",13);sNext.Click([this](auto&&,auto&&){SmtcCmd(2);});
+ smtcBtns.Children().Append(sPrev);smtcBtns.Children().Append(sPlay);smtcBtns.Children().Append(sNext);
+ Grid::SetColumn(smtcBtns,1);smtcGrid.Children().Append(smtcBtns);
+ smtcPanel.Child(smtcGrid);
+ Grid::SetRow(smtcPanel,4);root.Children().Append(smtcPanel);
  StackPanel listArea;listArea.Margin(Thickness{6,0,6,8});
  empty=TextBlock();empty.Text(i18n::Tr(L"还没有歌曲，选择一个音乐文件夹开始播放。"));empty.FontSize(ScaledFont(owner.layout.settings.textSize,12));empty.Margin(Thickness{8,14,8,10});empty.TextWrapping(TextWrapping::Wrap);empty.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));
  listPanel=StackPanel();
  listHost=ScrollViewer();listHost.Content(listPanel);listHost.VerticalScrollBarVisibility(ScrollBarVisibility::Auto);listHost.Padding(Thickness{4,0,4,0});
  listArea.Children().Append(empty);listArea.Children().Append(listHost);
- Grid::SetRow(listArea,4);root.Children().Append(listArea);
+ Grid::SetRow(listArea,5);root.Children().Append(listArea);
  window.Content(root);
  window.Closed([this](auto&&,auto&&){
   if(closing)return;closing=true;
@@ -193,14 +209,51 @@ MusicWindow::MusicWindow(Controller& c):owner(c){
  UpdateTrackUi();RebuildList();UpdateProgress();SyncPlayGlyph();
  saveTimer=root.DispatcherQueue().CreateTimer();saveTimer.Interval(std::chrono::milliseconds(600));saveTimer.Tick([this](auto&&,auto&&){saveTimer.Stop();owner.Save();});
  tick=root.DispatcherQueue().CreateTimer();tick.Interval(std::chrono::seconds(1));tick.Tick([this](auto&&,auto&&){UpdateProgress();SyncPlayGlyph();});tick.Start();
+ SmtcInit();
+ smtcTick=root.DispatcherQueue().CreateTimer();smtcTick.Interval(std::chrono::seconds(2));smtcTick.Tick([this](auto&&,auto&&){SmtcPoll();});smtcTick.Start();
  window.Activate();
 }
 void MusicWindow::Show(){window.Activate();}
 MusicWindow::~MusicWindow(){
  closing=true;*alive=false;
- if(tick)tick.Stop();if(dragTimer)dragTimer.Stop();if(saveTimer)saveTimer.Stop();
+ if(tick)tick.Stop();if(dragTimer)dragTimer.Stop();if(saveTimer)saveTimer.Stop();if(smtcTick)smtcTick.Stop();
+ smtcMgr=nullptr;
  try{player.Pause();player.Source(nullptr);}catch(...){}
  try{window.Closed(nullptr);}catch(...){}
  if(IsWindow(hwnd))window.Close();
+}
+winrt::fire_and_forget MusicWindow::SmtcInit(){
+ auto wt=std::weak_ptr<bool>(alive);
+ try{auto mgr=co_await SMTC::GlobalSystemMediaTransportControlsSessionManager::RequestAsync();if(!wt.lock())co_return;smtcMgr=mgr;}catch(...){co_return;}
+ if(!wt.lock()||closing)co_return;
+ SmtcPoll();
+}
+winrt::fire_and_forget MusicWindow::SmtcPoll(){
+ auto wt=std::weak_ptr<bool>(alive);
+ SMTC::GlobalSystemMediaTransportControlsSession session{nullptr};
+ try{if(smtcMgr)session=smtcMgr.GetCurrentSession();}catch(...){}
+ if(!session){if(wt.lock()&&!closing)smtcPanel.Visibility(Visibility::Collapsed);co_return;}
+ int kind=1;
+ try{kind=MediaStatusKind(static_cast<int>(session.GetPlaybackInfo().PlaybackStatus()));}catch(...){}
+ if(kind==0){if(wt.lock()&&!closing)smtcPanel.Visibility(Visibility::Collapsed);co_return;}
+ std::wstring line;
+ try{auto props=co_await session.TryGetMediaPropertiesAsync();if(!wt.lock())co_return;line=MediaTrackLine(props.Title().c_str(),props.Artist().c_str());}catch(...){}
+ std::wstring posText;
+ try{auto tl=session.GetTimelineProperties();long long pos=std::chrono::duration_cast<std::chrono::seconds>(tl.Position()).count();long long end=std::chrono::duration_cast<std::chrono::seconds>(tl.EndTime()).count();posText=MediaTimeText(pos,end);}catch(...){}
+ if(!wt.lock()||closing)co_return;
+ if(line.empty())line=i18n::Tr(L"未知曲目");
+ smtcTrack.Text(line);
+ smtcSub.Text(std::wstring(i18n::Tr(kind==3?L"播放中":kind==2?L"已暂停":L"空闲"))+(posText.empty()?std::wstring():L" · "+posText));
+ smtcPlayGlyph.Glyph(kind==3?L"\uE769":L"\uE768");
+ smtcPanel.Visibility(Visibility::Visible);
+}
+winrt::fire_and_forget MusicWindow::SmtcCmd(int cmd){
+ auto wt=std::weak_ptr<bool>(alive);
+ SMTC::GlobalSystemMediaTransportControlsSession session{nullptr};
+ try{if(smtcMgr)session=smtcMgr.GetCurrentSession();}catch(...){}
+ if(!session)co_return;
+ try{if(cmd==0)co_await session.TrySkipPreviousAsync();else if(cmd==1)co_await session.TryTogglePlayPauseAsync();else co_await session.TrySkipNextAsync();}catch(...){}
+ if(!wt.lock())co_return;
+ SmtcPoll();
 }
 }

@@ -287,6 +287,23 @@ int ZoneColorCount(){return 8;}
 unsigned ZoneColorRGB(int color){static const unsigned pal[8]={0xE81123,0xF7630C,0xFFB900,0x13A10E,0x00B7C3,0x0078D4,0x8764B8,0xE3008C};return color>=1&&color<=8?pal[color-1]:0u;}
 int ClampOpacityPercent(int v){return v<20?20:(v>100?100:v);}
 int NextOpacityStep(int v){if(v>=90)return 80;if(v>=70)return 60;if(v>=50)return 40;return 100;}
+std::wstring MediaTrackLine(std::wstring const& title,std::wstring const& artist){
+ auto trim=[](std::wstring s){size_t b=s.find_first_not_of(L" \t\r\n");if(b==std::wstring::npos)return std::wstring{};size_t e=s.find_last_not_of(L" \t\r\n");return s.substr(b,e-b+1);};
+ auto t=trim(title),a=trim(artist);
+ if(t.empty())return a;
+ if(a.empty())return t;
+ auto line=t+L" · "+a;
+ if(line.size()>160)line=line.substr(0,159)+L"…";
+ return line;
+}
+std::wstring MediaTimeText(long long posSec,long long endSec){
+ if(posSec<0)posSec=0;if(endSec<0)endSec=0;
+ wchar_t buf[48]{};
+ if(endSec==0)swprintf_s(buf,48,L"%lld:%02lld",posSec/60,posSec%60);
+ else swprintf_s(buf,48,L"%lld:%02lld / %lld:%02lld",posSec/60,posSec%60,endSec/60,endSec%60);
+ return buf;
+}
+int MediaStatusKind(int raw){switch(raw){case 0:return 0;case 3:return 3;case 4:return 2;case 1:case 2:return 1;default:return 1;}}
 bool IsImagePath(std::wstring const& path){auto f=path.find_last_of(L'.');if(f==std::wstring::npos||f+1>=path.size())return false;auto ext=path.substr(f+1);if(ext.size()>5||ext.find_first_of(L"\\/")!=std::wstring::npos)return false;for(auto& c:ext)c=towlower(c);return ext==L"png"||ext==L"jpg"||ext==L"jpeg"||ext==L"bmp"||ext==L"gif"||ext==L"webp"||ext==L"tif"||ext==L"tiff";}
 UndoStack::UndoStack(size_t limit):limit(limit?limit:1){}
 void UndoStack::Push(std::wstring label,std::string snapshot){if(snapshot.empty())return;frames.push_back({std::move(label),std::move(snapshot)});while(frames.size()>limit)frames.erase(frames.begin());}

@@ -2,6 +2,7 @@
 #include "Core.h"
 #include <winrt/Windows.Media.Playback.h>
 #include <winrt/Windows.Media.Core.h>
+#include <winrt/Windows.Media.Control.h>
 namespace guodesk {
 class Controller;
 class MusicWindow {
@@ -15,6 +16,12 @@ class MusicWindow {
  winrt::Microsoft::UI::Xaml::Controls::ScrollViewer listHost{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::Slider volume{nullptr};
  winrt::Microsoft::UI::Dispatching::DispatcherQueueTimer tick{nullptr},dragTimer{nullptr},saveTimer{nullptr};
+ winrt::Microsoft::UI::Xaml::Controls::Border smtcPanel{nullptr};
+ winrt::Microsoft::UI::Xaml::Controls::TextBlock smtcTrack{nullptr},smtcSub{nullptr};
+ winrt::Microsoft::UI::Xaml::Controls::FontIcon smtcPlayGlyph{nullptr};
+ winrt::Microsoft::UI::Dispatching::DispatcherQueueTimer smtcTick{nullptr};
+ winrt::Windows::Media::Control::GlobalSystemMediaTransportControlsSessionManager smtcMgr{nullptr};
+ winrt::fire_and_forget SmtcInit(); winrt::fire_and_forget SmtcPoll(); winrt::fire_and_forget SmtcCmd(int cmd);
  std::vector<std::wstring> playlist; int current=-1;
  winrt::Windows::Media::Playback::MediaPlayer player;
  std::shared_ptr<bool> alive{std::make_shared<bool>(true)};
