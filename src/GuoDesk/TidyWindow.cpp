@@ -26,7 +26,7 @@ Brush TidyWindow::ThemeBrush(wchar_t const* key,Windows::UI::Color fallback){boo
 TidyWindow::TidyWindow(Controller& c):owner(c){
  window=Window();window.Title(i18n::Tr(L"GuoDesk 整理预览"));hwnd=shell::Handle(window);
  try{auto dir=std::filesystem::path(TidyExePath()).parent_path();window.AppWindow().SetIcon((dir/L"guodesk.ico").wstring());}catch(...){}
- window.SystemBackdrop(MicaBackdrop());
+ window.SystemBackdrop(MakeBackdrop(owner.layout.settings.backdrop));
  root=Grid();root.Padding(Thickness{20,16,20,20});root.RowSpacing(10);
  RowDefinition head;head.Height(GridLength{0,GridUnitType::Auto});root.RowDefinitions().Append(head);
  RowDefinition body;body.Height(GridLength{1,GridUnitType::Star});root.RowDefinitions().Append(body);

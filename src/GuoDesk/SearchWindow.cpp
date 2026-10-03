@@ -171,7 +171,7 @@ void SearchWindow::SaveGeometry(){
 SearchWindow::SearchWindow(Controller& c):owner(c){
  window=Window();window.Title(i18n::Tr(L"GuoDesk 搜索"));hwnd=shell::Handle(window);
  try{auto dir=std::filesystem::path(SearchExePath()).parent_path();window.AppWindow().SetIcon((dir/L"guodesk.ico").wstring());}catch(...){}
- window.SystemBackdrop(MicaBackdrop());
+ window.SystemBackdrop(MakeBackdrop(owner.layout.settings.backdrop));
  try{window.AppWindow().IsShownInSwitchers(false);}catch(...){}
  root=Grid();
  GridLength rows[]={GridLength{0,GridUnitType::Auto},GridLength{1,GridUnitType::Star},GridLength{0,GridUnitType::Auto}};

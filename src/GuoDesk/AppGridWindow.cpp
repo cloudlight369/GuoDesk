@@ -93,7 +93,7 @@ LRESULT CALLBACK AppGridWindow::Subclass(HWND h,UINT msg,WPARAM w,LPARAM l,UINT_
 AppGridWindow::AppGridWindow(Controller& c):owner(c){
  window=Window();window.Title(i18n::Tr(L"GuoDesk 应用网格"));hwnd=shell::Handle(window);
  try{wchar_t buf[MAX_PATH]{};GetModuleFileNameW(nullptr,buf,MAX_PATH);auto dir=std::filesystem::path(buf).parent_path();window.AppWindow().SetIcon((dir/L"guodesk.ico").wstring());}catch(...){}
- window.SystemBackdrop(MicaBackdrop());
+ window.SystemBackdrop(MakeBackdrop(owner.layout.settings.backdrop));
  try{auto presenter=window.AppWindow().Presenter().as<Microsoft::UI::Windowing::OverlappedPresenter>();presenter.SetBorderAndTitleBar(true,false);window.AppWindow().IsShownInSwitchers(false);}catch(...){}
  auto& w=owner.layout.widgets;
  root=Grid();

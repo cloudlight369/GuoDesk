@@ -435,6 +435,12 @@ void RunTests(std::filesystem::path const& output){std::ofstream report(output);
  auto rLegacy=Deserialize("{\"version\":1,\"zones\":[],\"widgets\":{\"todos\":[{\"id\":\"a\",\"text\":\"t\"}]}}");expect(rLegacy.widgets.todos.size()==1&&rLegacy.widgets.todos[0].repeat==0,"legacy todo without repeat defaults none");
  auto rBad=Deserialize("{\"version\":1,\"zones\":[],\"widgets\":{\"todos\":[{\"id\":\"a\",\"text\":\"t\",\"repeat\":9}]}}");expect(rBad.widgets.todos[0].repeat==0,"out of range repeat self heals");
  expect(ToggleTodo(rw340,rw340.todos[0].id)==2&&rw340.todos[0].due>DueFromOffset(0),"monthly-free daily todo rolls past today");
+ expect(ClampBackdropKind(0)==0&&ClampBackdropKind(1)==1,"backdrop kinds 0 and 1 pass through");
+ expect(ClampBackdropKind(2)==0&&ClampBackdropKind(-3)==0&&ClampBackdropKind(7)==0,"illegal backdrop kinds clamp to mica");
+ Layout sl350;sl350.settings.backdrop=1;auto srt350=Deserialize(Serialize(sl350));expect(srt350.settings.backdrop==1,"backdrop setting roundtrip");
+ auto sbad350=Deserialize("{\"version\":1,\"zones\":[],\"settings\":{\"backdrop\":7}}");expect(sbad350.settings.backdrop==0,"numeric-but-illegal backdrop self heals");
+ auto stype350=Deserialize("{\"version\":1,\"zones\":[],\"settings\":{\"backdrop\":\"acrylic\"}}");expect(stype350.settings.backdrop==0,"wrong-typed backdrop self heals");
+ auto sleg350=Deserialize("{\"version\":1,\"zones\":[]}");expect(sleg350.settings.backdrop==0,"legacy layout without backdrop defaults mica");
 report<<"TOTAL "<<passed<<" passed\n";
 }
 }

@@ -90,7 +90,7 @@ std::wstring TodoWindow::CountText(){
 TodoWindow::TodoWindow(Controller& c):owner(c){
  window=Window();window.Title(i18n::Tr(L"GuoDesk 待办"));hwnd=shell::Handle(window);
  try{auto dir=std::filesystem::path(TodoExePath()).parent_path();window.AppWindow().SetIcon((dir/L"guodesk.ico").wstring());}catch(...){}
- window.SystemBackdrop(MicaBackdrop());
+ window.SystemBackdrop(MakeBackdrop(owner.layout.settings.backdrop));
  try{auto presenter=window.AppWindow().Presenter().as<Microsoft::UI::Windowing::OverlappedPresenter>();presenter.SetBorderAndTitleBar(true,false);window.AppWindow().IsShownInSwitchers(false);}catch(...){}
  auto& w=owner.layout.widgets;
  root=Grid();root.Padding(Thickness{0,0,0,0});

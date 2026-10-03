@@ -74,9 +74,13 @@ auto add=Action(L"\uE710",[this]{Pick();});ToolTipService::SetToolTip(add,box_va
  if(!owner.layout.settings.performance){Storyboard fade;DoubleAnimation alpha;alpha.From(0.0);alpha.To(1.0);alpha.Duration(Duration{std::chrono::milliseconds(220),DurationType::TimeSpan});Storyboard::SetTarget(alpha,root);Storyboard::SetTargetProperty(alpha,L"Opacity");fade.Children().Append(alpha);fade.Begin();}
 }
 DeskWindow::~DeskWindow(){*alive=false;closing=true;if(hoverTimer)hoverTimer.Stop();if(embedTimer)embedTimer.Stop();if(hoverTabTimer)hoverTabTimer.Stop();try{window.Closed(nullptr);}catch(...){}if(IsWindow(hwnd)){RemoveWindowSubclass(hwnd,Subclass,1);window.Close();}}
+winrt::Microsoft::UI::Xaml::Media::SystemBackdrop MakeBackdrop(int kind){
+ if(kind==1)try{return winrt::Microsoft::UI::Xaml::Media::SystemBackdrop{winrt::Microsoft::UI::Xaml::Media::DesktopAcrylicBackdrop()};}catch(...){}
+ try{return winrt::Microsoft::UI::Xaml::Media::SystemBackdrop{winrt::Microsoft::UI::Xaml::Media::MicaBackdrop()};}catch(...){return winrt::Microsoft::UI::Xaml::Media::SystemBackdrop{nullptr};}
+}
 void DeskWindow::ApplyPerformance(){
  bool perf=owner.layout.settings.performance;
- try{window.SystemBackdrop(perf?winrt::Microsoft::UI::Xaml::Media::SystemBackdrop{nullptr}:winrt::Microsoft::UI::Xaml::Media::MicaBackdrop());}catch(...){}
+ try{window.SystemBackdrop(perf?winrt::Microsoft::UI::Xaml::Media::SystemBackdrop{nullptr}:MakeBackdrop(owner.layout.settings.backdrop));}catch(...){}
  ApplyBackground();
 }
 void DeskWindow::ApplyBackground(){
