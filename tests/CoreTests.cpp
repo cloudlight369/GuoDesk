@@ -309,6 +309,8 @@ void RunTests(std::filesystem::path const& output){std::ofstream report(output);
  Layout usOff;usOff.settings.hotkeyUndo=L"";usOff.settings.tabHover=false;expect(Deserialize(Serialize(usOff)).settings.hotkeyUndo.empty()&&!Deserialize(Serialize(usOff)).settings.tabHover,"undo hotkey can be disabled");
  auto usLegacy=Deserialize("{\"version\":1,\"zones\":[],\"settings\":{}}");expect(usLegacy.settings.hotkeyUndo==L"Ctrl+Alt+U"&&usLegacy.settings.tabHover,"legacy config keeps undo defaults");
  auto usBad=Deserialize("{\"version\":1,\"zones\":[],\"settings\":{\"hotkeyUndo\":\"NotAKey!!\"}}");expect(usBad.settings.hotkeyUndo.empty(),"invalid undo hotkey dropped");
+ Layout um;um.settings.memTrim=false;expect(!Deserialize(Serialize(um)).settings.memTrim,"mem trim can be disabled");
+ auto umLegacy=Deserialize("{\"version\":1,\"zones\":[],\"settings\":{}}");expect(umLegacy.settings.memTrim,"legacy config keeps mem trim default on");
 report<<"TOTAL "<<passed<<" passed\n";
 }
 }

@@ -375,6 +375,8 @@ KV const table[]{
  {L"删除分区、移除入口、合并标签组等改动都可按热键或托盘「撤销」回退，最多 20 步。",L"Zone deletions, removed entries, tab-group merges and more can be rolled back with the hotkey or the tray Undo, up to 20 steps."},
  {L"悬停切换标签",L"Hover to switch tabs"},
  {L"鼠标停在标签组的其他标签上片刻即切换分区。",L"Hover over another tab in a group for a moment to switch zones."},
+ {L"空闲时修剪内存",L"Trim memory when idle"},
+ {L"长时间无操作后自动释放占用的内存，需要时再取回。",L"Memory is released automatically after a long idle period and reclaimed when needed."},
 };
 std::wstring Resolve(std::wstring const& setting){
  std::wstring lang=setting;

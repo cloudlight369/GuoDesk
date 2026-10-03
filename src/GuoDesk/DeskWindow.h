@@ -36,7 +36,7 @@ class DeskWindow {
  winrt::Microsoft::UI::Xaml::Controls::Border dimLayer{nullptr};
  std::wstring bgPath; int bgDim=-1; bool bgPerf=false; bool bgDesk=false;
 public:
- std::wstring id; std::wstring viewId;
+ std::wstring id; std::wstring viewId; bool menuOpen=false; std::shared_ptr<bool> alive{std::make_shared<bool>(true)};
  Zone& View();
  winrt::Microsoft::UI::Xaml::Window window{nullptr}; HWND hwnd{};
  DeskWindow(Controller&,std::wstring);
