@@ -359,6 +359,8 @@ KV const table[]{
  {L"批量移除 {0} 个入口（保留原文件）",L"Bulk remove {0} entries (keep files)"},
  {L"批量移除 {0} 个入口",L"Bulk remove {0} entries"},
  {L"已批量移除 {0} 个入口。",L"Removed {0} entries in bulk."},
+ {L"透明度：{0}%（点击切换）",L"Opacity: {0}% (click to cycle)"},
+ {L"透明度已设为 {0}%。",L"Opacity set to {0}%."},
  {L"跟随天气状况",L"Follow the weather"},
  {L"状况皮肤会按晴、雨、雪、雷暴等切换背景渐变色。",L"The condition skin tints the background gradient by sun, rain, snow or thunder."},
  {L"时钟组件的显示样式。",L"Display style of the clock widget."},
