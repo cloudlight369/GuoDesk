@@ -1,4 +1,5 @@
 #include "pch.h"
+#include <shlwapi.h>
 #include "ClockWindow.h"
 #include "DeskWindow.h"
 #include "Shell.h"
@@ -10,6 +11,13 @@ namespace Shapes=winrt::Microsoft::UI::Xaml::Shapes;
 using namespace Microsoft::UI::Xaml::Media;
 namespace guodesk {
 static std::wstring ClockExePath(){wchar_t buf[MAX_PATH]{};GetModuleFileNameW(nullptr,buf,MAX_PATH);return buf;}
+static std::vector<std::wstring> EnumFolderImages(std::wstring folder){
+ while(!folder.empty()&&folder.back()==L'\\')folder.pop_back();
+ std::vector<std::wstring> names;WIN32_FIND_DATAW fd{};auto h=FindFirstFileW((folder+L"\\*").c_str(),&fd);
+ if(h!=INVALID_HANDLE_VALUE){do{if(!(fd.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY))names.push_back(folder+L"\\"+std::wstring(fd.cFileName));}while(FindNextFileW(h,&fd));FindClose(h);}
+ auto imgs=FilterImagePaths(names);std::sort(imgs.begin(),imgs.end());return imgs;
+}
+static MenuFlyoutItem MenuItem(std::wstring const& text,std::function<void()> run){MenuFlyoutItem b;b.Text(text);b.Click([run](auto&&,auto&&){try{run();}catch(...){MessageBoxW(nullptr,i18n::Tr(L"操作未完成，请检查文件是否存在及访问权限。").c_str(),L"GuoDesk",MB_OK|MB_ICONERROR);}});return b;}
 static Brush ResolveClockBrush(wchar_t const* key,Windows::UI::Color fallback,bool dark){
  try{return Application::Current().Resources().Lookup(box_value(key)).as<Brush>();}catch(...){}
  struct Entry{wchar_t const* key;Windows::UI::Color light;Windows::UI::Color dark;};
@@ -50,6 +58,33 @@ void ClockWindow::Update(){
  lunar.Text(text);
  lunar.Visibility(text.empty()?Visibility::Collapsed:Visibility::Visible);
 }
+void ClockWindow::SetBgBrush(std::wstring const& path){
+ Brush next{nullptr};
+ if(!path.empty()&&IsImagePath(path)&&GetFileAttributesW(path.c_str())!=INVALID_FILE_ATTRIBUTES){
+  try{wchar_t url[1024];DWORD c=1024;if(SUCCEEDED(UrlCreateFromPathW(path.c_str(),url,&c,0))){winrt::Microsoft::UI::Xaml::Media::Imaging::BitmapImage img;img.UriSource(winrt::Windows::Foundation::Uri(url));ImageBrush ib;ib.ImageSource(img);ib.Stretch(Stretch::UniformToFill);ib.Opacity(static_cast<double>(owner.layout.widgets.clockBgTrans)/100.0);next=ib;}}catch(...){}
+ }
+ root.Background(next);
+}
+void ClockWindow::ApplyBackground(){
+ auto const& p=owner.layout.widgets.clockBg;
+ bgList.clear();
+ if(!p.empty()){DWORD a=GetFileAttributesW(p.c_str());if(a!=INVALID_FILE_ATTRIBUTES&&(a&FILE_ATTRIBUTE_DIRECTORY))bgList=EnumFolderImages(p);}
+ if(bgList.empty())SetBgBrush(p);
+ else{if(bgIdx>=bgList.size())bgIdx=0;SetBgBrush(bgList[bgIdx]);}
+ if(bgList.size()>1){if(!rotate){rotate=root.DispatcherQueue().CreateTimer();rotate.Interval(std::chrono::seconds(60));rotate.Tick([this](auto&&,auto&&){if(closing||!IsWindow(hwnd)||bgList.empty())return;bgIdx=(bgIdx+1)%bgList.size();SetBgBrush(bgList[bgIdx]);});}rotate.Start();}
+ else if(rotate)rotate.Stop();
+}
+void ClockWindow::PopulateMenu(MenuFlyout const& menu){
+ auto& w=owner.layout.widgets;
+ bool isDir=false;if(!w.clockBg.empty()){DWORD a=GetFileAttributesW(w.clockBg.c_str());isDir=a!=INVALID_FILE_ATTRIBUTES&&(a&FILE_ATTRIBUTE_DIRECTORY);}
+ if(calFlyout)menu.Items().Append(MenuItem(i18n::Tr(L"日历"),[this]{try{calFlyout.ShowAt(root);}catch(...){}}));
+ menu.Items().Append(MenuItem(w.clockBg.empty()||isDir?i18n::Tr(L"设置背景图…"):i18n::Tr(L"更换背景图…"),[this]{auto picked=shell::Pick(hwnd,false);if(picked.empty())return;if(!IsImagePath(picked.front())){MessageBoxW(hwnd,i18n::Tr(L"请选择图片文件（png / jpg / bmp / gif / webp / tif）").c_str(),L"GuoDesk",MB_OK|MB_ICONINFORMATION);return;}bgIdx=0;owner.layout.widgets.clockBg=picked.front();ApplyBackground();owner.Save();}));
+ menu.Items().Append(MenuItem(isDir?i18n::Tr(L"更换轮播文件夹…"):i18n::Tr(L"文件夹轮播…"),[this]{auto picked=shell::Pick(hwnd,true);if(picked.empty())return;auto imgs=EnumFolderImages(picked.front());if(imgs.empty()){MessageBoxW(hwnd,i18n::Tr(L"该文件夹中没有图片文件。").c_str(),L"GuoDesk",MB_OK|MB_ICONINFORMATION);return;}bgIdx=0;owner.layout.widgets.clockBg=picked.front();ApplyBackground();owner.Save();}));
+ if(!w.clockBg.empty()){
+  menu.Items().Append(MenuItem(i18n::TrF(L"背景透明度：{0}%（点击切换）",{std::to_wstring(w.clockBgTrans)}),[this]{auto& q=owner.layout.widgets;q.clockBgTrans=NextOpacityStep(q.clockBgTrans);ApplyBackground();owner.Save();}));
+  menu.Items().Append(MenuItem(i18n::Tr(L"清除背景图"),[this]{auto& q=owner.layout.widgets;q.clockBg.clear();bgIdx=0;ApplyBackground();owner.Save();}));
+ }
+}
 ClockWindow::ClockWindow(Controller& c):owner(c){
  window=Window();window.Title(i18n::Tr(L"GuoDesk 时钟"));hwnd=shell::Handle(window);
  try{auto dir=std::filesystem::path(ClockExePath()).parent_path();window.AppWindow().SetIcon((dir/L"guodesk.ico").wstring());}catch(...){}
@@ -74,7 +109,8 @@ ClockWindow::ClockWindow(Controller& c):owner(c){
  root.PointerPressed([this,dragging,dragStart,dragOrigin,dragTimer](auto&&,Input::PointerRoutedEventArgs const& a){*dragging=true;GetCursorPos(&*dragStart);GetWindowRect(hwnd,&*dragOrigin);root.CapturePointer(a.Pointer());a.Handled(true);dragTimer.Start();});
  root.PointerReleased([EndDrag](auto&&,auto&&){EndDrag();});
  root.PointerCaptureLost([EndDrag](auto&&,auto&&){EndDrag();});
- try{Flyout calFlyout;CalendarView cal;cal.MinWidth(300);cal.MinHeight(320);calFlyout.Content(cal);root.ContextFlyout(calFlyout);}catch(...){}
+ try{CalendarView cal;cal.MinWidth(300);cal.MinHeight(320);Flyout f;f.Content(cal);calFlyout=f;}catch(...){}
+ MenuFlyout menu;menu.Opening([this,menu](auto&&,auto&&){menu.Items().Clear();PopulateMenu(menu);});root.ContextFlyout(menu);
  window.Content(root);
  if(analog)root.SizeChanged([this](auto&&,auto&&){BuildFace();});
  window.Closed([this](auto&&,auto&&){if(closing)return;closing=true;window.DispatcherQueue().TryEnqueue([this]{owner.CloseClock();});});
@@ -82,9 +118,10 @@ ClockWindow::ClockWindow(Controller& c):owner(c){
  MONITORINFO mi{sizeof(mi)};GetMonitorInfoW(MonitorFromWindow(hwnd,MONITOR_DEFAULTTONEAREST),&mi);
  if(y>mi.rcWork.bottom-40||y<mi.rcWork.top-20||x>mi.rcWork.right-60||x<mi.rcWork.left-40){x=std::clamp(x,(int)mi.rcWork.left,(int)mi.rcWork.right-100);y=std::clamp(y,(int)mi.rcWork.top,(int)mi.rcWork.bottom-60);SetWindowPos(hwnd,nullptr,x,y,0,0,SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE);}
  Update();
+ ApplyBackground();
  tick=root.DispatcherQueue().CreateTimer();tick.Interval(std::chrono::seconds(1));tick.Tick([this](auto&&,auto&&){Update();});tick.Start();
  window.Activate();
 }
 void ClockWindow::Show(){Update();window.Activate();}
-ClockWindow::~ClockWindow(){closing=true;if(tick)tick.Stop();try{window.Closed(nullptr);}catch(...){}if(IsWindow(hwnd))window.Close();}
+ClockWindow::~ClockWindow(){closing=true;if(tick)tick.Stop();if(rotate)rotate.Stop();try{window.Closed(nullptr);}catch(...){}if(IsWindow(hwnd))window.Close();}
 }

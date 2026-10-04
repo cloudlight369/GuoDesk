@@ -14,6 +14,7 @@ struct Widgets {
  int noteX=340,noteY=180,noteW=300,noteH=240; int notePage=0;
  int todoX=680,todoY=180,todoW=300,todoH=420;
  int clockX=980,clockY=60,clockW=220,clockH=150;
+ std::wstring clockBg; int clockBgTrans=100;
  int musicX=980,musicY=280,musicW=280,musicH=380;
  int weatherX=660,weatherY=520,weatherW=250,weatherH=340;
  int appGridX=340,appGridY=520,appGridW=340,appGridH=400;
@@ -73,6 +74,7 @@ std::wstring MediaTrackLine(std::wstring const& title,std::wstring const& artist
 std::wstring MediaTimeText(long long posSec,long long endSec);
 int MediaStatusKind(int raw);
 bool IsImagePath(std::wstring const& path);
+std::vector<std::wstring> FilterImagePaths(std::vector<std::wstring> const& paths);
 std::wstring DueText(long long due);
 bool DueReached(long long due);
 void SetTodoDue(Widgets& widgets,std::wstring const& id,long long due);

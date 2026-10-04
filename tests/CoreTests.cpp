@@ -441,6 +441,14 @@ void RunTests(std::filesystem::path const& output){std::ofstream report(output);
  auto sbad350=Deserialize("{\"version\":1,\"zones\":[],\"settings\":{\"backdrop\":7}}");expect(sbad350.settings.backdrop==0,"numeric-but-illegal backdrop self heals");
  auto stype350=Deserialize("{\"version\":1,\"zones\":[],\"settings\":{\"backdrop\":\"acrylic\"}}");expect(stype350.settings.backdrop==0,"wrong-typed backdrop self heals");
  auto sleg350=Deserialize("{\"version\":1,\"zones\":[]}");expect(sleg350.settings.backdrop==0,"legacy layout without backdrop defaults mica");
+ std::vector<std::wstring> fin360{L"C:\\a\\x.PNG",L"C:\\a\\notes.txt",L"C:\\a\\z.jpg",L"C:\\a\\noext",L"C:\\a\\w.gif"};
+ auto fout360=FilterImagePaths(fin360);
+ expect(fout360.size()==3&&fout360[0]==fin360[0]&&fout360[1]==fin360[2]&&fout360[2]==fin360[4],"FilterImagePaths keeps only images in order");
+ std::vector<std::wstring> fnone360;expect(FilterImagePaths(fnone360).empty(),"FilterImagePaths of no paths is empty");
+ Layout wl360;wl360.widgets.clockBg=L"D:\\pics\\sunrise.png";wl360.widgets.clockBgTrans=60;auto wrt360=Deserialize(Serialize(wl360));expect(wrt360.widgets.clockBg==L"D:\\pics\\sunrise.png"&&wrt360.widgets.clockBgTrans==60,"clock background roundtrip");
+ auto wlow360=Deserialize("{\"version\":1,\"zones\":[],\"widgets\":{\"clockBg\":\"D:\\\\pics\",\"clockBgTrans\":7}}");expect(wlow360.widgets.clockBg==L"D:\\pics"&&wlow360.widgets.clockBgTrans==20,"tiny clock transparency clamps to floor");
+ auto wbad360=Deserialize("{\"version\":1,\"zones\":[],\"widgets\":{\"clockBgTrans\":\"mist\"}}");expect(wbad360.widgets.clockBgTrans==100&&wbad360.widgets.clockBg.empty(),"wrong-typed clock transparency self heals");
+ auto wleg360=Deserialize("{\"version\":1,\"zones\":[]}");expect(wleg360.widgets.clockBg.empty()&&wleg360.widgets.clockBgTrans==100,"legacy widgets without clock background default clear");
 report<<"TOTAL "<<passed<<" passed\n";
 }
 }
