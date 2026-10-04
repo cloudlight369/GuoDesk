@@ -449,6 +449,20 @@ void RunTests(std::filesystem::path const& output){std::ofstream report(output);
  auto wlow360=Deserialize("{\"version\":1,\"zones\":[],\"widgets\":{\"clockBg\":\"D:\\\\pics\",\"clockBgTrans\":7}}");expect(wlow360.widgets.clockBg==L"D:\\pics"&&wlow360.widgets.clockBgTrans==20,"tiny clock transparency clamps to floor");
  auto wbad360=Deserialize("{\"version\":1,\"zones\":[],\"widgets\":{\"clockBgTrans\":\"mist\"}}");expect(wbad360.widgets.clockBgTrans==100&&wbad360.widgets.clockBg.empty(),"wrong-typed clock transparency self heals");
  auto wleg360=Deserialize("{\"version\":1,\"zones\":[]}");expect(wleg360.widgets.clockBg.empty()&&wleg360.widgets.clockBgTrans==100,"legacy widgets without clock background default clear");
+ Layout d370;Zone zz370;zz370.name=L"ZONESecretName";zz370.entries.push_back({L"e1",L"C:\\ENTRYSECRET.txt",L""});zz370.pins.push_back(L"C:\\PINSECRET.lnk");zz370.mappedFolder=L"D:\\MAPPEDSECRET";d370.zones.push_back(zz370);
+ d370.settings.syncUrl=L"https://secret-host.example/dav";d370.settings.syncUser=L"myuser";d370.settings.syncPass=L"s3cretpw";
+ d370.widgets.noteText=L"NOTESECRET";d370.widgets.todos.push_back({L"t1",L"TODOSECRET",false,20261001,false,0,0});
+ d370.widgets.todos.push_back({L"t2",L"b",true,0,false,2,0});
+ d370.widgets.todos.push_back({L"t3",L"c",false,0,false,0,2});
+ d370.widgets.clockVisible=true;
+ auto diag370=BuildDiagnostics(d370,L"3.7.0",L"x64",L"10.0.26100.1",20261004);
+ expect(diag370.find(L"version=3.7.0")!=std::wstring::npos&&diag370.find(L"zones=1")!=std::wstring::npos&&diag370.find(L"os=10.0.26100.1")!=std::wstring::npos,"diagnostics carries version and zone count");
+ expect(diag370.find(L"todos=3")!=std::wstring::npos&&diag370.find(L"done=1")!=std::wstring::npos&&diag370.find(L"overdue=1")!=std::wstring::npos&&diag370.find(L"repeating=1")!=std::wstring::npos&&diag370.find(L"flags=1")!=std::wstring::npos,"diagnostics counts todo states against today");
+ expect(diag370.find(L"webdav=configured")!=std::wstring::npos&&diag370.find(L"clock=1")!=std::wstring::npos&&diag370.find(L"hotkey=Ctrl+Alt+G")!=std::wstring::npos,"diagnostics reports webdav state widget flags and hotkey");
+ expect(diag370.find(L"SECRET")==std::wstring::npos&&diag370.find(L"secret")==std::wstring::npos&&diag370.find(L"myuser")==std::wstring::npos&&diag370.find(L"s3cretpw")==std::wstring::npos,"diagnostics is privacy filtered with no user content");
+ auto dEmpty370=BuildDiagnostics(Layout{},L"1.0",L"ARM64",L"",20261004);
+ expect(dEmpty370.find(L"zones=0")!=std::wstring::npos&&dEmpty370.find(L"webdav=off")!=std::wstring::npos&&dEmpty370.find(L"os=unknown")!=std::wstring::npos,"default layout diagnostics is all-zero with webdav off");
+ expect(dEmpty370.find(L"topologyLast=none")!=std::wstring::npos&&dEmpty370.find(L"clockStyle=digital")!=std::wstring::npos,"diagnostics normalizes empty optional values");
 report<<"TOTAL "<<passed<<" passed\n";
 }
 }

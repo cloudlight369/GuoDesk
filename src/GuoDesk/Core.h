@@ -75,6 +75,7 @@ std::wstring MediaTimeText(long long posSec,long long endSec);
 int MediaStatusKind(int raw);
 bool IsImagePath(std::wstring const& path);
 std::vector<std::wstring> FilterImagePaths(std::vector<std::wstring> const& paths);
+std::wstring BuildDiagnostics(Layout const& l,std::wstring const& version,std::wstring const& machine,std::wstring const& osBuild,long long today);
 std::wstring DueText(long long due);
 bool DueReached(long long due);
 void SetTodoDue(Widgets& widgets,std::wstring const& id,long long due);

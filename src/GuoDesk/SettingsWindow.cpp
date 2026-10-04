@@ -111,6 +111,7 @@ SettingsWindow::SettingsWindow(Controller& c):owner(c){
  StackPanel backupBar;backupBar.Orientation(Orientation::Horizontal);backupBar.Spacing(8);
  auto exportBtn=Button();exportBtn.Content(box_value(i18n::Tr(L"导出配置")));exportBtn.Click([this](auto&&,auto&&){OnExport();});backupBar.Children().Append(exportBtn);
  auto importBtn=Button();importBtn.Content(box_value(i18n::Tr(L"导入配置")));importBtn.Click([this](auto&&,auto&&){OnImport();});backupBar.Children().Append(importBtn);
+ auto diagBtn=Button();diagBtn.Content(box_value(i18n::Tr(L"导出诊断…")));diagBtn.Click([this](auto&&,auto&&){OnDiagnostics();});backupBar.Children().Append(diagBtn);
  panel.Children().Append(backupBar);
  snapshots=ToggleSwitch();snapshots.OnContent(box_value(i18n::Tr(L"配置自动快照")));snapshots.OffContent(box_value(i18n::Tr(L"配置自动快照")));snapshots.Toggled([this](auto&&,auto&&){if(applying)return;OnSnapshots(snapshots.IsOn());});panel.Children().Append(snapshots);
  TextBlock snapHint;snapHint.Text(i18n::Tr(L"每天首次及每 20 次保存各留一份，保留最近 5 份，配置损坏可自动恢复。"));snapHint.FontSize(11);snapHint.Opacity(0.6);snapHint.TextWrapping(TextWrapping::Wrap);panel.Children().Append(snapHint);
@@ -220,6 +221,36 @@ void SettingsWindow::Apply(){applying=true;auto const& s=owner.layout.settings;t
 static std::string ReadTextFile(std::filesystem::path const& p){std::ifstream f(p,std::ios::binary);if(!f)throw std::runtime_error("Cannot read file");return {std::istreambuf_iterator<char>(f),{}};}
 void SettingsWindow::OnExport(){owner.Save();auto target=shell::SaveFile(hwnd,L"guodesk-layout.json");if(target.empty())return;try{std::filesystem::copy_file(owner.store.Directory()/L"layout.json",target,std::filesystem::copy_options::overwrite_existing);}catch(...){MessageBoxW(hwnd,i18n::Tr(L"导出失败：请检查目标位置是否可写。").c_str(),L"GuoDesk",MB_OK|MB_ICONERROR);return;}if(!owner.windows.empty())owner.windows.front()->Notify(i18n::TrF(L"已导出到 {0}",{target}));}
 void SettingsWindow::OnImport(){auto picked=shell::Pick(hwnd,false,i18n::Tr(L"选择要导入的 GuoDesk 配置"));if(picked.size()!=1)return;std::string text;try{text=ReadTextFile(std::filesystem::path(picked[0]));}catch(...){MessageBoxW(hwnd,i18n::Tr(L"导入失败：文件不是有效的 GuoDesk 配置。").c_str(),L"GuoDesk",MB_OK|MB_ICONERROR);return;}Layout next;try{next=Deserialize(text);}catch(...){MessageBoxW(hwnd,i18n::Tr(L"导入失败：文件不是有效的 GuoDesk 配置。").c_str(),L"GuoDesk",MB_OK|MB_ICONERROR);return;}owner.ImportLayout(std::move(next));Controller* c=&owner;winrt::Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread().TryEnqueue([c](){c->CloseSettings();});}
+static std::wstring DiagVersion(){
+ wchar_t path[MAX_PATH]{};GetModuleFileNameW(nullptr,path,MAX_PATH);std::wstring out=L"unknown";
+ if(HMODULE v=LoadLibraryW(L"version.dll")){
+  using GSZ=DWORD(WINAPI*)(LPCWSTR,DWORD*);using GFI=BOOL(WINAPI*)(LPCWSTR,DWORD,DWORD,LPVOID);using QV=BOOL(WINAPI*)(LPVOID,LPCWSTR,LPVOID*,UINT*);
+  auto gsz=(GSZ)(void*)GetProcAddress(v,"GetFileVersionInfoSizeW");auto gfi=(GFI)(void*)GetProcAddress(v,"GetFileVersionInfoW");auto qv=(QV)(void*)GetProcAddress(v,"VerQueryValueW");
+  if(gsz&&gfi&&qv)if(DWORD sz=gsz(path,nullptr);sz>0){std::vector<char> buf(sz);if(gfi(path,0,sz,buf.data())){VS_FIXEDFILEINFO* ffi{};UINT len=0;if(qv(buf.data(),L"\\",(void**)&ffi,&len)&&len){wchar_t b[32];swprintf_s(b,32,L"%u.%u.%u.%u",HIWORD(ffi->dwFileVersionMS),LOWORD(ffi->dwFileVersionMS),HIWORD(ffi->dwFileVersionLS),LOWORD(ffi->dwFileVersionLS));out=b;}}}
+  FreeLibrary(v);
+ }
+ return out;
+}
+static std::wstring DiagOs(){
+ std::wstring build;wchar_t buf[64]{};DWORD c=sizeof(buf);
+ if(ERROR_SUCCESS==RegGetValueW(HKEY_LOCAL_MACHINE,L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",L"CurrentBuildNumber",RRF_RT_REG_SZ,nullptr,buf,&c)){build=buf;wchar_t dv[64]{};c=sizeof(dv);if(ERROR_SUCCESS==RegGetValueW(HKEY_LOCAL_MACHINE,L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",L"DisplayVersion",RRF_RT_REG_SZ,nullptr,dv,&c)&&*dv)build+=L"."+std::wstring(dv);}
+ return build.empty()?std::wstring():L"Windows 10/11 "+build;
+}
+void SettingsWindow::OnDiagnostics(){
+ owner.Save();
+ SYSTEMTIME st{};GetLocalTime(&st);wchar_t nm[48]{};swprintf_s(nm,48,L"guodesk-diag-%04d%02d%02d-%02d%02d%02d.txt",st.wYear,st.wMonth,st.wDay,st.wHour,st.wMinute,st.wSecond);
+ auto target=shell::SaveFile(hwnd,nm);if(target.empty())return;
+#if defined(_M_ARM64)
+ std::wstring machine=L"ARM64";
+#elif defined(_M_X64)
+ std::wstring machine=L"x64";
+#else
+ std::wstring machine=L"x86";
+#endif
+ auto text=BuildDiagnostics(owner.layout,DiagVersion(),machine,DiagOs(),static_cast<long long>(st.wYear)*10000+st.wMonth*100+st.wDay);
+ try{std::ofstream f(target,std::ios::binary|std::ios::trunc);if(!f)throw std::runtime_error("open");f.write("\xef\xbb\xbf",3);f<<winrt::to_string(text);if(!f)throw std::runtime_error("write");}catch(...){MessageBoxW(hwnd,i18n::Tr(L"导出失败：请检查目标位置是否可写。").c_str(),L"GuoDesk",MB_OK|MB_ICONERROR);return;}
+ if(!owner.windows.empty())owner.windows.front()->Notify(i18n::TrF(L"已导出到 {0}",{target}));
+}
 void SettingsWindow::Show(){window.Activate();}
 SettingsWindow::~SettingsWindow(){closing=true;try{window.Closed(nullptr);}catch(...){}if(IsWindow(hwnd))window.Close();}
 void SettingsWindow::RebuildRules(){

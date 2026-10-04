@@ -307,6 +307,25 @@ std::wstring MediaTimeText(long long posSec,long long endSec){
 int MediaStatusKind(int raw){switch(raw){case 0:return 0;case 3:return 3;case 4:return 2;case 1:case 2:return 1;default:return 1;}}
 bool IsImagePath(std::wstring const& path){auto f=path.find_last_of(L'.');if(f==std::wstring::npos||f+1>=path.size())return false;auto ext=path.substr(f+1);if(ext.size()>5||ext.find_first_of(L"\\/")!=std::wstring::npos)return false;for(auto& c:ext)c=towlower(c);return ext==L"png"||ext==L"jpg"||ext==L"jpeg"||ext==L"bmp"||ext==L"gif"||ext==L"webp"||ext==L"tif"||ext==L"tiff";}
 std::vector<std::wstring> FilterImagePaths(std::vector<std::wstring> const& paths){std::vector<std::wstring> out;for(auto const& p:paths)if(IsImagePath(p))out.push_back(p);return out;}
+std::wstring BuildDiagnostics(Layout const& l,std::wstring const& version,std::wstring const& machine,std::wstring const& osBuild,long long today){
+ auto b=[](bool v){return v?std::wstring(L"1"):std::wstring(L"0");};
+ auto n=[](size_t v){return std::to_wstring(v);};
+ auto orNone=[](std::wstring const& v,wchar_t const* def){return v.empty()?std::wstring(def):v;};
+ size_t entries=0,stacks=0,pins=0,mapped=0,capsules=0,collapsed=0,grouped=0,colored=0,bg=0;
+ for(auto const& z:l.zones){entries+=z.entries.size();stacks+=z.stacks.size();pins+=z.pins.size();if(!z.mappedFolder.empty())++mapped;if(z.capsule)++capsules;if(z.collapsed)++collapsed;if(!z.group.empty())++grouped;if(z.color)++colored;if(!z.background.empty())++bg;}
+ size_t done=0,overdue=0,repeating=0,flags=0;
+ for(auto const& t:l.widgets.todos){if(t.done)++done;if(!t.done&&t.due>0&&t.due<today)++overdue;if(t.repeat)++repeating;if(t.flag)++flags;}
+ std::wstring s=L"GuoDesk Diagnostics\n";
+ s+=L"version="+version+L"\nmachine="+machine+L"\nos="+orNone(osBuild,L"unknown")+L"\n\n";
+ s+=L"theme="+orNone(l.settings.theme,L"System")+L" language="+orNone(l.settings.language,L"zh")+L" textSize="+n(l.settings.textSize)+L" clockStyle="+(l.settings.clockStyle.empty()?L"digital":l.settings.clockStyle)+L" backdrop="+n(l.settings.backdrop)+L"\n";
+ s+=L"performance="+b(l.settings.performance)+L" memTrim="+b(l.settings.memTrim)+L" snapshots="+b(l.settings.snapshots)+L" tabHover="+b(l.settings.tabHover)+L" guideDone="+b(l.settings.guideDone)+L" everything="+b(l.settings.everything)+L"\n";
+ s+=L"hotkey="+orNone(l.settings.hotkey,L"none")+L" search="+orNone(l.settings.hotkeySearch,L"none")+L" capture="+orNone(l.settings.hotkeyCapture,L"none")+L" undo="+orNone(l.settings.hotkeyUndo,L"none")+L" reveal="+orNone(l.settings.revealHotkey,L"none")+L"\n\n";
+ s+=L"zones="+n(l.zones.size())+L" entries="+n(entries)+L" stacks="+n(stacks)+L" pins="+n(pins)+L" mapped="+n(mapped)+L" capsules="+n(capsules)+L" collapsed="+n(collapsed)+L" grouped="+n(grouped)+L" colored="+n(colored)+L" backgrounds="+n(bg)+L" rules="+n(l.rules.size())+L"\n";
+ s+=L"todos="+n(l.widgets.todos.size())+L" done="+n(done)+L" overdue="+n(overdue)+L" repeating="+n(repeating)+L" flags="+n(flags)+L" notePages="+n(l.widgets.pages.size())+L" searchHistory="+n(l.settings.searchHistory.size())+L" searchFavorites="+n(l.settings.searchFavorites.size())+L"\n";
+ s+=L"widgets note="+b(l.widgets.noteVisible)+L" todo="+b(l.widgets.todoVisible)+L" clock="+b(l.widgets.clockVisible)+L" music="+b(l.widgets.musicVisible)+L" weather="+b(l.widgets.weatherVisible)+L" appGrid="+b(l.widgets.appGridVisible)+L" clockBg="+(l.widgets.clockBg.empty()?L"off":L"on")+L"\n";
+ s+=std::wstring(L"webdav=")+(l.settings.syncUrl.empty()?L"off":L"configured")+L" syncAuto="+b(l.settings.syncAuto)+L" topologyArchives="+n(l.topologyArchives.size())+L" topologyLast="+(l.topologyLast.empty()?L"none":L"known")+L"\n";
+ return s;
+}
 UndoStack::UndoStack(size_t limit):limit(limit?limit:1){}
 void UndoStack::Push(std::wstring label,std::string snapshot){if(snapshot.empty())return;frames.push_back({std::move(label),std::move(snapshot)});while(frames.size()>limit)frames.erase(frames.begin());}
 bool UndoStack::Pop(UndoFrame& out){if(frames.empty())return false;out=std::move(frames.back());frames.pop_back();return true;}

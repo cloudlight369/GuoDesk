@@ -48,7 +48,7 @@ class SettingsWindow {
  void OnHotkeySearch(int index); void OnHotkeyCapture(int index); void OnHotkeyUndo(int index); void OnHotkeyReveal(int index); void OnTabHover(bool on); void OnMemTrim(bool on); void OnGeoSearch(); void OnGeoSave(); void OnGeoAuto();
  void OnSyncSave(); void OnSyncUpload(); void OnSyncDownload(); void OnSyncAuto(bool on);
  void RebuildRules(); void EditRule(std::wstring ruleId);
- void OnExport(); void OnImport();
+ void OnExport(); void OnImport(); void OnDiagnostics();
 public:
  SettingsWindow(Controller&);
  ~SettingsWindow();

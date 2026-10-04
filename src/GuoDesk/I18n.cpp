@@ -96,6 +96,7 @@ KV const table[]{
  {L"更换轮播文件夹…",L"Change slideshow folder…"},
  {L"背景透明度：{0}%（点击切换）",L"Background opacity: {0}% (click to cycle)"},
  {L"该文件夹中没有图片文件。",L"No image files in that folder."},
+ {L"导出诊断…",L"Export diagnostics…"},
  {L"背景明暗：{0}（点击切换）",L"Background dimming: {0} (click to cycle)"},
  {L"适中",L"Medium"},
  {L"较暗",L"Dark"},
