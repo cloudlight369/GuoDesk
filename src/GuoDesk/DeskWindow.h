@@ -50,6 +50,10 @@ class DeskWindow {
  void MoveFocus(int delta);
  void SelHint();
  bool IsSel(std::wstring const& path); void ToggleSel(std::wstring const& path);
+ void TapSelect(std::wstring const& path); int NavIndex(std::wstring const& path);
+ std::vector<std::wstring> ListedPaths(); std::vector<std::wstring> OpPaths(); std::wstring TargetFolder();
+ void CopyClip(bool cut); void PasteClip(); void CreateFolderHere(); void RenameOne(); void DeleteSelected(bool permanent);
+ int selAnchor=-1;
  winrt::Microsoft::UI::Xaml::Media::Brush ItemFill(std::wstring const& path);
  winrt::Microsoft::UI::Xaml::Controls::Border dimLayer{nullptr};
  std::wstring bgPath; int bgDim=-1; bool bgPerf=false; bool bgDesk=false;

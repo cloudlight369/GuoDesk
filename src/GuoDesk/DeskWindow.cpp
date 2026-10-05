@@ -160,6 +160,112 @@ void DeskWindow::AttachDrag(FrameworkElement const& el,std::wstring const& path)
 }
 bool DeskWindow::IsSel(std::wstring const& path){return std::find(selected.begin(),selected.end(),PathKey(path))!=selected.end();}
 void DeskWindow::ToggleSel(std::wstring const& path){ToggleSelect(selected,PathKey(path));Refresh();}
+int DeskWindow::NavIndex(std::wstring const& path){for(size_t i=0;i<navPaths.size();++i)if(PathKey(navPaths[i])==PathKey(path))return static_cast<int>(i);return -1;}
+void DeskWindow::TapSelect(std::wstring const& path){
+ FocusBody();
+ bool shift=(GetAsyncKeyState(VK_SHIFT)&0x8000)!=0,ctrl=(GetAsyncKeyState(VK_CONTROL)&0x8000)!=0;
+ int index=NavIndex(path);
+ if(shift&&selAnchor>=0&&index>=0){SelectRange(selected,navPaths,selAnchor,index);SetFocus(index);SelHint();return;}
+ if(ctrl){selAnchor=index;ToggleSel(path);SetFocus(index);SelHint();FocusBody();return;}
+ selAnchor=index;selected.clear();selected.push_back(PathKey(path));SetFocus(index);SelHint();
+}
+std::vector<std::wstring> DeskWindow::ListedPaths(){
+ auto& v=View();std::vector<std::wstring> out;
+ if(!v.mappedFolder.empty()&&!v.browseFolder.empty()){for(auto const& e:ListMapped(v.browseFolder))out.push_back(e.path);return out;}
+ for(auto const& e:v.entries)out.push_back(e.path);
+ return out;
+}
+std::vector<std::wstring> DeskWindow::OpPaths(){
+ std::vector<std::wstring> out;
+ if(!selected.empty()){for(auto const& p:ListedPaths())if(IsSel(p))out.push_back(p);return out;}
+ if(focusIdx>=0&&focusIdx<static_cast<int>(navPaths.size()))out.push_back(navPaths[focusIdx]);
+ return out;
+}
+std::wstring DeskWindow::TargetFolder(){auto& v=View();if(v.mappedFolder.empty())return std::wstring();return v.browseFolder.empty()?v.mappedFolder:v.browseFolder;}
+void DeskWindow::CopyClip(bool cut){
+ auto paths=OpPaths();
+ if(paths.empty()){Notify(i18n::Tr(L"请先选中要复制的条目。"));return;}
+ try{shell::ClipboardCopy(paths,cut);}catch(...){Notify(i18n::Tr(L"复制未完成：剪贴板正被其它程序占用。"));return;}
+ Notify(i18n::TrF(cut?L"已剪切 {0} 项，可在目标分区或资源管理器按 Ctrl+V。":L"已复制 {0} 项，可按 Ctrl+V 粘贴。",{std::to_wstring(paths.size())}));
+}
+void DeskWindow::PasteClip(){
+ auto paths=shell::ClipPaths();
+ if(paths.empty()){Notify(i18n::Tr(L"剪贴板中没有文件。"));return;}
+ auto here=TargetFolder();
+ if(here.empty()){
+  auto& v=View();
+  owner.PushUndo(i18n::TrF(L"粘贴 {0} 个入口到分区「{1}」",{std::to_wstring(paths.size()),v.name}));
+  int added=0;
+  for(auto const& p:paths){if(std::any_of(v.entries.begin(),v.entries.end(),[&](auto const& x){return PathKey(x.path)==PathKey(p);}))continue;if(AddEntry(v,p))++added;}
+  Refresh();owner.Save();
+  Notify(i18n::TrF(L"已按引用添加 {0} 个入口，原文件未移动。",{std::to_wstring(added)}));
+  return;
+ }
+ auto made=shell::PasteInto(here);
+ if(made.empty()){Notify(i18n::Tr(L"粘贴未完成：文件已在目标文件夹中。"));return;}
+ SyncMapped(View());
+ selected.clear();for(auto const& p:made)if(selected.size()<50)selected.push_back(PathKey(p));
+ Refresh();owner.Save();
+ Notify(i18n::TrF(L"已粘贴 {0} 项到「{1}」。",{std::to_wstring(made.size()),shell::Name(here)}));
+}
+void DeskWindow::CreateFolderHere(){
+ auto here=TargetFolder();
+ if(here.empty()){Notify(i18n::Tr(L"普通分区请用「添加文件夹」，映射分区可直接在此新建文件夹。"));return;}
+ auto made=shell::CreateFolder(here,i18n::Tr(L"新建文件夹"));
+ SyncMapped(View());Refresh();owner.Save();
+ Notify(i18n::TrF(L"已新建文件夹「{0}」。",{shell::Name(made)}));
+}
+void DeskWindow::RenameOne(){
+ auto paths=OpPaths();
+ if(paths.size()!=1){Notify(i18n::Tr(L"请只选中一个条目再重命名。"));return;}
+ auto path=paths.front();
+ TextBox box;box.Text(std::filesystem::path(path).filename().wstring());
+ ContentDialog dlg;dlg.Title(box_value(i18n::Tr(L"重命名")));dlg.PrimaryButtonText(i18n::Tr(L"保存"));dlg.CloseButtonText(i18n::Tr(L"取消"));dlg.DefaultButton(ContentDialogButton::Primary);
+ StackPanel p;p.Spacing(8);p.MaxWidth(320);p.Children().Append(box);dlg.Content(p);
+ try{dlg.XamlRoot(root.XamlRoot());}catch(...){return;}
+ auto guard=this->alive;
+ dlg.ShowAsync().Completed([this,guard,path,box](auto&& async,auto&&){
+  if(!*guard)return;
+  if(async.GetResults()!=ContentDialogResult::Primary)return;
+  auto t=std::wstring(box.Text());
+  size_t a=t.find_first_not_of(L" \t");
+  if(a==std::wstring::npos)return;
+  t=t.substr(a,t.find_last_not_of(L" \t")-a+1);
+  auto oldKey=PathKey(path),parent=std::filesystem::path(path).parent_path().wstring();
+  try{shell::RenamePath(path,t);}catch(...){Notify(i18n::Tr(L"重命名未完成：名称重复或含有 \\ / : * ? \" < > |。"));return;}
+  auto& v=View();for(auto& e:v.entries)if(PathKey(e.path)==oldKey)e.path=parent+L"\\"+t;
+  if(!v.mappedFolder.empty())SyncMapped(v);
+  selected.clear();focusIdx=-1;Refresh();owner.Save();
+  Notify(i18n::TrF(L"已重命名为「{0}」。",{t}));
+ });
+}
+void DeskWindow::DeleteSelected(bool permanent){
+ auto paths=OpPaths();
+ if(paths.empty()){Notify(i18n::Tr(L"请先选中要删除的条目。"));return;}
+ ContentDialog dlg;
+ dlg.Title(box_value(i18n::Tr(permanent?L"彻底删除文件":L"移到回收站")));
+ TextBlock msg;msg.Text(i18n::TrF(permanent?L"将直接从磁盘删除 {0} 项，不经过回收站，可能无法找回：{1}":L"将把 {0} 项移到回收站，可从回收站还原：{1}",{std::to_wstring(paths.size()),shell::Name(paths.front())}));
+ msg.TextWrapping(TextWrapping::Wrap);msg.MaxWidth(320);
+ dlg.Content(msg);
+ dlg.PrimaryButtonText(i18n::Tr(permanent?L"仍然删除":L"移到回收站"));dlg.CloseButtonText(i18n::Tr(L"取消"));dlg.DefaultButton(ContentDialogButton::Close);
+ try{dlg.XamlRoot(root.XamlRoot());}catch(...){return;}
+ auto guard=this->alive;
+ dlg.ShowAsync().Completed([this,guard,paths,permanent](auto&& async,auto&&){
+  if(!*guard)return;
+  if(async.GetResults()!=ContentDialogResult::Primary)return;
+  try{shell::DeletePaths(paths,permanent);}catch(...){Notify(i18n::Tr(L"删除未完成：文件可能被占用或需要权限。"));return;}
+  auto& v=View();
+  std::vector<std::wstring> keys;for(auto const& p:paths)keys.push_back(PathKey(p));
+  auto hit=[&](auto const& x){return std::find(keys.begin(),keys.end(),PathKey(x.path))!=keys.end();};
+  if(!v.mappedFolder.empty())SyncMapped(v);
+  else{
+   size_t n=std::count_if(v.entries.begin(),v.entries.end(),hit);
+   if(n){owner.PushUndo(i18n::TrF(L"移除 {0} 个已删除条目的入口",{std::to_wstring(n)}));std::erase_if(v.entries,hit);}
+  }
+  selected.clear();focusIdx=-1;Refresh();owner.Save();
+  Notify(i18n::TrF(permanent?L"已彻底删除 {0} 项。":L"已把 {0} 项移到回收站。",{std::to_wstring(paths.size())}));
+ });
+}
 winrt::Microsoft::UI::Xaml::Media::Brush DeskWindow::ItemFill(std::wstring const& path){
  if(!IsSel(path))return ThemeBrush(L"CardBackgroundFillColorDefault",Windows::UI::Color{255,60,60,60});
  Windows::UI::Color c{80,0,120,215};
@@ -201,6 +307,16 @@ void DeskWindow::OnNavKey(Input::KeyRoutedEventArgs const& a){
  if(key==Windows::System::VirtualKey::Down||key==Windows::System::VirtualKey::Right){MoveFocus(1);a.Handled(true);return;}
  if(key==Windows::System::VirtualKey::Home){SetFocus(0);a.Handled(true);return;}
  if(key==Windows::System::VirtualKey::End){SetFocus(static_cast<int>(navPaths.size())-1);a.Handled(true);return;}
+ if(key==Windows::System::VirtualKey::F2){RenameOne();a.Handled(true);return;}
+ if(key==Windows::System::VirtualKey::Delete){DeleteSelected((GetKeyState(VK_SHIFT)&0x8000)!=0);a.Handled(true);return;}
+ if(ctrl&&key==Windows::System::VirtualKey::C){CopyClip(false);a.Handled(true);return;}
+ if(ctrl&&key==Windows::System::VirtualKey::X){CopyClip(true);a.Handled(true);return;}
+ if(ctrl&&key==Windows::System::VirtualKey::V){PasteClip();a.Handled(true);return;}
+ if(ctrl&&key==Windows::System::VirtualKey::A){
+  auto keys=selected;
+  for(auto const& p:ListedPaths()){if(keys.size()>=50)break;auto k=PathKey(p);if(std::find(keys.begin(),keys.end(),k)==keys.end())keys.push_back(k);}
+  selected=std::move(keys);RepaintNav();SelHint();a.Handled(true);return;
+ }
  if(focusIdx<0||focusIdx>=static_cast<int>(navPaths.size()))return;
  auto path=navPaths[focusIdx];
  if(key==Windows::System::VirtualKey::Enter){OpenFocused(path);a.Handled(true);return;}
@@ -234,6 +350,10 @@ void DeskWindow::Menu(FrameworkElement const& target){auto& z=Model();auto& v=Vi
  if(!owner.undo.Empty()){auto* ctrl=&owner;menu.Items().Append(MenuItem(i18n::TrF(L"撤销：{0}",{owner.undo.TopLabel()}),[ctrl]{ctrl->Undo();}));menu.Items().Append(MenuFlyoutSeparator());}
  menu.Items().Append(MenuItem(i18n::Tr(L"添加文件 / 应用"),[this,mapped]{if(mapped){Notify(i18n::Tr(L"映射分区为只读视图：请在资源管理器中修改文件夹后右键刷新。"));return;}Pick();}));
  menu.Items().Append(MenuItem(i18n::Tr(L"添加文件夹"),[this,mapped]{if(mapped){Notify(i18n::Tr(L"映射分区为只读视图：请在资源管理器中修改文件夹后右键刷新。"));return;}Pick(true);}));
+ menu.Items().Append(MenuItem(i18n::Tr(L"新建文件夹…"),[this,mapped]{if(!mapped){Notify(i18n::Tr(L"普通分区请用「添加文件夹」，映射分区可直接在此新建文件夹。"));return;}CreateFolderHere();}));
+ menu.Items().Append(MenuItem(shell::HasClipFiles()?(mapped?i18n::Tr(L"粘贴文件到此处"):i18n::Tr(L"粘贴为入口")):i18n::Tr(L"粘贴（剪贴板无文件）"),[this]{PasteClip();}));
+ menu.Items().Append(MenuItem(i18n::Tr(L"重命名选中项…"),[this]{RenameOne();}));
+ menu.Items().Append(MenuItem(i18n::Tr(L"删除选中项（回收站）…"),[this]{DeleteSelected(false);}));
  menu.Items().Append(MenuItem(i18n::Tr(L"钉选快捷方式…"),[this]{auto picked=shell::Pick(hwnd);if(picked.empty())return;auto& m=View();int added=0;for(auto const& p:picked){if(m.pins.size()>=12)break;if(std::any_of(m.pins.begin(),m.pins.end(),[&](auto const& q){return PathKey(q)==PathKey(p);}))continue;owner.PushUndo(i18n::TrF(L"钉选快捷方式「{0}」",{shell::Name(p)}));m.pins.push_back(p);++added;}if(added){Refresh();owner.Save();Notify(i18n::TrF(L"已钉选 {0} 个快捷方式。",{std::to_wstring(added)}));}}));
  menu.Items().Append(MenuItem(mapped?i18n::Tr(L"取消文件夹映射"):i18n::Tr(L"映射文件夹…"),[this,mapped]{if(mapped){View().mappedFolder.clear();View().browseFolder.clear();Refresh();owner.Save();Notify(i18n::Tr(L"已取消映射，恢复普通分区。"));return;}auto picked=shell::Pick(hwnd,true);if(picked.empty())return;View().mappedFolder=picked.front();View().browseFolder.clear();SyncMapped(View());Refresh();owner.Save();Notify(i18n::Tr(L"已映射文件夹（只读视图）：修改请在资源管理器中完成，右键可刷新。"));}));
  if(mapped){ToggleMenuFlyoutItem browse;browse.Text(i18n::Tr(L"文件夹就地打开"));browse.IsChecked(v.browseInPlace);browse.Click([this](auto&&,auto&&){auto& m=View();m.browseInPlace=!m.browseInPlace;if(!m.browseInPlace)m.browseFolder.clear();Refresh();owner.Save();});menu.Items().Append(browse);}
@@ -297,13 +417,15 @@ void DeskWindow::EntryMenu(std::wstring const& path,std::wstring const& key,std:
  if(idx==1){owner.PushUndo(i18n::TrF(L"移除入口「{0}」",{shell::Name(path)}));std::erase_if(v.entries,[&](auto const& x){return x.id==key;});Refresh();owner.Save();return;}
  if(idx==2){owner.PushUndo(i18n::TrF(L"批量移除 {0} 个入口",{std::to_wstring(selected.size())}));size_t n=0;for(auto const& k:selected){size_t before=v.entries.size();std::erase_if(v.entries,[&](auto const& x){return PathKey(x.path)==k;});n+=before-v.entries.size();}selected.clear();Refresh();owner.Save();Notify(i18n::TrF(L"已批量移除 {0} 个入口。",{std::to_wstring(n)}));return;}
 }
-void DeskWindow::Refresh(){auto& z=Model();auto& v=View();if(z.group.empty())viewId=z.id;if(lockBtn)lockBtn.Visibility(z.locked?Visibility::Visible:Visibility::Collapsed);root.Opacity(static_cast<double>(v.opacity)/100.0);std::erase_if(selected,[&](auto const& k){return !std::any_of(v.entries.begin(),v.entries.end(),[&](auto const& e){return PathKey(e.path)==k;});});if(capsuleNow){barGrid.Visibility(Visibility::Collapsed);grid.Visibility(Visibility::Collapsed);listHost.Visibility(Visibility::Collapsed);status.Visibility(Visibility::Collapsed);tabsPanel.Visibility(Visibility::Collapsed);if(crumbBar)crumbBar.Visibility(Visibility::Collapsed);pinBar.Visibility(Visibility::Collapsed);pill.Visibility(Visibility::Visible);unsigned cp=z.color?ZoneColorRGB(z.color):0;pill.Background(cp?Brush(SolidColorBrush(Windows::UI::Color{176,(uint8_t)((cp>>16)&0xFF),(uint8_t)((cp>>8)&0xFF),(uint8_t)(cp&0xFF)})):ThemeBrush(L"CardBackgroundFillColorDefault",Windows::UI::Color{255,60,60,60}));pillName.Text(z.name);window.Title(L"GuoDesk · "+z.name);bool has=!z.entries.empty();pillIcon.Visibility(has?Visibility::Visible:Visibility::Collapsed);pillGlyph.Visibility(has?Visibility::Collapsed:Visibility::Visible);if(has)shell::LoadIcon(z.entries.front().path,pillIcon);return;}RebuildTabs();barGrid.Visibility(Visibility::Visible);unsigned ht=v.color?ZoneColorRGB(v.color):0;barGrid.Background(ht?Brush(SolidColorBrush(Windows::UI::Color{64,(uint8_t)((ht>>16)&0xFF),(uint8_t)((ht>>8)&0xFF),(uint8_t)(ht&0xFF)})):Brush{nullptr});status.Visibility(Visibility::Visible);if(title.FocusState()==FocusState::Unfocused)title.Text(v.name);window.Title(L"GuoDesk · "+v.name);grid.Visibility(z.collapsed||v.viewMode!=L"grid"?Visibility::Collapsed:Visibility::Visible);listHost.Visibility(z.collapsed||v.viewMode!=L"list"?Visibility::Collapsed:Visibility::Visible);FontIcon chevronGlyph;chevronGlyph.FontFamily(FontFamily(L"Segoe Fluent Icons"));chevronGlyph.Glyph(z.collapsed?L"\uE70D":L"\uE70E");chevronGlyph.FontSize(16);chevron.Content(chevronGlyph);grid.Items().Clear();listPanel.Children().Clear();bool compact=owner.layout.settings.compact;bool mapped=!v.mappedFolder.empty();
+void DeskWindow::Refresh(){auto& z=Model();auto& v=View();bool bodyFocus=listHost.FocusState()!=FocusState::Unfocused||grid.FocusState()!=FocusState::Unfocused;if(z.group.empty())viewId=z.id;if(lockBtn)lockBtn.Visibility(z.locked?Visibility::Visible:Visibility::Collapsed);root.Opacity(static_cast<double>(v.opacity)/100.0);if(capsuleNow){barGrid.Visibility(Visibility::Collapsed);grid.Visibility(Visibility::Collapsed);listHost.Visibility(Visibility::Collapsed);status.Visibility(Visibility::Collapsed);tabsPanel.Visibility(Visibility::Collapsed);if(crumbBar)crumbBar.Visibility(Visibility::Collapsed);pinBar.Visibility(Visibility::Collapsed);pill.Visibility(Visibility::Visible);unsigned cp=z.color?ZoneColorRGB(z.color):0;pill.Background(cp?Brush(SolidColorBrush(Windows::UI::Color{176,(uint8_t)((cp>>16)&0xFF),(uint8_t)((cp>>8)&0xFF),(uint8_t)(cp&0xFF)})):ThemeBrush(L"CardBackgroundFillColorDefault",Windows::UI::Color{255,60,60,60}));pillName.Text(z.name);window.Title(L"GuoDesk · "+z.name);bool has=!z.entries.empty();pillIcon.Visibility(has?Visibility::Visible:Visibility::Collapsed);pillGlyph.Visibility(has?Visibility::Collapsed:Visibility::Visible);if(has)shell::LoadIcon(z.entries.front().path,pillIcon);return;}RebuildTabs();barGrid.Visibility(Visibility::Visible);unsigned ht=v.color?ZoneColorRGB(v.color):0;barGrid.Background(ht?Brush(SolidColorBrush(Windows::UI::Color{64,(uint8_t)((ht>>16)&0xFF),(uint8_t)((ht>>8)&0xFF),(uint8_t)(ht&0xFF)})):Brush{nullptr});status.Visibility(Visibility::Visible);if(title.FocusState()==FocusState::Unfocused)title.Text(v.name);window.Title(L"GuoDesk · "+v.name);grid.Visibility(z.collapsed||v.viewMode!=L"grid"?Visibility::Collapsed:Visibility::Visible);listHost.Visibility(z.collapsed||v.viewMode!=L"list"?Visibility::Collapsed:Visibility::Visible);FontIcon chevronGlyph;chevronGlyph.FontFamily(FontFamily(L"Segoe Fluent Icons"));chevronGlyph.Glyph(z.collapsed?L"\uE70D":L"\uE70E");chevronGlyph.FontSize(16);chevron.Content(chevronGlyph);grid.Items().Clear();listPanel.Children().Clear();bool compact=owner.layout.settings.compact;bool mapped=!v.mappedFolder.empty();
  if(mapped&&(!v.browseInPlace||(!v.browseFolder.empty()&&!UnderRoot(v.mappedFolder,v.browseFolder))))v.browseFolder.clear();
  std::vector<Entry> browseItems;if(mapped&&!v.browseFolder.empty())browseItems=ListMapped(v.browseFolder);
  std::vector<Entry> const& items=mapped&&!v.browseFolder.empty()?browseItems:v.entries;
- size_t const limit=500,total=items.size();
+ size_t const limit=500,total=items.size();std::erase_if(selected,[&](auto const& k){return !std::any_of(items.begin(),items.end(),[&](auto const& e){return PathKey(e.path)==k;});});
  navPaths.clear();navVis.clear();
- auto itemMenu=[this](std::wstring const& path){MenuFlyout menu;auto& m=View();if(!m.browseFolder.empty())menu.Items().Append(MenuItem(i18n::Tr(L"返回上一级"),[this]{auto& q=View();Navigate(CrumbParent(q.mappedFolder,q.browseFolder));}));menu.Items().Append(MenuItem(i18n::Tr(L"打开"),[this,path]{shell::Open(hwnd,path);}));menu.Items().Append(MenuItem(i18n::Tr(L"定位原文件"),[this,path]{shell::Reveal(hwnd,path);}));keepCapsuleOpen(this,menu);return menu;};
+ auto itemMenu=[this](std::wstring const& path){MenuFlyout menu;auto& m=View();if(!m.browseFolder.empty())menu.Items().Append(MenuItem(i18n::Tr(L"返回上一级"),[this]{auto& q=View();Navigate(CrumbParent(q.mappedFolder,q.browseFolder));}));menu.Items().Append(MenuItem(i18n::Tr(L"打开"),[this,path]{shell::Open(hwnd,path);}));menu.Items().Append(MenuItem(i18n::Tr(L"定位原文件"),[this,path]{shell::Reveal(hwnd,path);}));
+ menu.Items().Append(MenuItem(i18n::Tr(L"重命名…"),[this,path]{selected={PathKey(path)};RenameOne();}));
+ menu.Items().Append(MenuItem(i18n::Tr(L"删除（回收站）…"),[this,path]{selected={PathKey(path)};DeleteSelected(false);}));keepCapsuleOpen(this,menu);return menu;};
  std::map<std::wstring,size_t> firstIdx;for(size_t i=0;i<v.entries.size();++i)if(!v.entries[i].stack.empty())firstIdx.emplace(v.entries[i].stack,i);
  std::set<std::wstring> rendered;
  auto renderCollapse=[&](std::wstring const& sid){int tier=v.tileSize-(compact?1:0);tier=std::clamp(tier,0,2);static int const TW[3]={72,88,112},TH[3]={78,94,118};Border tile;tile.Width(TW[tier]);tile.Height(TH[tier]);tile.CornerRadius(CornerRadius{8,8,8,8});tile.Background(ThemeBrush(L"CardBackgroundFillColorSecondary",Windows::UI::Color{255,80,80,80}));tile.AllowDrop(!mapped);StackPanel c;c.VerticalAlignment(VerticalAlignment::Center);c.Spacing(4);FontIcon g;g.FontFamily(FontFamily(L"Segoe Fluent Icons"));g.Glyph(L"\uE70E");g.FontSize(20);TextBlock t;t.Text(i18n::Tr(L"收起叠放"));t.FontSize(ScaledFont(owner.layout.settings.textSize,12));t.TextAlignment(TextAlignment::Center);t.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,180,180,180}));c.Children().Append(g);c.Children().Append(t);tile.Child(c);tile.DoubleTapped([this,sid](auto&&,auto&&){expandedStack.clear();Refresh();});tile.DragOver([mapped](auto&&,DragEventArgs const& a){a.AcceptedOperation(mapped?DataPackageOperation::None:(a.DataView().Contains(StandardDataFormats::StorageItems())?DataPackageOperation::Link:DataPackageOperation::Move));a.Handled(true);});if(!mapped)tile.Drop([this,sid](auto&&,DragEventArgs const& a){a.Handled(true);Drop(a,0,sid);});grid.Items().Append(tile);};
@@ -330,7 +452,7 @@ void DeskWindow::Refresh(){auto& z=Model();auto& v=View();if(z.group.empty())vie
   if(v.viewMode!=L"list"&&!e.stack.empty()&&expandedStack!=e.stack){if(!rendered.count(e.stack)){renderPile(e.stack,i);rendered.insert(e.stack);}continue;}
   if(v.viewMode!=L"list"&&!e.stack.empty()&&expandedStack==e.stack&&firstIdx[e.stack]==i)renderCollapse(e.stack);
   if(v.viewMode==L"list"){
-   Border row;row.Height(30);row.CornerRadius(CornerRadius{4,4,4,4});row.Padding(Thickness{8,3,8,3});row.Background(ItemFill(path));ToolTipService::SetToolTip(row,box_value(path));row.PointerEntered([weak=make_weak(row),this](auto&&,auto&&){if(auto r=weak.get())r.Background(ThemeBrush(L"CardBackgroundFillColorSecondary",Windows::UI::Color{255,80,80,80}));});row.PointerExited([weak=make_weak(row),path,this](auto&&,auto&&){if(auto r=weak.get())r.Background(ItemFill(path));});row.Tapped([this,path](auto&&,Input::TappedRoutedEventArgs const& t){if(GetAsyncKeyState(VK_CONTROL)&0x8000){t.Handled(true);ToggleSel(path);}});
+   Border row;row.Height(30);row.CornerRadius(CornerRadius{4,4,4,4});row.Padding(Thickness{8,3,8,3});row.Background(ItemFill(path));ToolTipService::SetToolTip(row,box_value(path));row.PointerEntered([weak=make_weak(row),this](auto&&,auto&&){if(auto r=weak.get())r.Background(ThemeBrush(L"CardBackgroundFillColorSecondary",Windows::UI::Color{255,80,80,80}));});row.PointerExited([weak=make_weak(row),path,this](auto&&,auto&&){if(auto r=weak.get())r.Background(ItemFill(path));});row.Tapped([this,path](auto&&,Input::TappedRoutedEventArgs const& t){t.Handled(true);TapSelect(path);});
    Grid line;ColumnDefinition ci,cn,cp;ci.Width(GridLength{0,GridUnitType::Auto});cn.Width(GridLength{2,GridUnitType::Star});cp.Width(GridLength{3,GridUnitType::Star});line.ColumnDefinitions().Append(ci);line.ColumnDefinitions().Append(cn);line.ColumnDefinitions().Append(cp);
    Image icon;icon.Width(18);icon.Height(18);line.Children().Append(icon);shell::LoadIcon(path,icon);
    TextBlock name;name.Text((exists?L"":L"⚠ ")+shell::Name(path));name.FontSize(ScaledFont(owner.layout.settings.textSize,12));name.VerticalAlignment(VerticalAlignment::Center);name.Margin(Thickness{8,0,8,0});name.TextTrimming(TextTrimming::CharacterEllipsis);name.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,180,180,180}));Grid::SetColumn(name,1);line.Children().Append(name);
@@ -338,7 +460,7 @@ void DeskWindow::Refresh(){auto& z=Model();auto& v=View();if(z.group.empty())vie
    row.Child(line);row.DoubleTapped([this,path](auto&&,auto&&){OpenFocused(path);});if(mapped)row.ContextFlyout(itemMenu(path));else row.ContextRequested([this,path,key,sid=e.stack](auto&&,auto&& a){a.Handled(true);EntryMenu(path,key,sid);});AttachDrag(row,path);listPanel.Children().Append(row);RegisterNav(path,row,true);
   }else{
    int tier=v.tileSize-(compact?1:0);tier=std::clamp(tier,0,2);static int const TW[3]={72,88,112},TH[3]={78,94,118},TI[3]={32,40,56};
-   Border tile;tile.Width(TW[tier]);tile.Height(TH[tier]);tile.Padding(Thickness{4,4,4,4});tile.CornerRadius(CornerRadius{8,8,8,8});tile.Background(ItemFill(path));tile.CanDrag(!mapped);tile.AllowDrop(true);ToolTipService::SetToolTip(tile,box_value(path));tile.PointerEntered([weak=make_weak(tile),this](auto&&,auto&&){if(auto t=weak.get())t.Background(ThemeBrush(L"CardBackgroundFillColorSecondary",Windows::UI::Color{255,80,80,80}));});tile.PointerExited([weak=make_weak(tile),path,this](auto&&,auto&&){if(auto t=weak.get())t.Background(ItemFill(path));});tile.Tapped([this,path](auto&&,Input::TappedRoutedEventArgs const& t){if(GetAsyncKeyState(VK_CONTROL)&0x8000){t.Handled(true);ToggleSel(path);}});StackPanel content;content.Spacing(5);Image icon;icon.Width(TI[tier]);icon.Height(TI[tier]);content.Children().Append(icon);shell::LoadIcon(path,icon);TextBlock label;label.Text((exists?L"":L"⚠ ")+shell::Name(path));label.FontSize(ScaledFont(owner.layout.settings.textSize,12));label.TextAlignment(TextAlignment::Center);label.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,180,180,180}));if(v.nameLines==0)label.Visibility(Visibility::Collapsed);else if(v.nameLines==1){label.TextWrapping(TextWrapping::NoWrap);label.TextTrimming(TextTrimming::CharacterEllipsis);label.MaxHeight(18);}else{label.TextWrapping(TextWrapping::Wrap);label.MaxHeight(36);}content.Children().Append(label);tile.Child(content);
+   Border tile;tile.Width(TW[tier]);tile.Height(TH[tier]);tile.Padding(Thickness{4,4,4,4});tile.CornerRadius(CornerRadius{8,8,8,8});tile.Background(ItemFill(path));tile.CanDrag(!mapped);tile.AllowDrop(true);ToolTipService::SetToolTip(tile,box_value(path));tile.PointerEntered([weak=make_weak(tile),this](auto&&,auto&&){if(auto t=weak.get())t.Background(ThemeBrush(L"CardBackgroundFillColorSecondary",Windows::UI::Color{255,80,80,80}));});tile.PointerExited([weak=make_weak(tile),path,this](auto&&,auto&&){if(auto t=weak.get())t.Background(ItemFill(path));});tile.Tapped([this,path](auto&&,Input::TappedRoutedEventArgs const& t){t.Handled(true);TapSelect(path);});StackPanel content;content.Spacing(5);Image icon;icon.Width(TI[tier]);icon.Height(TI[tier]);content.Children().Append(icon);shell::LoadIcon(path,icon);TextBlock label;label.Text((exists?L"":L"⚠ ")+shell::Name(path));label.FontSize(ScaledFont(owner.layout.settings.textSize,12));label.TextAlignment(TextAlignment::Center);label.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,180,180,180}));if(v.nameLines==0)label.Visibility(Visibility::Collapsed);else if(v.nameLines==1){label.TextWrapping(TextWrapping::NoWrap);label.TextTrimming(TextTrimming::CharacterEllipsis);label.MaxHeight(18);}else{label.TextWrapping(TextWrapping::Wrap);label.MaxHeight(36);}content.Children().Append(label);tile.Child(content);
    tile.DoubleTapped([this,path](auto&&,auto&&){OpenFocused(path);});
    if(!mapped)tile.DragStarting([key](auto&&,DragStartingEventArgs const& a){a.Data().SetText(L"guodesk-entry:"+key);a.Data().RequestedOperation(DataPackageOperation::Move);});
    tile.DragOver([mapped](auto&&,DragEventArgs const& a){a.AcceptedOperation(mapped?DataPackageOperation::None:(a.DataView().Contains(StandardDataFormats::StorageItems())?DataPackageOperation::Link:DataPackageOperation::Move));a.Handled(true);});
@@ -350,7 +472,7 @@ void DeskWindow::Refresh(){auto& z=Model();auto& v=View();if(z.group.empty())vie
  RenderCrumbs();
  if(mapped){std::wstring here=v.browseFolder.empty()?v.mappedFolder:v.browseFolder;std::wstring head=total==0?i18n::Tr(L"映射文件夹为空或不可访问"):i18n::TrF(L"映射视图（只读）· {0} · 共 {1} 项",{shell::Name(here),std::to_wstring(total)});if(total>limit)head+=i18n::TrF(L" · 已显示前 {0} 项",{std::to_wstring(limit)});if(v.browseInPlace)head+=i18n::Tr(L" · 双击文件夹可进入");Notify(head+i18n::Tr(L" · 右键更多"));}
  else Notify(v.entries.empty()?i18n::Tr(L"拖入文件、文件夹或应用快捷方式 · 原文件保持原位"):selected.empty()?i18n::Tr(L"双击打开 · 右键管理 · 拖拽排序 · 单击后方向键选择"):i18n::TrF(L"已选 {0} 项 · 拖出包含全部选中",{std::to_wstring(selected.size())}));
- RebuildPins();}
+ RebuildPins();if(bodyFocus)FocusBody();}
 fire_and_forget DeskWindow::Drop(DragEventArgs a,size_t position,std::wstring stackId){auto deferral=a.GetDeferral();auto weak=winrt::make_weak(root);auto key=viewId;auto* controller=&owner;try{auto data=a.DataView();auto zoneOf=[&](std::wstring const& kid)->Zone*{auto it=std::find_if(controller->layout.zones.begin(),controller->layout.zones.end(),[&](auto const& z){return z.id==kid;});return it==controller->layout.zones.end()?nullptr:&*it;};if(data.Contains(StandardDataFormats::StorageItems())){auto items=co_await data.GetStorageItemsAsync();if(auto zt=zoneOf(key))for(auto const& item:items)if(!item.Path().empty()){auto pk=PathKey(std::wstring(item.Path()));if(AddEntry(*zt,std::wstring(item.Path()))&&!stackId.empty())for(auto& e:zt->entries)if(PathKey(e.path)==pk)e.stack=stackId;}}else if(data.Contains(StandardDataFormats::Text())){std::wstring text(co_await data.GetTextAsync());if(text.starts_with(L"guodesk-entry:")){auto eid=text.substr(14);controller->MoveEntry(eid,key,position);if(!stackId.empty())if(auto zt=zoneOf(key))AssignStack(*zt,eid,stackId);}else if(text.starts_with(L"guodesk-stack:")){auto rest=text.substr(14);auto bar=rest.find(L'|');if(bar!=std::wstring::npos)MoveStack(controller->layout,rest.substr(bar+1),rest.substr(0,bar),key);}}if(auto live=weak.get())live.DispatcherQueue().TryEnqueue([controller]{controller->Refresh();controller->Save();});}catch(...){if(auto live=weak.get())MessageBoxW(nullptr,i18n::Tr(L"无法添加拖入项目。").c_str(),L"GuoDesk",MB_OK);}deferral.Complete();}
 LRESULT CALLBACK DeskWindow::Subclass(HWND h,UINT msg,WPARAM w,LPARAM l,UINT_PTR,DWORD_PTR data){auto* self=reinterpret_cast<DeskWindow*>(data);if(!self->Exists())return DefSubclassProc(h,msg,w,l);if(msg==WM_NCCALCSIZE&&w&&self->desktop)return 0;if(msg==WM_NCHITTEST&&self->Model().locked){auto res=DefSubclassProc(h,msg,w,l);if(res>=HTLEFT&&res<=HTBOTTOMRIGHT)return HTCLIENT;return res;}if(msg==WM_ENTERSIZEMOVE){self->lockRevert=self->Model().locked;if(self->lockRevert)GetWindowRect(h,&self->lockRect);}if(msg==WM_SIZING&&l){auto* rr=reinterpret_cast<RECT*>(l);if(!self->Model().locked)self->SnapResize(*rr,static_cast<int>(w));self->CapResize(*rr,static_cast<int>(w));return TRUE;}if(msg==WM_EXITSIZEMOVE){if(self->lockRevert){self->lockRevert=false;SetWindowPos(h,nullptr,self->lockRect.left,self->lockRect.top,self->lockRect.right-self->lockRect.left,self->lockRect.bottom-self->lockRect.top,SWP_NOZORDER|SWP_NOACTIVATE);self->Notify(i18n::Tr(L"分区已锁定：位置与尺寸已还原。"));}self->Capture();self->owner.Save();}if(msg==WM_DISPLAYCHANGE)self->Place();if(msg==WM_DPICHANGED){auto* rect=reinterpret_cast<RECT*>(l);SetWindowPos(h,nullptr,rect->left,rect->top,rect->right-rect->left,rect->bottom-rect->top,SWP_NOZORDER|SWP_NOACTIVATE);self->Capture();self->Place();self->owner.Save();}return DefSubclassProc(h,msg,w,l);}
 }

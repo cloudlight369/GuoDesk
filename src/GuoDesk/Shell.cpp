@@ -145,4 +145,121 @@ HRESULT DragOut(HWND hwnd,std::vector<std::wstring> const& paths){
  active=false;
  return r;
 }
+static std::wstring TrimTail(std::wstring v){while(!v.empty()&&v.back()==L'\\')v.pop_back();return v;}
+static std::wstring Zipped(std::vector<std::wstring> const& paths){std::wstring s;for(auto const& p:paths){s+=p;s.push_back(L'\0');}s.push_back(L'\0');return s;}
+static bool SamePath(std::wstring const& a,std::wstring const& b){return CompareStringOrdinal(a.c_str(),-1,b.c_str(),-1,TRUE)==CSTR_EQUAL;}
+static std::vector<std::wstring> ExistingNames(std::wstring const& dir){
+ std::vector<std::wstring> out;
+ WIN32_FIND_DATAW fd{};
+ HANDLE h=FindFirstFileW((TrimTail(dir)+L"\\*").c_str(),&fd);
+ if(h==INVALID_HANDLE_VALUE)return out;
+ do{std::wstring n=fd.cFileName;if(n!=L"."&&n!=L"..")out.push_back(std::move(n));}while(FindNextFileW(h,&fd));
+ FindClose(h);
+ return out;
+}
+static int Run(SHFILEOPSTRUCTW& op){
+ op.hwnd=nullptr;
+ op.fFlags|=FOF_SILENT|FOF_NOCONFIRMATION|FOF_NOERRORUI|FOF_MULTIDESTFILES;
+ auto r=SHFileOperationW(&op);
+ if(r==ERROR_CANCELLED)return 0;
+ if(r!=0||op.fAnyOperationsAborted)throw std::runtime_error("file operation failed");
+ return 1;
+}
+std::vector<std::wstring> ClipPaths(){
+ if(!IsClipboardFormatAvailable(CF_HDROP)||!OpenClipboard(nullptr))return {};
+ std::vector<std::wstring> out;
+ if(HANDLE h=GetClipboardData(CF_HDROP)){
+  auto* df=reinterpret_cast<HDROP>(GlobalLock(h));
+  if(df){
+   wchar_t buf[4096];
+   for(UINT i=0,n=DragQueryFileW(df,0xffffffff,nullptr,0);i<n;++i){auto len=DragQueryFileW(df,i,buf,4095);if(len)out.emplace_back(buf,len);}
+   GlobalUnlock(h);
+  }
+ }
+ CloseClipboard();
+ return out;
+}
+bool HasClipFiles(){return IsClipboardFormatAvailable(CF_HDROP)!=FALSE;}
+bool ClipIsMove(){
+ bool move=false;
+ if(!HasClipFiles()||!OpenClipboard(nullptr))return move;
+ if(HANDLE h=GetClipboardData(static_cast<UINT>(RegisterClipboardFormatW(L"Preferred DropEffect")))){
+  auto* p=reinterpret_cast<DWORD*>(GlobalLock(h));
+  if(p){move=(*p&DROPEFFECT_MOVE)!=0&&(*p&DROPEFFECT_COPY)==0;GlobalUnlock(h);}
+ }
+ CloseClipboard();
+ return move;
+}
+void ClipboardCopy(std::vector<std::wstring> const& paths,bool cut){
+ if(paths.empty())return;
+ auto blob=MakeHdrop(paths);
+ // 其它进程（资源管理器、剪贴板工具、脚本）可能短暂占用剪贴板，重试比直接失败更贴近用户预期
+ bool opened=false;
+ for(int i=0;i<10;++i){if(OpenClipboard(nullptr)){opened=true;break;}Sleep(40);}
+ if(!opened)throw_last_error();
+ if(!EmptyClipboard()){CloseClipboard();throw_last_error();}
+ HGLOBAL drop=GlobalAlloc(GMEM_MOVEABLE,blob.size());
+ void* dst=drop?GlobalLock(drop):nullptr;
+ if(!drop||!dst){if(drop)GlobalFree(drop);CloseClipboard();throw std::runtime_error("clipboard out of memory");}
+ CopyMemory(dst,blob.data(),blob.size());GlobalUnlock(drop);
+ if(!SetClipboardData(CF_HDROP,drop)){GlobalFree(drop);CloseClipboard();throw_last_error();}
+ HGLOBAL effect=GlobalAlloc(GMEM_MOVEABLE,sizeof(DWORD));
+ if(effect){
+  auto* p=reinterpret_cast<DWORD*>(GlobalLock(effect));
+  if(p){*p=cut?DROPEFFECT_MOVE:(DROPEFFECT_COPY|DROPEFFECT_MOVE);GlobalUnlock(effect);SetClipboardData(static_cast<UINT>(RegisterClipboardFormatW(L"Preferred DropEffect")),effect);}
+  else GlobalFree(effect);
+ }
+ CloseClipboard();
+}
+std::vector<std::wstring> PasteInto(std::wstring const& destDir){
+ auto sources=ClipPaths();
+ if(sources.empty())return {};
+ auto dest=TrimTail(std::filesystem::path(destDir).wstring());
+ if(dest.empty())return sources;
+ auto move=ClipIsMove();
+ std::vector<std::wstring> out;
+ for(auto const& src:sources){
+  std::filesystem::path p(src);
+  auto name=p.filename().wstring();
+  if(name.empty())continue;
+  auto target=dest+L"\\"+name;
+  if(SamePath(src,target)||SamePath(p.parent_path().wstring(),dest))continue;
+  bool dir=std::filesystem::is_directory(p);
+  name=UniqueName(ExistingNames(dest),dir?name:p.stem().wstring(),dir?std::wstring():p.extension().wstring());
+  target=dest+L"\\"+name;
+  auto from=Zipped({src}),to=Zipped({target});
+  SHFILEOPSTRUCTW op{};op.wFunc=move?FO_MOVE:FO_COPY;op.pFrom=from.c_str();op.pTo=to.c_str();
+  if(Run(op))out.push_back(std::move(target));
+ }
+ return out;
+}
+std::wstring CreateFolder(std::wstring const& dir,std::wstring const& baseName){
+ auto dest=TrimTail(std::filesystem::path(dir).wstring());
+ if(dest.empty())throw std::runtime_error("no target folder");
+ auto name=UniqueName(ExistingNames(dest),baseName.empty()?std::wstring(L"新建文件夹"):baseName);
+ auto target=dest+L"\\"+name;
+ if(!CreateDirectoryW(target.c_str(),nullptr)&&GetLastError()!=ERROR_ALREADY_EXISTS)throw std::runtime_error("cannot create folder");
+ return target;
+}
+void RenamePath(std::wstring const& path,std::wstring const& newName){
+ std::wstring name=newName;
+ while(!name.empty()&&name.front()==L' ')name.erase(name.begin());
+ while(!name.empty()&&name.back()==L' ')name.pop_back();
+ if(name.empty()||name.find_first_of(L"\\/:*?\"<>|")!=std::wstring::npos)throw std::runtime_error("invalid name");
+ std::filesystem::path p(path);
+ auto target=TrimTail(p.parent_path().wstring())+L"\\"+name;
+ if(SamePath(path,target))return;
+ if(GetFileAttributesW(target.c_str())!=INVALID_FILE_ATTRIBUTES)throw std::runtime_error("name already exists");
+ auto from=Zipped({path}),to=Zipped({target});
+ SHFILEOPSTRUCTW op{};op.wFunc=FO_RENAME;op.pFrom=from.c_str();op.pTo=to.c_str();
+ Run(op);
+}
+void DeletePaths(std::vector<std::wstring> const& paths,bool permanent){
+ if(paths.empty())return;
+ auto from=Zipped(paths);
+ SHFILEOPSTRUCTW op{};
+ op.wFunc=FO_DELETE;op.pFrom=from.c_str();
+ if(!permanent)op.fFlags|=FOF_ALLOWUNDO;
+ Run(op);
+}
 }

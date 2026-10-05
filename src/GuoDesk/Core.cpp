@@ -496,6 +496,21 @@ bool ToggleSelect(std::vector<std::wstring>& keys,std::wstring const& key,size_t
  if(keys.size()>limit)keys.erase(keys.begin());
  return true;
 }
+int SelectRange(std::vector<std::wstring>& keys,std::vector<std::wstring> const& paths,int anchor,int target,size_t limit){
+ if(paths.empty())return 0;
+ auto inside=[](int i,int n){return i<0?0:(i>=n?n-1:i);};
+ int a=inside(anchor,(int)paths.size()),b=inside(target,(int)paths.size());
+ if(a>b)std::swap(a,b);
+ int added=0;
+ for(int i=a;i<=b;++i){auto key=PathKey(paths[i]);if(std::find(keys.begin(),keys.end(),key)!=keys.end())continue;added+=ToggleSelect(keys,key,limit)?1:0;}
+ return added;
+}
+std::wstring UniqueName(std::vector<std::wstring> const& taken,std::wstring const& base,std::wstring const& ext){
+ auto free=[&](std::wstring const& name){auto want=Lower(name);return !std::any_of(taken.begin(),taken.end(),[&](auto const& t){return Lower(t)==want;});};
+ if(free(base+ext))return base+ext;
+ for(int n=2;n<=999;++n){auto name=base+L" ("+std::to_wstring(n)+L")"+ext;if(free(name))return name;}
+ return base+L" (1000)"+ext;
+}
 int NavStep(int cur,int count,int delta){
  if(count<=0)return -1;
  if(cur<0)return delta<0?count-1:0;
