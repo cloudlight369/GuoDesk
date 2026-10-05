@@ -13,6 +13,7 @@
 #include "SearchWindow.h"
 #include "WeatherWindow.h"
 #include "CaptureWindow.h"
+#include "PreviewWindow.h"
 #include "AppGridWindow.h"
 #include "Shell.h"
 #include "I18n.h"
@@ -151,7 +152,7 @@ void DeskWindow::SetCapsule(bool on){auto& z=Model();z.capsule=on;capsuleNow=on;
 void DeskWindow::ExpandCapsule(){if(!capsuleNow||dragging)return;capsuleNow=false;Refresh();Place();}
 void DeskWindow::ShrinkCapsule(){if(capsuleNow||dragging)return;Capture();capsuleNow=true;Refresh();Place();}
 void DeskWindow::AttachDrag(FrameworkElement const& el,std::wstring const& path){
- el.PointerPressed([this,path](auto&&,Input::PointerRoutedEventArgs const&){FocusBody();POINT sp{};GetCursorPos(&sp);dragSX=sp.x;dragSY=sp.y;dragPath=path;dragArmed=true;});
+ el.PointerPressed([this,path](auto&&,Input::PointerRoutedEventArgs const&){FocusBody();int idx=-1;for(size_t i=0;i<navPaths.size();++i)if(PathKey(navPaths[i])==PathKey(path)){idx=static_cast<int>(i);break;}if(idx>=0)SetFocus(idx);POINT sp{};GetCursorPos(&sp);dragSX=sp.x;dragSY=sp.y;dragPath=path;dragArmed=true;});
  el.PointerReleased([this](auto&&,Input::PointerRoutedEventArgs const&){dragArmed=false;});
  el.PointerCaptureLost([this](auto&&,auto&&){dragArmed=false;});
  if(!rootDragHooked){rootDragHooked=true;
@@ -216,6 +217,20 @@ void DeskWindow::CreateFolderHere(){
  try{made=shell::CreateFolder(here,i18n::Tr(L"新建文件夹"));}catch(...){Notify(i18n::Tr(L"新建文件夹未完成：目标文件夹不可写或已被删除。"));return;}
  SyncMapped(View());Refresh();owner.Save();
  Notify(i18n::TrF(L"已新建文件夹「{0}」。",{shell::Name(made)}));
+}
+void DeskWindow::PreviewSelection(){
+ auto list=ListedPaths();
+ if(list.empty()){Notify(i18n::Tr(L"没有可预览的条目。"));return;}
+ size_t start=0;
+ if(focusIdx>=0&&focusIdx<static_cast<int>(list.size()))start=static_cast<size_t>(focusIdx);
+ else if(!selected.empty())for(size_t i=0;i<list.size();++i)if(PathKey(list[i])==selected.front()){start=i;break;}
+ owner.ShowPreview(list,start);
+}
+void DeskWindow::PreviewPath(std::wstring const& path){
+ auto list=ListedPaths();
+ auto hit=std::find_if(list.begin(),list.end(),[&](auto const& p){return PathKey(p)==PathKey(path);});
+ if(hit==list.end()){owner.ShowPreview({path},0);return;}
+ owner.ShowPreview(list,static_cast<size_t>(std::distance(list.begin(),hit)));
 }
 void DeskWindow::RenameOne(){
  auto paths=OpPaths();
@@ -319,10 +334,11 @@ void DeskWindow::OnNavKey(Input::KeyRoutedEventArgs const& a){
   for(auto const& p:ListedPaths()){if(keys.size()>=50)break;auto k=PathKey(p);if(std::find(keys.begin(),keys.end(),k)==keys.end())keys.push_back(k);}
   selected=std::move(keys);RepaintNav();SelHint();a.Handled(true);return;
  }
+ if(key==Windows::System::VirtualKey::Space&&!ctrl){PreviewSelection();a.Handled(true);return;}
  if(focusIdx<0||focusIdx>=static_cast<int>(navPaths.size()))return;
  auto path=navPaths[focusIdx];
  if(key==Windows::System::VirtualKey::Enter){OpenFocused(path);a.Handled(true);return;}
- if(key==Windows::System::VirtualKey::Space){if(!View().mappedFolder.empty())return;ToggleSelect(selected,PathKey(path));RepaintNav();SelHint();a.Handled(true);return;}
+ if(key==Windows::System::VirtualKey::Space){ToggleSelect(selected,PathKey(path));RepaintNav();SelHint();a.Handled(true);return;}
 }
 std::vector<RECT> DeskWindow::Peers(){std::vector<RECT> list;for(auto& w:owner.windows)if(w.get()!=this&&IsWindow(w->hwnd)&&IsWindowVisible(w->hwnd)){RECT r{};GetWindowRect(w->hwnd,&r);list.push_back(r);}return list;}
 void DeskWindow::DragUpdate(){if(!dragging||Model().locked)return;POINT p{};GetCursorPos(&p);int x=dragOrigin.left+p.x-dragStart.x,y=dragOrigin.top+p.y-dragStart.y,w=dragOrigin.right-dragOrigin.left,h=dragOrigin.bottom-dragOrigin.top;int threshold=MulDiv(8,GetDpiForWindow(hwnd),96);std::vector<int> xs,ys;auto peers=Peers();for(auto const& r:peers){int cx=r.left+(r.right-r.left)/2,cy=r.top+(r.bottom-r.top)/2;xs.push_back(r.left);xs.push_back(r.right-w);xs.push_back(r.left-w);xs.push_back(r.right);xs.push_back(cx-w/2);ys.push_back(r.top);ys.push_back(r.bottom-h);ys.push_back(r.top-h);ys.push_back(r.bottom);ys.push_back(cy-h/2);}MONITORINFO mi{sizeof(mi)};GetMonitorInfoW(MonitorFromWindow(hwnd,MONITOR_DEFAULTTONEAREST),&mi);xs.push_back(mi.rcWork.left);xs.push_back(mi.rcWork.right-w);ys.push_back(mi.rcWork.top);ys.push_back(mi.rcWork.bottom-h);x+=Snap(x,xs,threshold);y+=Snap(y,ys,threshold);SetWindowPos(hwnd,nullptr,x,y,0,0,SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE);}
@@ -426,7 +442,7 @@ void DeskWindow::Refresh(){auto& z=Model();auto& v=View();bool bodyFocus=listHos
  std::vector<Entry> const& items=mapped&&!v.browseFolder.empty()?browseItems:v.entries;
  size_t const limit=500,total=items.size();std::erase_if(selected,[&](auto const& k){return !std::any_of(items.begin(),items.end(),[&](auto const& e){return PathKey(e.path)==k;});});
  navPaths.clear();navVis.clear();
- auto itemMenu=[this](std::wstring const& path){MenuFlyout menu;auto& m=View();if(!m.browseFolder.empty())menu.Items().Append(MenuItem(i18n::Tr(L"返回上一级"),[this]{auto& q=View();Navigate(CrumbParent(q.mappedFolder,q.browseFolder));}));menu.Items().Append(MenuItem(i18n::Tr(L"打开"),[this,path]{shell::Open(hwnd,path);}));menu.Items().Append(MenuItem(i18n::Tr(L"定位原文件"),[this,path]{shell::Reveal(hwnd,path);}));
+ auto itemMenu=[this](std::wstring const& path){MenuFlyout menu;auto& m=View();if(!m.browseFolder.empty())menu.Items().Append(MenuItem(i18n::Tr(L"返回上一级"),[this]{auto& q=View();Navigate(CrumbParent(q.mappedFolder,q.browseFolder));}));menu.Items().Append(MenuItem(i18n::Tr(L"打开"),[this,path]{shell::Open(hwnd,path);}));menu.Items().Append(MenuItem(i18n::Tr(L"快速预览"),[this,path]{PreviewPath(path);}));menu.Items().Append(MenuItem(i18n::Tr(L"定位原文件"),[this,path]{shell::Reveal(hwnd,path);}));
  menu.Items().Append(MenuItem(i18n::Tr(L"重命名…"),[this,path]{selected={PathKey(path)};RenameOne();}));
  menu.Items().Append(MenuItem(i18n::Tr(L"删除（回收站）…"),[this,path]{selected={PathKey(path)};DeleteSelected(false);}));keepCapsuleOpen(this,menu);return menu;};
  std::map<std::wstring,size_t> firstIdx;for(size_t i=0;i<v.entries.size();++i)if(!v.entries[i].stack.empty())firstIdx.emplace(v.entries[i].stack,i);
@@ -605,6 +621,8 @@ void Controller::ShowAppGrid(){layout.widgets.appGridVisible=true;if(!appGrid)ap
 void Controller::CloseAppGrid(){if(layout.widgets.appGridVisible){layout.widgets.appGridVisible=false;Save();}appGrid.reset();}
 void Controller::ShowCapture(){if(!capture)capture=std::make_unique<CaptureWindow>(*this);else capture->Show();}
 void Controller::CloseCapture(){capture.reset();}
+void Controller::ShowPreview(std::vector<std::wstring> const& paths,size_t start){if(!preview)preview=std::make_unique<PreviewWindow>(*this);preview->Open(paths,start);}
+void Controller::ClosePreview(){preview.reset();}
 void Controller::RebuildWidgets(){
  note.reset();todo.reset();clockW.reset();music.reset();weather.reset();appGrid.reset();search.reset();
  for(auto& w:windows)w->ApplySettings();

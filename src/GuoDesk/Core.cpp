@@ -326,6 +326,30 @@ std::wstring MediaTimeText(long long posSec,long long endSec){
 int MediaStatusKind(int raw){switch(raw){case 0:return 0;case 4:return 3;case 5:return 2;default:return 1;}}
 bool IsImagePath(std::wstring const& path){auto f=path.find_last_of(L'.');if(f==std::wstring::npos||f+1>=path.size())return false;auto ext=path.substr(f+1);if(ext.size()>5||ext.find_first_of(L"\\/")!=std::wstring::npos)return false;for(auto& c:ext)c=towlower(c);return ext==L"png"||ext==L"jpg"||ext==L"jpeg"||ext==L"bmp"||ext==L"gif"||ext==L"webp"||ext==L"tif"||ext==L"tiff";}
 std::vector<std::wstring> FilterImagePaths(std::vector<std::wstring> const& paths){std::vector<std::wstring> out;for(auto const& p:paths)if(IsImagePath(p))out.push_back(p);return out;}
+bool IsTextPath(std::wstring const& path){static const wchar_t* table[]{L"txt",L"md",L"markdown",L"log",L"csv",L"tsv",L"json",L"jsonc",L"xml",L"xaml",L"ini",L"cfg",L"conf",L"reg",L"properties",L"yaml",L"yml",L"toml",L"plist",L"html",L"htm",L"css",L"js",L"jsx",L"mjs",L"cjs",L"ts",L"tsx",L"c",L"cpp",L"cc",L"cxx",L"h",L"hpp",L"hxx",L"cs",L"vb",L"java",L"kt",L"scala",L"go",L"rs",L"rb",L"py",L"php",L"pl",L"lua",L"sh",L"bash",L"zsh",L"ps1",L"psm1",L"bat",L"cmd",L"sql",L"srt",L"vtt",L"ass",L"diff",L"patch",L"mk",L"cmake",L"gradle",L"svg",L"tex",L"ics",L"env"};auto e=ExtOf(path);if(e.empty())return false;for(auto const* x:table)if(e==x)return true;return false;}
+int PreviewKind(std::wstring const& path){if(IsImagePath(path))return 1;if(IsTextPath(path))return 2;return 0;}
+static std::wstring NormalizeNewlines(std::wstring const& s){std::wstring out;out.reserve(s.size());for(size_t i=0;i<s.size();++i){if(s[i]!=L'\r'){out.push_back(s[i]);continue;}if(i+1<s.size()&&s[i+1]==L'\n')++i;out.push_back(L'\n');}return out;}
+std::wstring DecodeNeutralText(std::vector<char> const& raw){
+ size_t off=0;bool le=false,be=false;
+ if(raw.size()>=3&&(unsigned char)raw[0]==0xEF&&(unsigned char)raw[1]==0xBB&&(unsigned char)raw[2]==0xBF)off=3;
+ else if(raw.size()>=2&&(unsigned char)raw[0]==0xFF&&(unsigned char)raw[1]==0xFE){le=true;off=2;}
+ else if(raw.size()>=2&&(unsigned char)raw[0]==0xFE&&(unsigned char)raw[1]==0xFF){be=true;off=2;}
+ if(!le&&!be){
+  int n=MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,raw.data()+off,static_cast<int>(raw.size()-off),nullptr,0);
+  if(n<=0)n=MultiByteToWideChar(CP_ACP,0,raw.data()+off,static_cast<int>(raw.size()-off),nullptr,0);
+  if(n<=0)return L"";
+  std::wstring out(n,L'\0');
+  if(MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,raw.data()+off,static_cast<int>(raw.size()-off),out.data(),n)<=0)
+   MultiByteToWideChar(CP_ACP,0,raw.data()+off,static_cast<int>(raw.size()-off),out.data(),n);
+  return NormalizeNewlines(out);
+ }
+ size_t units=(raw.size()-off)/2;if(units==0)return L"";
+ std::wstring out(units,L'\0');memcpy(out.data(),raw.data()+off,units*sizeof(wchar_t));
+ if(be)for(auto& c:out)c=static_cast<wchar_t>((static_cast<unsigned>(c)>>8)|(static_cast<unsigned>(c&0xFF)<<8));
+ return NormalizeNewlines(out);
+}
+std::wstring ClampPreviewText(std::wstring const& text,size_t maxChars){if(maxChars==0||text.size()<=maxChars)return text;auto cut=text.substr(0,maxChars);auto nl=cut.rfind(L'\n');if(nl!=std::wstring::npos&&nl>maxChars/2)cut=cut.substr(0,nl);return cut;}
+std::wstring PreviewSizeText(long long bytes){if(bytes<0)bytes=0;wchar_t buf[64]{};if(bytes<1024){swprintf_s(buf,64,L"%lld B",bytes);return buf;}if(bytes<1024LL*1024){swprintf_s(buf,64,L"%.1f KB",bytes/1024.0);return buf;}if(bytes<1024LL*1024*1024){swprintf_s(buf,64,L"%.1f MB",bytes/(1024.0*1024.0));return buf;}swprintf_s(buf,64,L"%.2f GB",bytes/(1024.0*1024.0*1024.0));return buf;}
 std::wstring BuildDiagnostics(Layout const& l,std::wstring const& version,std::wstring const& machine,std::wstring const& osBuild,long long today){
  auto b=[](bool v){return v?std::wstring(L"1"):std::wstring(L"0");};
  auto n=[](size_t v){return std::to_wstring(v);};

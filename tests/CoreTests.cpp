@@ -513,6 +513,23 @@ void RunTests(std::filesystem::path const& output){std::ofstream report(output);
  Widgets bw380;AddTodo(bw380,L"a");auto idAx=bw380.todos[0].id;AddTodo(bw380,L"b");auto idBy=bw380.todos[1].id;AddTodo(bw380,L"c");auto idCz=bw380.todos[2].id;
  expect(RemoveTodos(bw380,{idAx,idCz})==2&&bw380.todos.size()==1&&bw380.todos[0].text==L"b","bulk remove keeps order and counts");
  expect(RemoveTodos(bw380,{})==0&&RemoveTodos(bw380,{L"ghost"})==0&&bw380.todos.size()==1&&bw380.todos[0].id==idBy,"bulk remove no-op on empty or unknown ids");
+ expect(PreviewKind(L"C:\\p\\photo.PNG")==1&&PreviewKind(L"C:\\p\\note.md")==2&&PreviewKind(L"C:\\p\\setup.exe")==0&&PreviewKind(L"C:\\p\\README")==0,"PreviewKind classifies image, text and unknown");
+ expect(IsTextPath(L"C:\\p\\run.ps1")&&IsTextPath(L"C:\\p\\icon.svg")&&IsTextPath(L"C:\\p\\a.MD")&&!IsTextPath(L"C:\\p\\book.zip")&&!IsTextPath(L"C:\\p\\noextension"),"IsTextPath covers code and markup while rejecting archives and extension-less names");
+ {
+  std::vector<char> u8bom{(char)0xEF,(char)0xBB,(char)0xBF,'A',(char)0xE4,(char)0xB8,(char)0xAD};
+  std::vector<char> le130{(char)0xFF,(char)0xFE,0x48,0x00,0x69,0x00};
+  std::vector<char> be130{(char)0xFE,(char)0xFF,0x00,0x48,0x00,0x69};
+  std::vector<char> crlf130{'a','\r','\n','b','\r','c'};
+  std::vector<char> gbk130{(char)0xD6,(char)0xD0,(char)0xCE,(char)0xC4};
+  expect(DecodeNeutralText(u8bom)==L"A中","utf-8 bom stripped and multibyte decoded");
+  expect(DecodeNeutralText(le130)==L"Hi"&&DecodeNeutralText(be130)==L"Hi","utf-16 detected in both endiannesses");
+  expect(DecodeNeutralText(crlf130)==L"a\nb\nc","mixed newlines normalised to lf");
+  expect(DecodeNeutralText(gbk130).size()==2,"legacy ansi bytes still decode through the fallback");
+  expect(DecodeNeutralText(std::vector<char>{}).empty(),"empty input decodes to empty text");
+ }
+ expect(ClampPreviewText(L"line1\nline2\nline3\n",8)==L"line1"&&ClampPreviewText(L"short",8)==L"short"&&ClampPreviewText(L"abcdefghij",0)==L"abcdefghij","ClampPreviewText cuts on a line boundary and leaves short text untouched");
+ expect(PreviewSizeText(0)==L"0 B"&&PreviewSizeText(-5)==L"0 B"&&PreviewSizeText(1023)==L"1023 B","PreviewSizeText renders bytes below one kilobyte");
+ expect(PreviewSizeText(1536)==L"1.5 KB"&&PreviewSizeText(2LL*1024*1024)==L"2.0 MB"&&PreviewSizeText(3LL*1024*1024*1024+512LL*1024*1024)==L"3.50 GB","PreviewSizeText scales to KB, MB and GB");
 report<<"TOTAL "<<passed<<" passed\n";
 }
 }

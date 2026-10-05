@@ -53,6 +53,7 @@ class DeskWindow {
  void TapSelect(std::wstring const& path); int NavIndex(std::wstring const& path);
  std::vector<std::wstring> ListedPaths(); std::vector<std::wstring> OpPaths(); std::wstring TargetFolder();
  void CopyClip(bool cut); void PasteClip(); void CreateFolderHere(); void RenameOne(); void DeleteSelected(bool permanent);
+ void PreviewSelection(); void PreviewPath(std::wstring const& path);
  int selAnchor=-1;
  winrt::Microsoft::UI::Xaml::Media::Brush ItemFill(std::wstring const& path);
  winrt::Microsoft::UI::Xaml::Controls::Border dimLayer{nullptr};
@@ -92,6 +93,7 @@ public:
  void ShowClock(); void CloseClock(); void ShowGuide(); void CloseGuide(); void CheckReminders();
  void ShowMusic(); void CloseMusic(); void ShowSearch(); void CloseSearch(); void ShowWeather(); void CloseWeather();
  void ShowCapture(); void CloseCapture(); void ShowAppGrid(); void CloseAppGrid(); bool CommitCapture(std::wstring const& text,bool asTodo); void RebuildWidgets();
+ void ShowPreview(std::vector<std::wstring> const& paths,size_t start); void ClosePreview();
  void SyncUploadAuto();
  void MoveEntry(std::wstring const& entry,std::wstring const& target,size_t index);
  void SyncWindows(); void MergeInto(std::wstring const& self,std::wstring const& other); void Ungroup(std::wstring const& zoneId); void AddToGroup(std::wstring const& anchorId);
@@ -99,6 +101,6 @@ public:
  std::unique_ptr<class NoteWindow> note; std::unique_ptr<class TodoWindow> todo;
  std::unique_ptr<class ClockWindow> clockW; std::unique_ptr<class GuideWindow> guide;
  std::unique_ptr<class MusicWindow> music; std::unique_ptr<class SearchWindow> search; std::unique_ptr<class WeatherWindow> weather;
- std::unique_ptr<class CaptureWindow> capture; std::unique_ptr<class AppGridWindow> appGrid;
+ std::unique_ptr<class CaptureWindow> capture; std::unique_ptr<class AppGridWindow> appGrid; std::unique_ptr<class PreviewWindow> preview;
 };
 }

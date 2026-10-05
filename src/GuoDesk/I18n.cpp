@@ -502,6 +502,23 @@ KV const table[]{
  {L"已把 {0} 项移到回收站。",L"Moved {0} item(s) to the Recycle Bin."},
  {L"删除选中项（回收站）…",L"Delete selection (Recycle Bin)…"},
  {L"删除（回收站）…",L"Delete (Recycle Bin)…"},
+ {L"快速预览",L"Quick preview"},
+ {L"GuoDesk 快速预览",L"GuoDesk Quick Preview"},
+ {L"图片文件",L"Image file"},
+ {L"文本文件",L"Text file"},
+ {L"文件夹",L"Folder"},
+ {L"文件",L"File"},
+ {L"空文件",L"Empty file"},
+ {L"文件夹为空",L"The folder is empty"},
+ {L"共 {0} 项",L"{0} item(s)"},
+ {L"（仅显示前 {0} 项）",L"(only the first {0} items are shown)"},
+ {L"（内容过长，仅显示前 {0} 字）",L"(the file is long; only the first {0} characters are shown)"},
+ {L"无法预览此文件，按 Enter 用默认程序打开。",L"No preview available. Press Enter to open it with the default app."},
+ {L"无法预览此图片，按 Enter 用默认程序打开。",L"This image cannot be previewed. Press Enter to open it with the default app."},
+ {L"读取失败：文件可能被占用。",L"Could not read the file: it may be locked."},
+ {L"读取失败：文件夹不可访问。",L"Could not read the folder: it is not accessible."},
+ {L"空格或 Esc 关闭 · Enter 打开 · ↑↓ 切换条目",L"Space or Esc closes · Enter opens · Up/Down steps through the items"},
+ {L"没有可预览的条目。",L"There is nothing to preview."},
 };
 std::wstring Resolve(std::wstring const& setting){
  std::wstring lang=setting;
