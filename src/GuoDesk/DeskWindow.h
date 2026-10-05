@@ -1,5 +1,6 @@
 #pragma once
 #include "Core.h"
+#include "Shell.h"
 #include "SettingsWindow.h"
 namespace guodesk {
 class Controller;
@@ -44,6 +45,7 @@ class DeskWindow {
  void FocusBody();
  winrt::Microsoft::UI::Xaml::Media::Brush FocusRing();
  void OpenFocused(std::wstring const& path);
+ void TryOpen(std::wstring const& path); void TryReveal(std::wstring const& path);
  void RegisterNav(std::wstring const& path,winrt::Microsoft::UI::Xaml::Controls::Border const& el,bool tinted);
  void RepaintNav();
  void SetFocus(int index);
@@ -58,6 +60,14 @@ class DeskWindow {
  winrt::Microsoft::UI::Xaml::Media::Brush ItemFill(std::wstring const& path);
  winrt::Microsoft::UI::Xaml::Controls::Border dimLayer{nullptr};
  std::wstring bgPath; int bgDim=-1; bool bgPerf=false; bool bgDesk=false;
+ struct OpState;
+ std::shared_ptr<OpState> opState;
+ bool opRunning=false,opDialog=false;
+ winrt::Microsoft::UI::Xaml::Controls::ProgressBar opBar{nullptr};
+ winrt::Microsoft::UI::Xaml::Controls::Button opCancelBtn{nullptr};
+ winrt::Microsoft::UI::Dispatching::DispatcherQueueTimer opTimer{nullptr};
+ void BeginOp(std::wstring const& label,std::function<void(shell::CancelFlag const&,shell::ProgressFn const&)> work,std::function<void()> finish);
+ void OpTick(); void CancelOp();
  bool rootDragHooked=false; bool dragArmed=false; long dragSX=0; long dragSY=0; std::wstring dragPath;
 public:
  std::wstring id; std::wstring viewId; bool menuOpen=false; std::shared_ptr<bool> alive{std::make_shared<bool>(true)};

@@ -335,12 +335,22 @@ std::wstring DecodeNeutralText(std::vector<char> const& raw){
  else if(raw.size()>=2&&(unsigned char)raw[0]==0xFF&&(unsigned char)raw[1]==0xFE){le=true;off=2;}
  else if(raw.size()>=2&&(unsigned char)raw[0]==0xFE&&(unsigned char)raw[1]==0xFF){be=true;off=2;}
  if(!le&&!be){
-  int n=MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,raw.data()+off,static_cast<int>(raw.size()-off),nullptr,0);
-  if(n<=0)n=MultiByteToWideChar(CP_ACP,0,raw.data()+off,static_cast<int>(raw.size()-off),nullptr,0);
+  auto const* p=raw.data()+off;
+  int const len=static_cast<int>(raw.size()-off);
+  // 预览只读取文件头部，截断处可能劈开一个多字节字符：先回退尾部 1..3 字节再严格解码，避免整篇退成乱码
+  int n=0,used=len;
+  for(int trim=0;trim<=3&&n<=0;++trim){
+   used=len-trim;
+   if(used<=0)break;
+   n=MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,p,used,nullptr,0);
+  }
+  UINT cp=CP_UTF8,flags=MB_ERR_INVALID_CHARS;
+  if(n<=0){cp=CP_ACP;flags=0;used=len;n=MultiByteToWideChar(cp,flags,p,used,nullptr,0);}
   if(n<=0)return L"";
   std::wstring out(n,L'\0');
-  if(MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,raw.data()+off,static_cast<int>(raw.size()-off),out.data(),n)<=0)
-   MultiByteToWideChar(CP_ACP,0,raw.data()+off,static_cast<int>(raw.size()-off),out.data(),n);
+  auto wrote=MultiByteToWideChar(cp,flags,p,used,out.data(),n);
+  if(wrote<=0)return L"";
+  out.resize(wrote);
   return NormalizeNewlines(out);
  }
  size_t units=(raw.size()-off)/2;if(units==0)return L"";
@@ -350,6 +360,27 @@ std::wstring DecodeNeutralText(std::vector<char> const& raw){
 }
 std::wstring ClampPreviewText(std::wstring const& text,size_t maxChars){if(maxChars==0||text.size()<=maxChars)return text;auto cut=text.substr(0,maxChars);auto nl=cut.rfind(L'\n');if(nl!=std::wstring::npos&&nl>maxChars/2)cut=cut.substr(0,nl);return cut;}
 std::wstring PreviewSizeText(long long bytes){if(bytes<0)bytes=0;wchar_t buf[64]{};if(bytes<1024){swprintf_s(buf,64,L"%lld B",bytes);return buf;}if(bytes<1024LL*1024){swprintf_s(buf,64,L"%.1f KB",bytes/1024.0);return buf;}if(bytes<1024LL*1024*1024){swprintf_s(buf,64,L"%.1f MB",bytes/(1024.0*1024.0));return buf;}swprintf_s(buf,64,L"%.2f GB",bytes/(1024.0*1024.0*1024.0));return buf;}
+int ProgressPercent(long long done,long long total){
+ if(total<=0||done<=0)return 0;
+ if(done>=total)return 100;
+ return static_cast<int>((done*100+total/2)/total);
+}
+int OpOutcome(long long ok,long long failed,bool cancelled){
+ if(cancelled&&ok==0&&failed==0)return 4;
+ if(ok>0&&failed>0)return 2;
+ if(failed>0)return 3;
+ if(ok>0)return 1;
+ return 0;
+}
+bool IsReservedDeviceName(std::wstring const& name){
+ auto dot=name.find_first_of(L".");
+ auto stem=Lower(name.substr(0,dot==std::wstring::npos?name.size():dot));
+ if(stem.empty())return false;
+ static wchar_t const* plain[]{L"con",L"prn",L"aux",L"nul",L"clock$"};
+ for(auto const* p:plain)if(stem==p)return true;
+ if(stem.size()==4&&(stem==L"com1"||stem==L"com2"||stem==L"com3"||stem==L"com4"||stem==L"com5"||stem==L"com6"||stem==L"com7"||stem==L"com8"||stem==L"com9"||stem==L"lpt1"||stem==L"lpt2"||stem==L"lpt3"||stem==L"lpt4"||stem==L"lpt5"||stem==L"lpt6"||stem==L"lpt7"||stem==L"lpt8"||stem==L"lpt9"))return true;
+ return false;
+}
 std::wstring BuildDiagnostics(Layout const& l,std::wstring const& version,std::wstring const& machine,std::wstring const& osBuild,long long today){
  auto b=[](bool v){return v?std::wstring(L"1"):std::wstring(L"0");};
  auto n=[](size_t v){return std::to_wstring(v);};

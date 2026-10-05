@@ -1,6 +1,8 @@
 #include "pch.h"
 #include <shlwapi.h>
 #include <psapi.h>
+#include <thread>
+#include <mutex>
 #include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Microsoft.UI.Input.h>
 #include "DeskWindow.h"
@@ -47,6 +49,15 @@ static MenuFlyoutItem MenuItem(std::wstring const& text,std::function<void()> ru
 template<class F>static void keepCapsuleOpen(DeskWindow* w,F const& f){auto alive=w->alive;f.Opened([alive,w](auto&&,auto&&){if(*alive)w->menuOpen=true;});f.Closed([alive,w](auto&&,auto&&){if(*alive)w->menuOpen=false;});}
 static int Snap(int value,std::vector<int> const& targets,int threshold){int delta=0,best=threshold+1;for(int t:targets){int d=t-value,ad=d<0?-d:d;if(ad<best){best=ad;delta=d;}}return best<=threshold?delta:0;}
 Zone& DeskWindow::Model(){return *std::find_if(owner.layout.zones.begin(),owner.layout.zones.end(),[this](auto const& z){return z.id==id;});}
+struct DeskWindow::OpState{
+ std::atomic<bool> cancel{false},finished{false};
+ std::atomic<long long> done{0},total{0};
+ std::wstring label;
+ std::mutex gate;
+ std::wstring current;
+ std::function<void(shell::CancelFlag const&,shell::ProgressFn const&)> work;
+ std::function<void()> after;
+};
 bool DeskWindow::Exists() const{return std::find_if(owner.layout.zones.begin(),owner.layout.zones.end(),[this](auto const& z){return z.id==id;})!=owner.layout.zones.end();}
 Zone& DeskWindow::View(){auto& m=Model();auto members=GroupMemberIds(owner.layout,m.group);if(members.empty()||m.group.empty())return m;for(auto& z:owner.layout.zones)if(z.id==viewId)return z;viewId=m.id;return m;}
 DeskWindow::DeskWindow(Controller& c,std::wstring key):owner(c),id(std::move(key)){
@@ -69,7 +80,12 @@ auto add=Action(L"\uE710",[this]{Pick();});ToolTipService::SetToolTip(add,box_va
  listHost=ScrollViewer();listPanel=StackPanel();listPanel.Orientation(Orientation::Vertical);listPanel.Spacing(2);listPanel.Padding(Thickness{2,2,2,2});listHost.Content(listPanel);listHost.AllowDrop(true);listHost.Visibility(Visibility::Collapsed);Grid::SetRow(listHost,3);root.Children().Append(listHost);
  listHost.DragOver([this](auto&&,DragEventArgs const& a){a.AcceptedOperation(View().mappedFolder.empty()?(a.DataView().Contains(StandardDataFormats::StorageItems())?DataPackageOperation::Link:DataPackageOperation::Move):DataPackageOperation::None);a.Handled(true);});listHost.Drop([this](auto&&,DragEventArgs const& a){a.Handled(true);if(!View().mappedFolder.empty()){Notify(i18n::Tr(L"映射分区为只读视图，无法拖入。"));return;}Drop(a,View().entries.size());});
  grid.PointerPressed([this](auto&&,Input::PointerRoutedEventArgs const&){FocusBody();});listHost.PointerPressed([this](auto&&,Input::PointerRoutedEventArgs const&){FocusBody();});
- status=TextBlock();status.FontSize(11);status.TextWrapping(TextWrapping::Wrap);status.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,160,160,160}));Grid::SetRow(status,4);root.Children().Append(status);
+ status=TextBlock();status.FontSize(11);status.TextWrapping(TextWrapping::Wrap);status.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,160,160,160}));
+ opBar=ProgressBar();opBar.Minimum(0);opBar.Maximum(100);opBar.Height(4);opBar.ShowError(false);opBar.CornerRadius(CornerRadius{2,2,2,2});opBar.Visibility(Visibility::Collapsed);
+ opCancelBtn=Button();opCancelBtn.Content(box_value(i18n::Tr(L"取消")));opCancelBtn.FontSize(11);opCancelBtn.Padding(Thickness{8,2,8,2});opCancelBtn.Margin(Thickness{8,0,0,0});opCancelBtn.VerticalAlignment(VerticalAlignment::Center);opCancelBtn.Visibility(Visibility::Collapsed);opCancelBtn.Click([this](auto&&,auto&&){CancelOp();});
+ Grid opRow;ColumnDefinition opText;opText.Width(GridLength{1,GridUnitType::Star});opRow.ColumnDefinitions().Append(opText);ColumnDefinition opBtn;opBtn.Width(GridLength{0,GridUnitType::Auto});opRow.ColumnDefinitions().Append(opBtn);Grid::SetColumn(status,0);opRow.Children().Append(status);Grid::SetColumn(opCancelBtn,1);opRow.Children().Append(opCancelBtn);
+ StackPanel footBox;footBox.Orientation(Orientation::Vertical);footBox.Spacing(4);footBox.Children().Append(opBar);footBox.Children().Append(opRow);Grid::SetRow(footBox,4);root.Children().Append(footBox);
+ opTimer=root.DispatcherQueue().CreateTimer();opTimer.Interval(std::chrono::milliseconds(120));opTimer.Tick([this](auto&&,auto&&){OpTick();});
  pinBar=StackPanel();pinBar.Orientation(Orientation::Horizontal);pinBar.Spacing(6);pinBar.Margin(Thickness{10,0,10,10});pinBar.HorizontalAlignment(HorizontalAlignment::Left);Grid::SetRow(pinBar,5);root.Children().Append(pinBar);
  auto members=GroupMemberIds(owner.layout,Model().group);viewId=members.empty()?id:(Model().groupTab<static_cast<int>(members.size())?members[static_cast<size_t>(Model().groupTab)]:members.front());
  pill=Border();pill.CornerRadius(CornerRadius{20,20,20,20});pill.Height(36);pill.Padding(Thickness{10,0,10,0});pill.VerticalAlignment(VerticalAlignment::Center);pill.HorizontalAlignment(HorizontalAlignment::Stretch);Grid::SetRow(pill,1);StackPanel pillBox;pillBox.Orientation(Orientation::Horizontal);pillBox.Spacing(8);pillIcon=Image();pillIcon.Width(20);pillIcon.Height(20);pillGlyph=FontIcon();pillGlyph.FontFamily(FontFamily(L"Segoe Fluent Icons"));pillGlyph.Glyph(L"\uE8B7");pillGlyph.FontSize(16);pillName=TextBlock();pillName.FontSize(ScaledFont(owner.layout.settings.textSize,13));pillName.FontWeight(Windows::UI::Text::FontWeights::SemiBold());pillName.VerticalAlignment(VerticalAlignment::Center);pillName.TextTrimming(TextTrimming::CharacterEllipsis);pillBox.Children().Append(pillGlyph);pillBox.Children().Append(pillIcon);pillBox.Children().Append(pillName);pill.Child(pillBox);FontIcon grip;grip.FontFamily(FontFamily(L"Segoe Fluent Icons"));grip.Glyph(L"\uE7C2");grip.FontSize(14);grip.VerticalAlignment(VerticalAlignment::Center);pillBox.Children().InsertAt(0,grip);pill.Visibility(Visibility::Collapsed);pill.PointerPressed([this](auto&&,Input::PointerRoutedEventArgs const& a)mutable{if(Model().locked){Notify(i18n::Tr(L"分区已锁定：点左上角锁形图标或右键菜单解锁后才能移动。"));a.Handled(true);return;}dragging=true;GetCursorPos(&dragStart);GetWindowRect(hwnd,&dragOrigin);if(!desktop)pill.CapturePointer(a.Pointer());else embedTimer.Start();a.Handled(true);});pill.PointerMoved(DragMove);pill.PointerReleased(EndDrag);pill.PointerCaptureLost(EndDrag);pill.DoubleTapped([this](auto&&,auto&&){SetCapsule(false);Refresh();Place();owner.Save();});pill.ContextFlyout(nullptr);pill.RightTapped([this](auto&&,auto&&){Menu(pill);});root.Children().Append(pill);
@@ -79,7 +95,11 @@ auto add=Action(L"\uE710",[this]{Pick();});ToolTipService::SetToolTip(add,box_va
  SetWindowSubclass(hwnd,Subclass,1,reinterpret_cast<DWORD_PTR>(this));window.Activate();auto presenter=window.AppWindow().Presenter().as<Microsoft::UI::Windowing::OverlappedPresenter>();presenter.SetBorderAndTitleBar(true,false);window.AppWindow().IsShownInSwitchers(false);ApplySettings();Place();
  if(!owner.layout.settings.performance){Storyboard fade;DoubleAnimation alpha;alpha.From(0.0);alpha.To(1.0);alpha.Duration(Duration{std::chrono::milliseconds(220),DurationType::TimeSpan});Storyboard::SetTarget(alpha,root);Storyboard::SetTargetProperty(alpha,L"Opacity");fade.Children().Append(alpha);fade.Begin();}
 }
-DeskWindow::~DeskWindow(){*alive=false;closing=true;if(hoverTimer)hoverTimer.Stop();if(embedTimer)embedTimer.Stop();if(hoverTabTimer)hoverTabTimer.Stop();try{window.Closed(nullptr);}catch(...){}if(IsWindow(hwnd)){RemoveWindowSubclass(hwnd,Subclass,1);window.Close();}}
+DeskWindow::~DeskWindow(){*alive=false;closing=true;if(hoverTimer)hoverTimer.Stop();if(embedTimer)embedTimer.Stop();if(hoverTabTimer)hoverTabTimer.Stop();if(opTimer)opTimer.Stop();
+ // 工作线程只持有共享状态；退出前请求取消并做有界等待，避免进程在 SHFileOperation 中途销毁
+ if(opState){opState->cancel.store(true);for(int i=0;i<60&&!opState->finished.load();++i)Sleep(50);opState.reset();}
+ opRunning=false;
+ try{window.Closed(nullptr);}catch(...){}if(IsWindow(hwnd)){RemoveWindowSubclass(hwnd,Subclass,1);window.Close();}}
 winrt::Microsoft::UI::Xaml::Media::SystemBackdrop MakeBackdrop(int kind){
  if(kind==1)try{return winrt::Microsoft::UI::Xaml::Media::SystemBackdrop{winrt::Microsoft::UI::Xaml::Media::DesktopAcrylicBackdrop()};}catch(...){}
  try{return winrt::Microsoft::UI::Xaml::Media::SystemBackdrop{winrt::Microsoft::UI::Xaml::Media::MicaBackdrop()};}catch(...){return winrt::Microsoft::UI::Xaml::Media::SystemBackdrop{nullptr};}
@@ -170,6 +190,50 @@ void DeskWindow::TapSelect(std::wstring const& path){
  if(ctrl){selAnchor=index;ToggleSel(path);SetFocus(index);SelHint();FocusBody();return;}
  selAnchor=index;selected.clear();selected.push_back(PathKey(path));SetFocus(index);SelHint();
 }
+void DeskWindow::BeginOp(std::wstring const& label,std::function<void(shell::CancelFlag const&,shell::ProgressFn const&)> work,std::function<void()> finish){
+ if(opRunning){Notify(i18n::Tr(L"上一个文件操作还在进行，请稍候或点击“取消”。"));return;}
+ auto st=std::make_shared<OpState>();
+ st->label=label;st->work=std::move(work);st->after=std::move(finish);
+ opState=st;opRunning=true;
+ opBar.Value(0);opBar.Visibility(Visibility::Visible);opCancelBtn.Visibility(Visibility::Visible);opCancelBtn.IsEnabled(true);
+ status.Text(label);
+ std::thread([st]{
+  auto co=CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);
+  try{
+   shell::CancelFlag cancel(st,&st->cancel);
+   shell::ProgressFn prog=[st](long long done,long long total,std::wstring const& cur){st->done.store(done);st->total.store(total);{std::lock_guard<std::mutex>lk(st->gate);st->current=cur;}};
+   st->work(cancel,prog);
+  }catch(...){}
+  st->work=nullptr;
+  st->finished.store(true);
+  if(co==S_OK)CoUninitialize();
+ }).detach();
+ opTimer.Start();
+}
+void DeskWindow::OpTick(){
+ if(!opRunning||!opState){opTimer.Stop();return;}
+ auto st=opState;
+ if(st->finished.load()){
+  opRunning=false;opTimer.Stop();
+  opBar.Visibility(Visibility::Collapsed);opCancelBtn.Visibility(Visibility::Collapsed);
+  opState.reset();
+  auto after=std::move(st->after);
+  if(after)after();
+  return;
+ }
+ long long const done=st->done.load(),total=st->total.load();
+ std::wstring cur;{std::lock_guard<std::mutex>lk(st->gate);cur=st->current;}
+ opBar.Value(static_cast<double>(ProgressPercent(done,total)));
+ std::wstring text=st->label;text+=L" ";text+=std::to_wstring(done);text+=L"/";text+=std::to_wstring(total);
+ if(!cur.empty()){text+=L" · ";text+=cur;}
+ status.Text(text);
+}
+void DeskWindow::CancelOp(){
+ if(!opState)return;
+ opState->cancel.store(true);
+ opCancelBtn.IsEnabled(false);
+ Notify(i18n::Tr(L"正在取消：已完成的条目不会回滚。"));
+}
 std::vector<std::wstring> DeskWindow::ListedPaths(){
  auto& v=View();std::vector<std::wstring> out;
  if(!v.mappedFolder.empty()&&!v.browseFolder.empty()){for(auto const& e:ListMapped(v.browseFolder))out.push_back(e.path);return out;}
@@ -190,6 +254,7 @@ void DeskWindow::CopyClip(bool cut){
  Notify(i18n::TrF(cut?L"已剪切 {0} 项，可在目标分区或资源管理器按 Ctrl+V。":L"已复制 {0} 项，可按 Ctrl+V 粘贴。",{std::to_wstring(paths.size())}));
 }
 void DeskWindow::PasteClip(){
+ if(opRunning){Notify(i18n::Tr(L"上一个文件操作还在进行，请稍候或点击“取消”。"));return;}
  auto paths=shell::ClipPaths();
  if(paths.empty()){Notify(i18n::Tr(L"剪贴板中没有文件。"));return;}
  auto here=TargetFolder();
@@ -202,15 +267,30 @@ void DeskWindow::PasteClip(){
   Notify(i18n::TrF(L"已按引用添加 {0} 个入口，原文件未移动。",{std::to_wstring(added)}));
   return;
  }
- std::vector<std::wstring> made;
- try{made=shell::PasteInto(here);}catch(...){Notify(i18n::Tr(L"粘贴未完成：文件可能被占用或目标文件夹不可写。"));return;}
- if(made.empty()){Notify(i18n::Tr(L"粘贴未完成：文件已在目标文件夹中。"));return;}
- SyncMapped(View());
- selected.clear();for(auto const& p:made)if(selected.size()<50)selected.push_back(PathKey(p));
- Refresh();owner.Save();
- Notify(i18n::TrF(L"已粘贴 {0} 项到「{1}」。",{std::to_wstring(made.size()),shell::Name(here)}));
+ long long const total=static_cast<long long>(paths.size());
+ auto res=std::make_shared<shell::PasteResult>();
+ BeginOp(i18n::TrF(L"正在粘贴 {0} 项…",{std::to_wstring(total)}),
+  [here,res](shell::CancelFlag const& cancel,shell::ProgressFn const& prog){*res=shell::PasteFiles(here,cancel,prog);},
+  [this,guard=alive,res,here,total]{
+   if(!*guard)return;
+   auto& q=View();
+   long long const ok=static_cast<long long>(res->made.size());
+   SyncMapped(q);
+   selected.clear();for(auto const& p:res->made)if(selected.size()<50)selected.push_back(PathKey(p));
+   focusIdx=-1;Refresh();owner.Save();
+   auto state=OpOutcome(ok,res->failed,res->cancelled);
+   std::wstring msg;
+   if(state==3)msg=i18n::Tr(L"粘贴失败：文件可能被占用或目标文件夹不可写。");
+   else if(state==2)msg=i18n::TrF(L"已粘贴 {0} 项，{1} 项失败。",{std::to_wstring(ok),std::to_wstring(res->failed)});
+   else if(!ok)msg=i18n::Tr(res->cancelled?L"已取消粘贴，未复制任何文件。":L"粘贴未完成：文件已在目标文件夹中。");
+   else if(res->skipped)msg=i18n::TrF(L"已粘贴 {0} 项到「{1}」，跳过 {2} 项（已在目标文件夹中）。",{std::to_wstring(ok),shell::Name(here),std::to_wstring(res->skipped)});
+   else msg=i18n::TrF(L"已粘贴 {0} 项到「{1}」。",{std::to_wstring(ok),shell::Name(here)});
+   if(res->cancelled&&ok)msg+=L" "+i18n::TrF(L"已取消剩余 {0} 项。",{std::to_wstring(std::max<long long>(0,total-ok-res->skipped-res->failed))});
+   Notify(msg);
+  });
 }
 void DeskWindow::CreateFolderHere(){
+ if(opRunning){Notify(i18n::Tr(L"上一个文件操作还在进行，请稍候或点击“取消”。"));return;}
  auto here=TargetFolder();
  if(here.empty()){Notify(i18n::Tr(L"普通分区请用「添加文件夹」，映射分区可直接在此新建文件夹。"));return;}
  std::wstring made;
@@ -219,7 +299,7 @@ void DeskWindow::CreateFolderHere(){
  Notify(i18n::TrF(L"已新建文件夹「{0}」。",{shell::Name(made)}));
 }
 void DeskWindow::PreviewSelection(){
- auto list=ListedPaths();
+ auto list=navPaths.empty()?ListedPaths():navPaths;
  if(list.empty()){Notify(i18n::Tr(L"没有可预览的条目。"));return;}
  size_t start=0;
  if(focusIdx>=0&&focusIdx<static_cast<int>(list.size()))start=static_cast<size_t>(focusIdx);
@@ -227,7 +307,7 @@ void DeskWindow::PreviewSelection(){
  owner.ShowPreview(list,start);
 }
 void DeskWindow::PreviewPath(std::wstring const& path){
- auto list=ListedPaths();
+ auto list=navPaths.empty()?ListedPaths():navPaths;
  auto hit=std::find_if(list.begin(),list.end(),[&](auto const& p){return PathKey(p)==PathKey(path);});
  if(hit==list.end()){owner.ShowPreview({path},0);return;}
  owner.ShowPreview(list,static_cast<size_t>(std::distance(list.begin(),hit)));
@@ -235,21 +315,24 @@ void DeskWindow::PreviewPath(std::wstring const& path){
 void DeskWindow::RenameOne(){
  auto paths=OpPaths();
  if(paths.size()!=1){Notify(i18n::Tr(L"请只选中一个条目再重命名。"));return;}
+ if(opRunning){Notify(i18n::Tr(L"上一个文件操作还在进行，请稍候或点击“取消”。"));return;}
  auto path=paths.front();
  TextBox box;box.Text(std::filesystem::path(path).filename().wstring());
  ContentDialog dlg;dlg.Title(box_value(i18n::Tr(L"重命名")));dlg.PrimaryButtonText(i18n::Tr(L"保存"));dlg.CloseButtonText(i18n::Tr(L"取消"));dlg.DefaultButton(ContentDialogButton::Primary);
  StackPanel p;p.Spacing(8);p.MaxWidth(320);p.Children().Append(box);dlg.Content(p);
  try{dlg.XamlRoot(root.XamlRoot());}catch(...){return;}
  auto guard=this->alive;
+ if(opDialog)return;opDialog=true;
  dlg.ShowAsync().Completed([this,guard,path,box](auto&& async,auto&&){
   if(!*guard)return;
+  opDialog=false;
   if(async.GetResults()!=ContentDialogResult::Primary)return;
   auto t=std::wstring(box.Text());
   size_t a=t.find_first_not_of(L" \t");
   if(a==std::wstring::npos)return;
   t=t.substr(a,t.find_last_not_of(L" \t")-a+1);
   auto oldKey=PathKey(path),parent=std::filesystem::path(path).parent_path().wstring();
-  try{shell::RenamePath(path,t);}catch(...){Notify(i18n::Tr(L"重命名未完成：名称重复或含有 \\ / : * ? \" < > |。"));return;}
+  try{shell::RenamePath(path,t);}catch(...){Notify(i18n::Tr(L"重命名未完成：名称重复、是系统保留名，或含有 \\ / : * ? \" < > |。"));return;}
   auto& v=View();for(auto& e:v.entries)if(PathKey(e.path)==oldKey)e.path=parent+L"\\"+t;
   if(!v.mappedFolder.empty())SyncMapped(v);
   selected.clear();focusIdx=-1;Refresh();owner.Save();
@@ -259,28 +342,49 @@ void DeskWindow::RenameOne(){
 void DeskWindow::DeleteSelected(bool permanent){
  auto paths=OpPaths();
  if(paths.empty()){Notify(i18n::Tr(L"请先选中要删除的条目。"));return;}
+ if(opRunning){Notify(i18n::Tr(L"上一个文件操作还在进行，请稍候或点击“取消”。"));return;}
+ long long unrecycled=0;
+ if(!permanent)for(auto const& p:paths)if(!shell::RecycleCapable(p))++unrecycled;
  ContentDialog dlg;
  dlg.Title(box_value(i18n::Tr(permanent?L"彻底删除文件":L"移到回收站")));
  TextBlock msg;msg.Text(i18n::TrF(permanent?L"将直接从磁盘删除 {0} 项，不经过回收站，可能无法找回：{1}":L"将把 {0} 项移到回收站，可从回收站还原：{1}",{std::to_wstring(paths.size()),shell::Name(paths.front())}));
+ if(unrecycled)msg.Text(msg.Text()+L"\n"+i18n::TrF(L"其中 {0} 项所在的卷不支持回收站，会被彻底删除。",{std::to_wstring(unrecycled)}));
  msg.TextWrapping(TextWrapping::Wrap);msg.MaxWidth(320);
  dlg.Content(msg);
  dlg.PrimaryButtonText(i18n::Tr(permanent?L"仍然删除":L"移到回收站"));dlg.CloseButtonText(i18n::Tr(L"取消"));dlg.DefaultButton(ContentDialogButton::Close);
  try{dlg.XamlRoot(root.XamlRoot());}catch(...){return;}
  auto guard=this->alive;
+ if(opDialog)return;opDialog=true;
  dlg.ShowAsync().Completed([this,guard,paths,permanent](auto&& async,auto&&){
   if(!*guard)return;
+  opDialog=false;
   if(async.GetResults()!=ContentDialogResult::Primary)return;
-  try{shell::DeletePaths(paths,permanent);}catch(...){Notify(i18n::Tr(L"删除未完成：文件可能被占用或需要权限。"));return;}
-  auto& v=View();
-  std::vector<std::wstring> keys;for(auto const& p:paths)keys.push_back(PathKey(p));
-  auto hit=[&](auto const& x){return std::find(keys.begin(),keys.end(),PathKey(x.path))!=keys.end();};
-  if(!v.mappedFolder.empty())SyncMapped(v);
-  else{
-   size_t n=std::count_if(v.entries.begin(),v.entries.end(),hit);
-   if(n){owner.PushUndo(i18n::TrF(L"移除 {0} 个已删除条目的入口",{std::to_wstring(n)}));std::erase_if(v.entries,hit);}
-  }
-  selected.clear();focusIdx=-1;Refresh();owner.Save();
-  Notify(i18n::TrF(permanent?L"已彻底删除 {0} 项。":L"已把 {0} 项移到回收站。",{std::to_wstring(paths.size())}));
+  auto res=std::make_shared<shell::DeleteResult>();
+  long long const total=static_cast<long long>(paths.size());
+  BeginOp(i18n::TrF(permanent?L"正在彻底删除 {0} 项…":L"正在移到回收站 {0} 项…",{std::to_wstring(total)}),
+   [paths,permanent,res](shell::CancelFlag const& cancel,shell::ProgressFn const& prog){*res=shell::DeleteFiles(paths,permanent,cancel,prog);},
+   [this,guard,res,permanent,total]{
+   if(!*guard)return;
+   auto& v=View();
+   std::vector<std::wstring> keys;for(auto const& p:res->gone)keys.push_back(PathKey(p));
+   auto hit=[&](auto const& x){return std::find(keys.begin(),keys.end(),PathKey(x.path))!=keys.end();};
+   if(!v.mappedFolder.empty())SyncMapped(v);
+   else{
+    size_t n=std::count_if(v.entries.begin(),v.entries.end(),hit);
+    if(n){owner.PushUndo(i18n::TrF(L"移除 {0} 个已删除条目的入口",{std::to_wstring(n)}));std::erase_if(v.entries,hit);}
+   }
+   selected.clear();focusIdx=-1;Refresh();owner.Save();
+   long long const ok=static_cast<long long>(res->gone.size());
+   auto const state=OpOutcome(ok,res->failed,res->cancelled);
+   std::wstring text;
+   if(state==3)text=i18n::Tr(L"删除未完成：文件可能被占用或需要权限。");
+   else if(state==4)text=i18n::Tr(L"已取消删除，未删除任何文件。");
+   else text=i18n::TrF(permanent?L"已彻底删除 {0} 项。":L"已把 {0} 项移到回收站。",{std::to_wstring(ok)});
+   if(ok&&res->failed)text+=L" "+i18n::TrF(L"{0} 项删除失败。",{std::to_wstring(res->failed)});
+   if(ok&&res->cancelled)text+=L" "+i18n::TrF(L"已取消剩余 {0} 项。",{std::to_wstring(std::max<long long>(0,total-ok-res->failed))});
+   if(ok&&res->nuked)text+=L" "+i18n::TrF(L"其中 {0} 项所在卷没有回收站，已彻底删除。",{std::to_wstring(res->nuked)});
+   Notify(text);
+  });
  });
 }
 winrt::Microsoft::UI::Xaml::Media::Brush DeskWindow::ItemFill(std::wstring const& path){
@@ -309,7 +413,9 @@ void DeskWindow::MoveFocus(int delta){
  SetFocus(NavStep(focusIdx,n,delta));
 }
 void DeskWindow::SelHint(){Notify(selected.empty()?i18n::Tr(L"双击打开 · 右键管理 · 拖拽排序 · 单击后方向键选择"):i18n::TrF(L"已选 {0} 项 · 拖出包含全部选中",{std::to_wstring(selected.size())}));}
-void DeskWindow::OpenFocused(std::wstring const& path){auto& q=View();auto fa=GetFileAttributesW(path.c_str());if(!q.mappedFolder.empty()&&q.browseInPlace&&fa!=INVALID_FILE_ATTRIBUTES&&(fa&FILE_ATTRIBUTE_DIRECTORY)){Navigate(path);return;}try{shell::Open(hwnd,path);}catch(...){Notify(i18n::Tr(L"无法打开目标，请右键重新定位。 "));}}
+void DeskWindow::TryOpen(std::wstring const& path){try{shell::Open(hwnd,path);}catch(...){Notify(i18n::Tr(L"无法打开目标，请右键重新定位。"));}}
+void DeskWindow::TryReveal(std::wstring const& path){try{shell::Reveal(hwnd,path);}catch(...){Notify(i18n::Tr(L"无法定位原文件，目标可能已被移动或删除。"));}}
+void DeskWindow::OpenFocused(std::wstring const& path){auto& q=View();auto fa=GetFileAttributesW(path.c_str());if(!q.mappedFolder.empty()&&q.browseInPlace&&fa!=INVALID_FILE_ATTRIBUTES&&(fa&FILE_ATTRIBUTE_DIRECTORY)){Navigate(path);return;}TryOpen(path);}
 void DeskWindow::OnNavKey(Input::KeyRoutedEventArgs const& a){
  if(capsuleNow||menuOpen||Model().collapsed||title.FocusState()!=FocusState::Unfocused)return;
  auto key=a.Key();bool ctrl=(GetKeyState(VK_CONTROL)&0x8000)!=0;
@@ -360,7 +466,7 @@ void DeskWindow::SetDesktop(bool enabled){Capture();bool was=desktop;if(enabled)
 void DeskWindow::Pick(bool folder){if(!View().mappedFolder.empty()){Notify(i18n::Tr(L"映射分区为只读视图：请在资源管理器中修改文件夹后右键刷新。"));return;}for(auto const& path:shell::Pick(hwnd,folder))AddEntry(View(),path);Refresh();owner.Save();}
 void DeskWindow::RebuildPins(){auto& m=Model();auto& v=View();pinBar.Children().Clear();bool show=!v.pins.empty()&&!m.collapsed;pinBar.Visibility(show?Visibility::Visible:Visibility::Collapsed);if(!show)return;
  for(auto const& p:v.pins){auto const path=p;Button b;b.Width(40);b.Height(40);b.Padding(Thickness{7,7,7,7});b.CornerRadius(CornerRadius{8,8,8,8});b.Background(ThemeBrush(L"CardBackgroundFillColorSecondary",Windows::UI::Color{255,90,90,90}));Image img;img.Width(26);img.Height(26);b.Content(img);shell::LoadIcon(path,img);ToolTipService::SetToolTip(b,box_value(shell::Name(path)));if(GetFileAttributesW(path.c_str())==INVALID_FILE_ATTRIBUTES)b.Opacity(0.35);
-  b.Click([this,path](auto&&,auto&&){if(GetFileAttributesW(path.c_str())==INVALID_FILE_ATTRIBUTES){Notify(i18n::Tr(L"快捷方式目标已不存在。"));return;}shell::Open(hwnd,path);});
+  b.Click([this,path](auto&&,auto&&){if(GetFileAttributesW(path.c_str())==INVALID_FILE_ATTRIBUTES){Notify(i18n::Tr(L"快捷方式目标已不存在。"));return;}TryOpen(path);});
   MenuFlyout fly;fly.Items().Append(MenuItem(i18n::Tr(L"从快捷栏取消钉选"),[this,path]{auto& q=View();std::erase_if(q.pins,[&](auto const& s){return PathKey(s)==PathKey(path);});Refresh();owner.Save();}));keepCapsuleOpen(this,fly);b.ContextFlyout(fly);
   pinBar.Children().Append(b);}
 }
@@ -442,7 +548,7 @@ void DeskWindow::Refresh(){auto& z=Model();auto& v=View();bool bodyFocus=listHos
  std::vector<Entry> const& items=mapped&&!v.browseFolder.empty()?browseItems:v.entries;
  size_t const limit=500,total=items.size();std::erase_if(selected,[&](auto const& k){return !std::any_of(items.begin(),items.end(),[&](auto const& e){return PathKey(e.path)==k;});});
  navPaths.clear();navVis.clear();
- auto itemMenu=[this](std::wstring const& path){MenuFlyout menu;auto& m=View();if(!m.browseFolder.empty())menu.Items().Append(MenuItem(i18n::Tr(L"返回上一级"),[this]{auto& q=View();Navigate(CrumbParent(q.mappedFolder,q.browseFolder));}));menu.Items().Append(MenuItem(i18n::Tr(L"打开"),[this,path]{shell::Open(hwnd,path);}));menu.Items().Append(MenuItem(i18n::Tr(L"快速预览"),[this,path]{PreviewPath(path);}));menu.Items().Append(MenuItem(i18n::Tr(L"定位原文件"),[this,path]{shell::Reveal(hwnd,path);}));
+ auto itemMenu=[this](std::wstring const& path){MenuFlyout menu;auto& m=View();if(!m.browseFolder.empty())menu.Items().Append(MenuItem(i18n::Tr(L"返回上一级"),[this]{auto& q=View();Navigate(CrumbParent(q.mappedFolder,q.browseFolder));}));menu.Items().Append(MenuItem(i18n::Tr(L"打开"),[this,path]{TryOpen(path);}));menu.Items().Append(MenuItem(i18n::Tr(L"快速预览"),[this,path]{PreviewPath(path);}));menu.Items().Append(MenuItem(i18n::Tr(L"定位原文件"),[this,path]{TryReveal(path);}));
  menu.Items().Append(MenuItem(i18n::Tr(L"重命名…"),[this,path]{selected={PathKey(path)};RenameOne();}));
  menu.Items().Append(MenuItem(i18n::Tr(L"删除（回收站）…"),[this,path]{selected={PathKey(path)};DeleteSelected(false);}));keepCapsuleOpen(this,menu);return menu;};
  std::map<std::wstring,size_t> firstIdx;for(size_t i=0;i<v.entries.size();++i)if(!v.entries[i].stack.empty())firstIdx.emplace(v.entries[i].stack,i);

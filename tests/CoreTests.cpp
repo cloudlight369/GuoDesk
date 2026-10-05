@@ -530,6 +530,16 @@ void RunTests(std::filesystem::path const& output){std::ofstream report(output);
  expect(ClampPreviewText(L"line1\nline2\nline3\n",8)==L"line1"&&ClampPreviewText(L"short",8)==L"short"&&ClampPreviewText(L"abcdefghij",0)==L"abcdefghij","ClampPreviewText cuts on a line boundary and leaves short text untouched");
  expect(PreviewSizeText(0)==L"0 B"&&PreviewSizeText(-5)==L"0 B"&&PreviewSizeText(1023)==L"1023 B","PreviewSizeText renders bytes below one kilobyte");
  expect(PreviewSizeText(1536)==L"1.5 KB"&&PreviewSizeText(2LL*1024*1024)==L"2.0 MB"&&PreviewSizeText(3LL*1024*1024*1024+512LL*1024*1024)==L"3.50 GB","PreviewSizeText scales to KB, MB and GB");
+ expect(ProgressPercent(0,10)==0&&ProgressPercent(5,0)==0&&ProgressPercent(-3,10)==0,"ProgressPercent stays zero without a usable total");
+ expect(ProgressPercent(10,10)==100&&ProgressPercent(24,10)==100&&ProgressPercent(1,3)==33&&ProgressPercent(2,3)==67,"ProgressPercent rounds and caps at one hundred");
+ expect(OpOutcome(3,0,false)==1&&OpOutcome(0,0,false)==0&&OpOutcome(0,0,true)==4,"OpOutcome tells success, nothing done and pure cancel apart");
+ expect(OpOutcome(2,1,false)==2&&OpOutcome(0,2,false)==3&&OpOutcome(2,0,true)==1&&OpOutcome(2,1,true)==2,"OpOutcome reports partial success, total failure and cancelled batches");
+ expect(IsReservedDeviceName(L"CON")&&IsReservedDeviceName(L"con.txt")&&IsReservedDeviceName(L"NUL")&&IsReservedDeviceName(L"COM1")&&IsReservedDeviceName(L"lpt9.log")&&IsReservedDeviceName(L"CLOCK$"),"reserved device names are recognised");
+ expect(!IsReservedDeviceName(L"content.txt")&&!IsReservedDeviceName(L"console")&&!IsReservedDeviceName(L"comm1")&&!IsReservedDeviceName(L"lpt0")&&!IsReservedDeviceName(L"lpt10")&&!IsReservedDeviceName(L""),"ordinary names pass the reserved check");
+ {
+  std::vector<char> split3140{'A',(char)0xE4,(char)0xB8,(char)0xAD,(char)0xE2};
+  expect(DecodeNeutralText(split3140)==L"A中","a trailing utf-8 sequence cut by the head read does not corrupt the text");
+ }
 report<<"TOTAL "<<passed<<" passed\n";
 }
 }

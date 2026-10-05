@@ -28,7 +28,7 @@ static std::wstring WebUrl(std::wstring const& q){
  }
  return L"https://www.bing.com/search?q="+enc;
 }
-void SearchWindow::OpenPath(std::wstring const& path){shell::Open(hwnd,path);}
+void SearchWindow::OpenPath(std::wstring const& path){try{shell::Open(hwnd,path);}catch(...){try{hint.Text(i18n::Tr(L"无法打开目标，它可能已被移动或删除。"));}catch(...){}}}
 void SearchWindow::NoteQuery(){
  auto q=std::wstring(query.Text());
  auto& st=owner.layout.settings;

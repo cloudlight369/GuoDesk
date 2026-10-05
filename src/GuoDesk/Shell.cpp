@@ -157,41 +157,73 @@ static std::vector<std::wstring> ExistingNames(std::wstring const& dir){
  FindClose(h);
  return out;
 }
-static int Run(SHFILEOPSTRUCTW& op){
+static int RunOp(SHFILEOPSTRUCTW& op){
  op.hwnd=nullptr;
  op.fFlags|=FOF_SILENT|FOF_NOCONFIRMATION|FOF_NOERRORUI|FOF_MULTIDESTFILES;
  auto r=SHFileOperationW(&op);
  if(r==ERROR_CANCELLED)return 0;
- if(r!=0||op.fAnyOperationsAborted)throw std::runtime_error("file operation failed");
+ if(r!=0||op.fAnyOperationsAborted)return -1;
  return 1;
 }
-std::vector<std::wstring> ClipPaths(){
- if(!IsClipboardFormatAvailable(CF_HDROP))return {};
+static int Run(SHFILEOPSTRUCTW& op){
+ auto r=RunOp(op);
+ if(r==0)throw std::runtime_error("operation cancelled");
+ if(r<0)throw std::runtime_error("file operation failed");
+ return 1;
+}
+// 一次剪贴板会话同时读取文件列表与首选拖放效果：分两次打开会让剪切在两次读取之间被其它程序清掉
+static bool ReadClip(std::vector<std::wstring>& out,bool& move){
+ out.clear();move=false;
+ if(!IsClipboardFormatAvailable(CF_HDROP))return false;
  bool opened=false;
  for(int i=0;i<10;++i){if(OpenClipboard(nullptr)){opened=true;break;}Sleep(40);}
- if(!opened)return {};
- std::vector<std::wstring> out;
+ if(!opened)return false;
  if(HANDLE h=GetClipboardData(CF_HDROP)){
   auto* df=reinterpret_cast<HDROP>(GlobalLock(h));
   if(df){
-   wchar_t buf[4096];
-   for(UINT i=0,n=DragQueryFileW(df,0xffffffff,nullptr,0);i<n;++i){auto len=DragQueryFileW(df,i,buf,4095);if(len)out.emplace_back(buf,len);}
+   for(UINT i=0,n=DragQueryFileW(df,0xffffffff,nullptr,0);i<n;++i){
+    UINT const len=DragQueryFileW(df,i,nullptr,0);
+    if(!len)continue;
+    std::wstring p;
+    try{p.resize(static_cast<size_t>(len)+1);}catch(...){continue;}
+    auto wrote=DragQueryFileW(df,i,p.data(),static_cast<UINT>(p.size()));
+    if(!wrote)continue;
+    p.resize(wrote);
+    out.push_back(std::move(p));
+   }
    GlobalUnlock(h);
   }
  }
+ if(!out.empty()){
+  if(HANDLE e=GetClipboardData(static_cast<UINT>(RegisterClipboardFormatW(L"Preferred DropEffect")))){
+   auto* p=reinterpret_cast<DWORD*>(GlobalLock(e));
+   if(p){move=(*p&DROPEFFECT_MOVE)!=0&&(*p&DROPEFFECT_COPY)==0;GlobalUnlock(e);}
+  }
+ }
  CloseClipboard();
+ return !out.empty();
+}
+std::vector<std::wstring> ClipPaths(){
+ std::vector<std::wstring> out;bool move=false;
+ ReadClip(out,move);
  return out;
 }
 bool HasClipFiles(){return IsClipboardFormatAvailable(CF_HDROP)!=FALSE;}
-bool ClipIsMove(){
- bool move=false;
- if(!HasClipFiles()||!OpenClipboard(nullptr))return move;
- if(HANDLE h=GetClipboardData(static_cast<UINT>(RegisterClipboardFormatW(L"Preferred DropEffect")))){
-  auto* p=reinterpret_cast<DWORD*>(GlobalLock(h));
-  if(p){move=(*p&DROPEFFECT_MOVE)!=0&&(*p&DROPEFFECT_COPY)==0;GlobalUnlock(h);}
+static std::wstring VolumeRoot(std::wstring const& path){
+ auto root=std::filesystem::path(path).root_name().wstring();
+ if(root.empty())return {};
+ if(root.back()!=L'\\'&&root.back()!=L'/')root+=L'\\';
+ return root;
+}
+bool RecycleCapable(std::wstring const& path){
+ auto root=VolumeRoot(path);
+ if(root.empty())return false;
+ switch(GetDriveTypeW(root.c_str())){
+  case DRIVE_FIXED:case DRIVE_REMOVABLE:break;
+  default:return false;
  }
- CloseClipboard();
- return move;
+ auto exists=[&](wchar_t const* name){WIN32_FIND_DATAW fd{};HANDLE h=FindFirstFileW((root+name).c_str(),&fd);if(h==INVALID_HANDLE_VALUE)return false;FindClose(h);return true;};
+ return exists(L"$Recycle.Bin")||exists(L"Recycler");
 }
 void ClipboardCopy(std::vector<std::wstring> const& paths,bool cut){
  if(paths.empty())return;
@@ -214,31 +246,44 @@ void ClipboardCopy(std::vector<std::wstring> const& paths,bool cut){
  }
  CloseClipboard();
 }
-std::vector<std::wstring> PasteInto(std::wstring const& destDir){
- auto sources=ClipPaths();
- if(sources.empty())return {};
+static bool InsideRoot(std::wstring const& root,std::wstring const& path){
+ auto a=TrimTail(PathKey(root)),b=TrimTail(PathKey(path));
+ if(a.size()>=b.size())return false;
+ if(b.compare(0,a.size(),a)!=0)return false;
+ return b[a.size()]==L'\\';
+}
+PasteResult PasteFiles(std::wstring const& destDir,CancelFlag const& cancel,ProgressFn const& progress){
+ PasteResult r;
+ std::vector<std::wstring> sources;bool move=false;
+ if(!ReadClip(sources,move))return r;
  auto dest=TrimTail(std::filesystem::path(destDir).wstring());
- if(dest.empty())return sources;
- auto move=ClipIsMove();
- std::vector<std::wstring> out;
- size_t failed=0;
+ if(dest.empty())throw std::runtime_error("no target folder");
+ auto taken=ExistingNames(dest);
+ long long const total=static_cast<long long>(sources.size());
+ long long done=0;
  for(auto const& src:sources){
+  if(cancel&&cancel->load()){r.cancelled=true;break;}
+  if(progress)progress(done,total,Name(src));
+  ++done;
   try{
    std::filesystem::path p(src);
    auto name=p.filename().wstring();
-   if(name.empty())continue;
-   auto target=dest+L"\\"+name;
-   if(SamePath(src,target)||SamePath(p.parent_path().wstring(),dest))continue;
-   bool dir=std::filesystem::is_directory(p);
-   name=UniqueName(ExistingNames(dest),dir?name:p.stem().wstring(),dir?std::wstring():p.extension().wstring());
-   target=dest+L"\\"+name;
+   if(name.empty()){++r.failed;continue;}
+   if(SamePath(src,dest+L"\\"+name)||SamePath(TrimTail(p.parent_path().wstring()),dest)){++r.skipped;continue;}
+   if(InsideRoot(dest,src)){++r.skipped;continue;}
+   std::error_code ec;bool dir=std::filesystem::is_directory(p,ec);
+   auto unique=UniqueName(taken,dir?name:p.stem().wstring(),dir?std::wstring():p.extension().wstring());
+   auto target=dest+L"\\"+unique;
    auto from=Zipped({src}),to=Zipped({target});
    SHFILEOPSTRUCTW op{};op.wFunc=move?FO_MOVE:FO_COPY;op.pFrom=from.c_str();op.pTo=to.c_str();
-   if(Run(op))out.push_back(target);
-  }catch(...){++failed;}
+   auto res=RunOp(op);
+   if(res==0){r.cancelled=true;break;}
+   if(res<0){++r.failed;continue;}
+   taken.push_back(unique);
+   r.made.push_back(target);
+  }catch(...){++r.failed;}
  }
- if(out.empty()&&failed)throw std::runtime_error("paste failed");
- return out;
+ return r;
 }
 std::wstring CreateFolder(std::wstring const& dir,std::wstring const& baseName){
  auto dest=TrimTail(std::filesystem::path(dir).wstring());
@@ -253,6 +298,7 @@ void RenamePath(std::wstring const& path,std::wstring const& newName){
  while(!name.empty()&&name.front()==L' ')name.erase(name.begin());
  while(!name.empty()&&name.back()==L' ')name.pop_back();
  if(name.empty()||name.back()==L'.'||name.find_first_of(L"\\/:*?\"<>|")!=std::wstring::npos)throw std::runtime_error("invalid name");
+ if(IsReservedDeviceName(name))throw std::runtime_error("reserved device name");
  std::filesystem::path p(path);
  auto target=TrimTail(p.parent_path().wstring())+L"\\"+name;
  if(SamePath(path,target))return;
@@ -260,13 +306,28 @@ void RenamePath(std::wstring const& path,std::wstring const& newName){
  auto from=Zipped({path}),to=Zipped({target});
  SHFILEOPSTRUCTW op{};op.wFunc=FO_RENAME;op.pFrom=from.c_str();op.pTo=to.c_str();
  Run(op);
+ if(GetFileAttributesW(target.c_str())==INVALID_FILE_ATTRIBUTES)throw std::runtime_error("rename did not apply");
 }
-void DeletePaths(std::vector<std::wstring> const& paths,bool permanent){
- if(paths.empty())return;
- auto from=Zipped(paths);
- SHFILEOPSTRUCTW op{};
- op.wFunc=FO_DELETE;op.pFrom=from.c_str();
- if(!permanent)op.fFlags|=FOF_ALLOWUNDO;
- Run(op);
+DeleteResult DeleteFiles(std::vector<std::wstring> const& paths,bool permanent,CancelFlag const& cancel,ProgressFn const& progress){
+ DeleteResult r;
+ long long const total=static_cast<long long>(paths.size());
+ long long done=0;
+ for(auto const& src:paths){
+  if(cancel&&cancel->load()){r.cancelled=true;break;}
+  if(progress)progress(done,total,Name(src));
+  ++done;
+  // 请求回收站但所在卷不支持时，SHFileOperation 会在无提示下永久删除，必须先判定并如实告知
+  bool undo=!permanent&&RecycleCapable(src);
+  if(!permanent&&!undo)++r.nuked;
+  auto from=Zipped({src});
+  SHFILEOPSTRUCTW op{};
+  op.wFunc=FO_DELETE;op.pFrom=from.c_str();
+  if(undo)op.fFlags|=FOF_ALLOWUNDO;
+  auto res=RunOp(op);
+  if(res==0){r.cancelled=true;break;}
+  if(res<0){++r.failed;continue;}
+  r.gone.push_back(src);
+ }
+ return r;
 }
 }

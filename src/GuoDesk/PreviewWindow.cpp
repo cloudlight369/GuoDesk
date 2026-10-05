@@ -1,5 +1,6 @@
 #include "pch.h"
 #include <shlwapi.h>
+#include <limits>
 #include "PreviewWindow.h"
 #include "DeskWindow.h"
 #include "Shell.h"
@@ -46,25 +47,31 @@ static BitmapImage PreviewPictureImage(std::wstring const& path){
   return img;
  }catch(...){return nullptr;}
 }
+static size_t const kPreviewFolderScan=2000;
 static void PreviewFolderBody(std::wstring const& folder,std::wstring& body,long long& count){
  count=0;std::vector<std::wstring> names;std::error_code ec;
- std::filesystem::directory_iterator it(std::filesystem::path(folder),ec);
+ std::filesystem::directory_iterator it(std::filesystem::path(folder),std::filesystem::directory_options::skip_permission_denied,ec);
  if(ec){body=i18n::Tr(L"读取失败：文件夹不可访问。");return;}
- for(auto const& e:it){
+ bool scanned=false;
+ // 显式 increment(ec)：枚举中途遇到权限或目录被删时不会抛异常打断界面线程
+ for(;it!=std::filesystem::directory_iterator();it.increment(ec)){
+  if(ec){ec.clear();break;}
   ++count;
+  if(count>static_cast<long long>(kPreviewFolderScan)){scanned=true;break;}
   if(names.size()>=kPreviewFolderRows)continue;
-  std::error_code de;auto line=e.path().filename().wstring();
+  std::error_code de;auto line=it->path().filename().wstring();
   if(line.empty())continue;
-  if(e.is_directory(de))line+=L'\\';
+  if(it->is_directory(de))line+=L'\\';
   names.push_back(std::move(line));
  }
  std::sort(names.begin(),names.end(),[](std::wstring const& a,std::wstring const& b){bool da=a.back()==L'\\',db=b.back()==L'\\';if(da!=db)return da;return a<b;});
  for(auto const& n:names){body+=n;body+=L'\n';}
- if(body.empty())body=i18n::Tr(L"文件夹为空");
+ if(body.empty()){body=count?i18n::Tr(L"读取失败：文件夹不可访问。"):i18n::Tr(L"文件夹为空");}
  else if(count>static_cast<long long>(names.size())){body+=L'\n';body+=i18n::TrF(L"（仅显示前 {0} 项）",{std::to_wstring(names.size())});}
+ if(scanned){body+=L'\n';body+=i18n::TrF(L"（内容过多，只扫描了前 {0} 项）",{std::to_wstring(kPreviewFolderScan)});}
 }
 void PreviewWindow::Render(){
- if(index>=paths.size())return;
+ if(closing||!IsWindow(hwnd)||index>=paths.size())return;
  auto const& path=paths[index];
  std::error_code dec;bool dir=false;
  try{dir=std::filesystem::is_directory(std::filesystem::path(path),dec);}catch(...){}
@@ -107,7 +114,7 @@ void PreviewWindow::Render(){
  try{if(showPicture)picture.StartBringIntoView();else if(!body.empty())bodyText.StartBringIntoView();}catch(...){}
 }
 void PreviewWindow::Step(int delta){
- if(paths.empty())return;
+ if(closing||!IsWindow(hwnd)||paths.empty())return;
  int n=NavStep(static_cast<int>(index),static_cast<int>(paths.size()),delta);
  if(n<0)return;
  index=static_cast<size_t>(n);
@@ -122,6 +129,16 @@ void PreviewWindow::OnKey(Input::KeyRoutedEventArgs const& a){
  if(key==Windows::System::VirtualKey::Escape||key==Windows::System::VirtualKey::Space||key==Windows::System::VirtualKey::Back){a.Handled(true);RequestClose();return;}
  if(key==Windows::System::VirtualKey::Down||key==Windows::System::VirtualKey::Right){a.Handled(true);Step(1);return;}
  if(key==Windows::System::VirtualKey::Up||key==Windows::System::VirtualKey::Left){a.Handled(true);Step(-1);return;}
+ if(key==Windows::System::VirtualKey::PageUp||key==Windows::System::VirtualKey::PageDown){
+  a.Handled(true);
+  try{
+   float const nan=std::numeric_limits<float>::quiet_NaN();
+   double const page=scroller.ViewportHeight()*0.8;
+   double next=scroller.VerticalOffset()+(key==Windows::System::VirtualKey::PageUp?-page:page);
+   scroller.ChangeView(nan,static_cast<float>(std::max(0.0,next)),nan);
+  }catch(...){}
+  return;
+ }
  if(key==Windows::System::VirtualKey::Enter){a.Handled(true);if(index<paths.size())try{shell::Open(hwnd,paths[index]);}catch(...){}return;}
 }
 PreviewWindow::PreviewWindow(Controller& c):owner(c){
@@ -139,6 +156,7 @@ PreviewWindow::PreviewWindow(Controller& c):owner(c){
  scroller=ScrollViewer();scroller.Padding(Thickness{14,12,14,12});scroller.HorizontalScrollBarVisibility(ScrollBarVisibility::Auto);scroller.VerticalScrollBarVisibility(ScrollBarVisibility::Auto);
  auto inner=Grid();
  picture=Image();picture.Stretch(Stretch::Uniform);picture.HorizontalAlignment(HorizontalAlignment::Center);picture.VerticalAlignment(VerticalAlignment::Center);
+ picture.ImageFailed([this](auto&&,ExceptionRoutedEventArgs const&){try{picture.Source(BitmapImage{nullptr});picture.Visibility(Visibility::Collapsed);bodyText.Text(i18n::Tr(L"无法预览此图片，按 Enter 用默认程序打开。"));bodyText.Visibility(Visibility::Visible);}catch(...){}});
  bodyText=TextBlock();bodyText.FontFamily(FontFamily(L"Consolas"));bodyText.FontSize(ScaledFont(owner.layout.settings.textSize,12.5));bodyText.Foreground(ThemeBrush(L"TextFillColorPrimary",Windows::UI::Color{255,24,24,24}));bodyText.TextWrapping(TextWrapping::NoWrap);bodyText.IsTextSelectionEnabled(true);
  inner.Children().Append(picture);inner.Children().Append(bodyText);
  scroller.Content(inner);
@@ -148,9 +166,13 @@ PreviewWindow::PreviewWindow(Controller& c):owner(c){
  window.Content(root);
  window.Closed([this](auto&&,auto&&){if(closing)return;closing=true;RequestClose();});
  POINT cur{};GetCursorPos(&cur);
- HMONITOR hm=MonitorFromPoint(cur,MONITOR_DEFAULTTONEAREST);MONITORINFOEXW mi{sizeof(mi)};GetMonitorInfoW(hm,&mi);
+ MONITORINFOEXW mi{sizeof(mi)};
+ if(!GetMonitorInfoW(MonitorFromPoint(cur,MONITOR_DEFAULTTONEAREST),&mi))mi.rcWork=RECT{0,0,1920,1080};
+ int const dpi=GetDpiForWindow(hwnd)?GetDpiForWindow(hwnd):96;
  int aw=mi.rcWork.right-mi.rcWork.left,ah=mi.rcWork.bottom-mi.rcWork.top;
- int w=std::min(860,std::max(420,aw*3/5)),h=std::min(640,std::max(320,ah*3/5));
+ int capW=MulDiv(860,dpi,96),capH=MulDiv(640,dpi,96);
+ int floorW=std::min(MulDiv(360,dpi,96),aw),floorH=std::min(MulDiv(260,dpi,96),ah);
+ int w=std::max(floorW,std::min(capW,aw*3/5)),h=std::max(floorH,std::min(capH,ah*3/5));
  SetWindowPos(hwnd,nullptr,mi.rcWork.left+(aw-w)/2,mi.rcWork.top+(ah-h)/2,w,h,SWP_NOZORDER);
 }
 void PreviewWindow::Open(std::vector<std::wstring> const& list,size_t start){
