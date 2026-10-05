@@ -18,6 +18,8 @@ class DeskWindow {
  winrt::Microsoft::UI::Xaml::Controls::StackPanel listPanel{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::StackPanel pinBar{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::Button chevron{nullptr};
+ winrt::Microsoft::UI::Xaml::Controls::Button lockBtn{nullptr};
+ RECT lockRect{}; bool lockRevert=false;
  winrt::Microsoft::UI::Xaml::Controls::Border pill{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::TextBlock pillName{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::Image pillIcon{nullptr};
@@ -27,7 +29,7 @@ class DeskWindow {
  winrt::Microsoft::UI::Dispatching::DispatcherQueueTimer hoverTabTimer{nullptr}; int hoverTabPending=-1;
  void HoverTabSwitch(int index);
  static LRESULT CALLBACK Subclass(HWND,UINT,WPARAM,LPARAM,UINT_PTR,DWORD_PTR);
- std::vector<RECT> Peers(); void SnapResize(RECT&,int); void DragUpdate();
+ std::vector<RECT> Peers(); void SnapResize(RECT&,int); void CapResize(RECT&,int); void DragUpdate(); void SetCollapsed(bool on); void ToggleLock(); RECT WorkRect();
  winrt::fire_and_forget Drop(winrt::Microsoft::UI::Xaml::DragEventArgs args,size_t position,std::wstring stackId={});
  void Menu(winrt::Microsoft::UI::Xaml::FrameworkElement const& target);
  void EntryMenu(std::wstring const& path,std::wstring const& key,std::wstring const& stackId);
