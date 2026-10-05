@@ -536,6 +536,10 @@ void RunTests(std::filesystem::path const& output){std::ofstream report(output);
  expect(OpOutcome(2,1,false)==2&&OpOutcome(0,2,false)==3&&OpOutcome(2,0,true)==1&&OpOutcome(2,1,true)==2,"OpOutcome reports partial success, total failure and cancelled batches");
  expect(DropOperation(false,false)==0&&DropOperation(false,true)==0,"a normal zone keeps the reference drop whatever the modifier says");
  expect(DropOperation(true,false)==1&&DropOperation(true,true)==2,"a mapped zone copies on drop and moves on Shift+drop");
+ expect(SelfNesting(root,root)&&SelfNesting(root,root+L"\\"),"a folder dropped onto itself counts as nesting");
+ expect(SelfNesting(root,inner),"a folder dropped into its own subfolder counts as nesting");
+ expect(!SelfNesting(inner,root)&&!SelfNesting(root,elsewhere),"moving a subfolder up to its parent and unrelated folders are not nesting");
+ expect(!SelfNesting(L"",root)&&!SelfNesting(root,L""),"empty source or destination is never nesting");
  expect(IsReservedDeviceName(L"CON")&&IsReservedDeviceName(L"con.txt")&&IsReservedDeviceName(L"NUL")&&IsReservedDeviceName(L"COM1")&&IsReservedDeviceName(L"lpt9.log")&&IsReservedDeviceName(L"CLOCK$"),"reserved device names are recognised");
  expect(!IsReservedDeviceName(L"content.txt")&&!IsReservedDeviceName(L"console")&&!IsReservedDeviceName(L"comm1")&&!IsReservedDeviceName(L"lpt0")&&!IsReservedDeviceName(L"lpt10")&&!IsReservedDeviceName(L""),"ordinary names pass the reserved check");
  {

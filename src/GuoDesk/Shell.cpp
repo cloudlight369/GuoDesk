@@ -261,16 +261,13 @@ void ClipboardCopy(std::vector<std::wstring> const& paths,bool cut){
  }
  CloseClipboard();
 }
-static bool InsideRoot(std::wstring const& root,std::wstring const& path){
- auto a=TrimTail(PathKey(root)),b=TrimTail(PathKey(path));
- if(a.size()>=b.size())return false;
- if(b.compare(0,a.size(),a)!=0)return false;
- return b[a.size()]==L'\\';
-}
 TransferResult TransferFiles(std::vector<std::wstring> const& sources,std::wstring const& destDir,bool move,CancelFlag const& cancel,ProgressFn const& progress){
  TransferResult r;
  auto dest=TrimTail(std::filesystem::path(destDir).wstring());
  if(dest.empty()){r.failed=static_cast<long long>(sources.size());return r;}
+ // 目标目录被外部删掉时绝不能交给 SHFileOperationW：单个源文件+不存在的 pTo 会被当成"复制并重命名"，凭空造出一个以目标路径命名的文件
+ std::error_code dec;
+ if(!std::filesystem::is_directory(destDir,dec)){r.failed=static_cast<long long>(sources.size());return r;}
  auto taken=ExistingNames(dest);
  long long const total=static_cast<long long>(sources.size());
  long long done=0;
@@ -281,11 +278,12 @@ TransferResult TransferFiles(std::vector<std::wstring> const& sources,std::wstri
   try{
    std::filesystem::path p(src);
    auto name=p.filename().wstring();
+   std::error_code ec;bool dir=std::filesystem::is_directory(p,ec);
    if(name.empty())++r.failed;
    // 同目录粘贴、把文件夹放进它自己的子目录：跳过而不是自我嵌套副本
-   else if(SamePath(src,dest+L"\\"+name)||SamePath(TrimTail(p.parent_path().wstring()),dest)||InsideRoot(dest,src))++r.skipped;
+   else if(SamePath(src,dest+L"\\"+name)||SamePath(TrimTail(p.parent_path().wstring()),dest)||UnderRoot(dest,src))++r.skipped;
+   else if(dir&&SelfNesting(src,destDir))++r.skipped;
    else{
-    std::error_code ec;bool dir=std::filesystem::is_directory(p,ec);
     auto unique=UniqueName(taken,dir?name:p.stem().wstring(),dir?std::wstring():p.extension().wstring());
     auto target=dest+L"\\"+unique;
     auto from=Zipped({src}),to=Zipped({target});

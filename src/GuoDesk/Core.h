@@ -113,6 +113,7 @@ bool AddEntry(Zone& zone,std::wstring const& path);
 std::vector<Entry> ListMapped(std::wstring const& folder);
 void SyncMapped(Zone& zone);
 bool UnderRoot(std::wstring const& root,std::wstring const& path);
+bool SelfNesting(std::wstring const& source,std::wstring const& destDir);
 std::vector<std::wstring> Crumbs(std::wstring const& root,std::wstring const& current);
 std::wstring CrumbParent(std::wstring const& root,std::wstring const& current);
 void Clamp(Zone& zone,RECT const& area);
