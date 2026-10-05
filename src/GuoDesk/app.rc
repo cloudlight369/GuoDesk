@@ -5,8 +5,8 @@
 IDI_GUODESK ICON "app.ico"
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 3,12,0,0
- PRODUCTVERSION 3,12,0,0
+ FILEVERSION 3,12,1,0
+ PRODUCTVERSION 3,12,1,0
  FILEFLAGSMASK 0x3fL
  FILEFLAGS 0x0L
  FILEOS VOS_NT_WINDOWS32
@@ -19,12 +19,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "cloudlight369"
             VALUE "FileDescription", "GuoDesk Desktop Zones"
-            VALUE "FileVersion", "3.12.0.0"
+            VALUE "FileVersion", "3.12.1.0"
             VALUE "InternalName", "GuoDesk"
             VALUE "LegalCopyright", "MIT License"
             VALUE "OriginalFilename", "GuoDesk.exe"
             VALUE "ProductName", "GuoDesk"
-            VALUE "ProductVersion", "3.12.0.0"
+            VALUE "ProductVersion", "3.12.1.0"
         END
     END
     BLOCK "VarFileInfo"

@@ -166,7 +166,10 @@ static int Run(SHFILEOPSTRUCTW& op){
  return 1;
 }
 std::vector<std::wstring> ClipPaths(){
- if(!IsClipboardFormatAvailable(CF_HDROP)||!OpenClipboard(nullptr))return {};
+ if(!IsClipboardFormatAvailable(CF_HDROP))return {};
+ bool opened=false;
+ for(int i=0;i<10;++i){if(OpenClipboard(nullptr)){opened=true;break;}Sleep(40);}
+ if(!opened)return {};
  std::vector<std::wstring> out;
  if(HANDLE h=GetClipboardData(CF_HDROP)){
   auto* df=reinterpret_cast<HDROP>(GlobalLock(h));
@@ -218,19 +221,23 @@ std::vector<std::wstring> PasteInto(std::wstring const& destDir){
  if(dest.empty())return sources;
  auto move=ClipIsMove();
  std::vector<std::wstring> out;
+ size_t failed=0;
  for(auto const& src:sources){
-  std::filesystem::path p(src);
-  auto name=p.filename().wstring();
-  if(name.empty())continue;
-  auto target=dest+L"\\"+name;
-  if(SamePath(src,target)||SamePath(p.parent_path().wstring(),dest))continue;
-  bool dir=std::filesystem::is_directory(p);
-  name=UniqueName(ExistingNames(dest),dir?name:p.stem().wstring(),dir?std::wstring():p.extension().wstring());
-  target=dest+L"\\"+name;
-  auto from=Zipped({src}),to=Zipped({target});
-  SHFILEOPSTRUCTW op{};op.wFunc=move?FO_MOVE:FO_COPY;op.pFrom=from.c_str();op.pTo=to.c_str();
-  if(Run(op))out.push_back(std::move(target));
+  try{
+   std::filesystem::path p(src);
+   auto name=p.filename().wstring();
+   if(name.empty())continue;
+   auto target=dest+L"\\"+name;
+   if(SamePath(src,target)||SamePath(p.parent_path().wstring(),dest))continue;
+   bool dir=std::filesystem::is_directory(p);
+   name=UniqueName(ExistingNames(dest),dir?name:p.stem().wstring(),dir?std::wstring():p.extension().wstring());
+   target=dest+L"\\"+name;
+   auto from=Zipped({src}),to=Zipped({target});
+   SHFILEOPSTRUCTW op{};op.wFunc=move?FO_MOVE:FO_COPY;op.pFrom=from.c_str();op.pTo=to.c_str();
+   if(Run(op))out.push_back(target);
+  }catch(...){++failed;}
  }
+ if(out.empty()&&failed)throw std::runtime_error("paste failed");
  return out;
 }
 std::wstring CreateFolder(std::wstring const& dir,std::wstring const& baseName){
@@ -245,7 +252,7 @@ void RenamePath(std::wstring const& path,std::wstring const& newName){
  std::wstring name=newName;
  while(!name.empty()&&name.front()==L' ')name.erase(name.begin());
  while(!name.empty()&&name.back()==L' ')name.pop_back();
- if(name.empty()||name.find_first_of(L"\\/:*?\"<>|")!=std::wstring::npos)throw std::runtime_error("invalid name");
+ if(name.empty()||name.back()==L'.'||name.find_first_of(L"\\/:*?\"<>|")!=std::wstring::npos)throw std::runtime_error("invalid name");
  std::filesystem::path p(path);
  auto target=TrimTail(p.parent_path().wstring())+L"\\"+name;
  if(SamePath(path,target))return;

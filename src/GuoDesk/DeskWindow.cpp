@@ -201,7 +201,8 @@ void DeskWindow::PasteClip(){
   Notify(i18n::TrF(L"已按引用添加 {0} 个入口，原文件未移动。",{std::to_wstring(added)}));
   return;
  }
- auto made=shell::PasteInto(here);
+ std::vector<std::wstring> made;
+ try{made=shell::PasteInto(here);}catch(...){Notify(i18n::Tr(L"粘贴未完成：文件可能被占用或目标文件夹不可写。"));return;}
  if(made.empty()){Notify(i18n::Tr(L"粘贴未完成：文件已在目标文件夹中。"));return;}
  SyncMapped(View());
  selected.clear();for(auto const& p:made)if(selected.size()<50)selected.push_back(PathKey(p));
@@ -211,7 +212,8 @@ void DeskWindow::PasteClip(){
 void DeskWindow::CreateFolderHere(){
  auto here=TargetFolder();
  if(here.empty()){Notify(i18n::Tr(L"普通分区请用「添加文件夹」，映射分区可直接在此新建文件夹。"));return;}
- auto made=shell::CreateFolder(here,i18n::Tr(L"新建文件夹"));
+ std::wstring made;
+ try{made=shell::CreateFolder(here,i18n::Tr(L"新建文件夹"));}catch(...){Notify(i18n::Tr(L"新建文件夹未完成：目标文件夹不可写或已被删除。"));return;}
  SyncMapped(View());Refresh();owner.Save();
  Notify(i18n::TrF(L"已新建文件夹「{0}」。",{shell::Name(made)}));
 }
@@ -418,7 +420,8 @@ void DeskWindow::EntryMenu(std::wstring const& path,std::wstring const& key,std:
  if(idx==2){owner.PushUndo(i18n::TrF(L"批量移除 {0} 个入口",{std::to_wstring(selected.size())}));size_t n=0;for(auto const& k:selected){size_t before=v.entries.size();std::erase_if(v.entries,[&](auto const& x){return PathKey(x.path)==k;});n+=before-v.entries.size();}selected.clear();Refresh();owner.Save();Notify(i18n::TrF(L"已批量移除 {0} 个入口。",{std::to_wstring(n)}));return;}
 }
 void DeskWindow::Refresh(){auto& z=Model();auto& v=View();bool bodyFocus=listHost.FocusState()!=FocusState::Unfocused||grid.FocusState()!=FocusState::Unfocused;if(z.group.empty())viewId=z.id;if(lockBtn)lockBtn.Visibility(z.locked?Visibility::Visible:Visibility::Collapsed);root.Opacity(static_cast<double>(v.opacity)/100.0);if(capsuleNow){barGrid.Visibility(Visibility::Collapsed);grid.Visibility(Visibility::Collapsed);listHost.Visibility(Visibility::Collapsed);status.Visibility(Visibility::Collapsed);tabsPanel.Visibility(Visibility::Collapsed);if(crumbBar)crumbBar.Visibility(Visibility::Collapsed);pinBar.Visibility(Visibility::Collapsed);pill.Visibility(Visibility::Visible);unsigned cp=z.color?ZoneColorRGB(z.color):0;pill.Background(cp?Brush(SolidColorBrush(Windows::UI::Color{176,(uint8_t)((cp>>16)&0xFF),(uint8_t)((cp>>8)&0xFF),(uint8_t)(cp&0xFF)})):ThemeBrush(L"CardBackgroundFillColorDefault",Windows::UI::Color{255,60,60,60}));pillName.Text(z.name);window.Title(L"GuoDesk · "+z.name);bool has=!z.entries.empty();pillIcon.Visibility(has?Visibility::Visible:Visibility::Collapsed);pillGlyph.Visibility(has?Visibility::Collapsed:Visibility::Visible);if(has)shell::LoadIcon(z.entries.front().path,pillIcon);return;}RebuildTabs();barGrid.Visibility(Visibility::Visible);unsigned ht=v.color?ZoneColorRGB(v.color):0;barGrid.Background(ht?Brush(SolidColorBrush(Windows::UI::Color{64,(uint8_t)((ht>>16)&0xFF),(uint8_t)((ht>>8)&0xFF),(uint8_t)(ht&0xFF)})):Brush{nullptr});status.Visibility(Visibility::Visible);if(title.FocusState()==FocusState::Unfocused)title.Text(v.name);window.Title(L"GuoDesk · "+v.name);grid.Visibility(z.collapsed||v.viewMode!=L"grid"?Visibility::Collapsed:Visibility::Visible);listHost.Visibility(z.collapsed||v.viewMode!=L"list"?Visibility::Collapsed:Visibility::Visible);FontIcon chevronGlyph;chevronGlyph.FontFamily(FontFamily(L"Segoe Fluent Icons"));chevronGlyph.Glyph(z.collapsed?L"\uE70D":L"\uE70E");chevronGlyph.FontSize(16);chevron.Content(chevronGlyph);grid.Items().Clear();listPanel.Children().Clear();bool compact=owner.layout.settings.compact;bool mapped=!v.mappedFolder.empty();
- if(mapped&&(!v.browseInPlace||(!v.browseFolder.empty()&&!UnderRoot(v.mappedFolder,v.browseFolder))))v.browseFolder.clear();
+ std::error_code bec;
+ if(mapped&&(!v.browseInPlace||(!v.browseFolder.empty()&&(!UnderRoot(v.mappedFolder,v.browseFolder)||!std::filesystem::is_directory(std::filesystem::path(v.browseFolder),bec)))))v.browseFolder.clear();
  std::vector<Entry> browseItems;if(mapped&&!v.browseFolder.empty())browseItems=ListMapped(v.browseFolder);
  std::vector<Entry> const& items=mapped&&!v.browseFolder.empty()?browseItems:v.entries;
  size_t const limit=500,total=items.size();std::erase_if(selected,[&](auto const& k){return !std::any_of(items.begin(),items.end(),[&](auto const& e){return PathKey(e.path)==k;});});
