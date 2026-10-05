@@ -59,7 +59,7 @@ public:
  DeskWindow(Controller&,std::wstring);
  ~DeskWindow();
  Zone& Model();
- void Refresh(); void Place(); void Show(); void SetDesktop(bool enabled); void Raise(bool on); void Capture();
+ void Refresh(); void Place(); void Show(); void SetDesktop(bool enabled); void Raise(bool on); void EmbedRetry(); void Capture();
  void ApplySettings();
  void Notify(std::wstring const& text);
  void Pick(bool folder=false);
@@ -70,7 +70,7 @@ class SettingsWindow;
 class Controller {
  HWND messageWindow{}; NOTIFYICONDATAW tray{}; UINT taskbarCreated{}; HANDLE mutex{}; bool quitting=false; std::map<std::wstring,std::wstring> mappedStamp; std::shared_ptr<bool> syncAlive{std::make_shared<bool>(true)};
  HHOOK ctrlHook=nullptr;
- HHOOK revealHook=nullptr; bool revealShowing=false; bool raising=false;
+ HHOOK revealHook=nullptr; bool revealShowing=false; bool raising=false; std::vector<HWND> revealSet;
  static LRESULT CALLBACK MessageProc(HWND,UINT,WPARAM,LPARAM);
  void AddTray(); void InstallCtrlHook(); void RemoveCtrlHook(); void InstallRevealHook(); void RemoveRevealHook(); void RevealBegin(); void RevealEnd(); void StartRaise(); void EndRaise();
 public:
