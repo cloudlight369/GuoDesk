@@ -29,7 +29,7 @@ class DeskWindow {
  winrt::Microsoft::UI::Dispatching::DispatcherQueueTimer hoverTabTimer{nullptr}; int hoverTabPending=-1;
  void HoverTabSwitch(int index);
  static LRESULT CALLBACK Subclass(HWND,UINT,WPARAM,LPARAM,UINT_PTR,DWORD_PTR);
- std::vector<RECT> Peers(); void SnapResize(RECT&,int); void CapResize(RECT&,int); void DragUpdate(); void SetCollapsed(bool on); void ToggleLock(); RECT WorkRect();
+ std::vector<RECT> Peers(); void SnapResize(RECT&,int); void CapResize(RECT&,int); void DragUpdate(); void SetCollapsed(bool on); void Reanchor(int fromHeight,int toHeight); void ToggleLock(); RECT WorkRect();
  winrt::fire_and_forget Drop(winrt::Microsoft::UI::Xaml::DragEventArgs args,size_t position,std::wstring stackId={});
  void Menu(winrt::Microsoft::UI::Xaml::FrameworkElement const& target);
  void EntryMenu(std::wstring const& path,std::wstring const& key,std::wstring const& stackId);
@@ -61,6 +61,7 @@ public:
  DeskWindow(Controller&,std::wstring);
  ~DeskWindow();
  Zone& Model();
+ bool Exists() const;
  void Refresh(); void Place(); void Show(); void SetDesktop(bool enabled); void Raise(bool on); void EmbedRetry(); void Capture();
  void ApplySettings();
  void Notify(std::wstring const& text);

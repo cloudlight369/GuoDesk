@@ -16,7 +16,7 @@ void SyncMapped(Zone& z){if(z.mappedFolder.empty())return;std::error_code ec;if(
 bool UnderRoot(std::wstring const& root,std::wstring const& path){if(root.empty()||path.empty())return false;auto rk=PathKey(root),pk=PathKey(path);if(pk.size()<=rk.size())return false;return pk.starts_with(rk)&&pk[rk.size()]==L'\\';}
 std::vector<std::wstring> Crumbs(std::wstring const& root,std::wstring const& current){std::vector<std::wstring> out{root};if(!UnderRoot(root,current))return out;auto rk=PathKey(root),pk=PathKey(current);std::wstring rel=pk.substr(rk.size()+1);std::wstring acc=root;size_t pos=0;while(pos<rel.size()){auto next=rel.find(L'\\',pos);auto part=rel.substr(pos,next==std::wstring::npos?std::wstring::npos:next-pos);acc+=L'\\'+part;out.push_back(acc);if(next==std::wstring::npos)break;pos=next+1;}return out;}
 std::wstring CrumbParent(std::wstring const& root,std::wstring const& current){auto chain=Crumbs(root,current);if(chain.size()<2)return L"";if(chain.back()==PathKey(root)||chain.back()==root)return L"";return chain[chain.size()-2];}
-void Clamp(Zone& z,RECT const& a){int w=std::max(1L,a.right-a.left),h=std::max(1L,a.bottom-a.top); z.width=std::clamp(z.width,std::min(280,w),w); z.height=std::clamp(z.height,std::min(160,h),h); z.x=std::clamp(z.x,static_cast<int>(a.left),static_cast<int>(a.right)-z.width); z.y=std::clamp(z.y,static_cast<int>(a.top),static_cast<int>(a.bottom)-(z.collapsed?std::min(64,h):z.height));}
+void Clamp(Zone& z,RECT const& a){int w=std::max(1L,a.right-a.left),h=std::max(1L,a.bottom-a.top); z.width=std::clamp(z.width,std::min(280,w),w); z.height=std::clamp(z.height,std::min(160,h),h); z.x=std::clamp(z.x,static_cast<int>(a.left),static_cast<int>(a.right)-z.width); int view=z.collapsed?std::min(88,h):ZoneExpandedHeight(z.height,z.maxHeight,h); z.y=std::clamp(z.y,static_cast<int>(a.top),static_cast<int>(a.bottom)-view);}
 static std::wstring Lower(std::wstring v){CharLowerBuffW(v.data(),static_cast<DWORD>(v.size()));return v;}
 static std::wstring ExtOf(std::wstring const& path){auto p=std::filesystem::path(path).extension().wstring();if(!p.empty()&&p.front()==L'.')p.erase(p.begin());return Lower(p);}
 void DefaultRules(Layout& l){if(!l.rules.empty())return;auto push=[&](std::wstring name,std::vector<std::wstring> exts){l.rules.push_back({NewId(),std::move(name),std::move(exts),{},L""});};push(i18n::Tr(L"文档"),{L"doc",L"docx",L"pdf",L"txt",L"ppt",L"pptx",L"xls",L"xlsx",L"md",L"csv"});push(i18n::Tr(L"图片"),{L"png",L"jpg",L"jpeg",L"gif",L"bmp",L"webp"});push(i18n::Tr(L"安装包"),{L"exe",L"msi",L"zip",L"rar",L"7z"});}
@@ -291,7 +291,8 @@ int NextOpacityStep(int v){if(v>=90)return 80;if(v>=70)return 60;if(v>=50)return
 int ClampBackdropKind(int v){return v==1?1:0;}
 int ClampExpandDir(int v){return v<0||v>3?0:v;}
 int ClampMaxHeight(int v){return v<25?0:(v>100?100:v);}
-int ZoneExpandedHeight(int height,int maxHeight,int workHeight){if(maxHeight<=0||workHeight<=0)return height;int cap=static_cast<int>(static_cast<long long>(workHeight)*maxHeight/100);if(cap<88)cap=88;return height>cap?cap:height;}
+int ZoneCapHeight(int maxHeight,int workHeight){if(maxHeight<=0||workHeight<=0)return 1<<20;int cap=static_cast<int>(static_cast<long long>(workHeight)*maxHeight/100);return cap<88?88:cap;}
+int ZoneExpandedHeight(int height,int maxHeight,int workHeight){int cap=ZoneCapHeight(maxHeight,workHeight);return height>cap?cap:height;}
 int ZoneAnchorTop(int top,int height,int targetHeight,int dir,int workTop,int workBottom){
  int bottom=top+height;int t=ClampExpandDir(dir);int next;
  if(t==1)next=top;

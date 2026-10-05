@@ -72,6 +72,7 @@ int NextOpacityStep(int v);
 int ClampBackdropKind(int v);
 int ClampExpandDir(int v);
 int ClampMaxHeight(int v);
+int ZoneCapHeight(int maxHeight,int workHeight);
 int ZoneExpandedHeight(int height,int maxHeight,int workHeight);
 int ZoneAnchorTop(int top,int height,int targetHeight,int dir,int workTop,int workBottom);
 wchar_t const* ExpandDirName(int dir);
