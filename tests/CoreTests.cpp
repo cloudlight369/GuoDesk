@@ -534,6 +534,8 @@ void RunTests(std::filesystem::path const& output){std::ofstream report(output);
  expect(ProgressPercent(10,10)==100&&ProgressPercent(24,10)==100&&ProgressPercent(1,3)==33&&ProgressPercent(2,3)==67,"ProgressPercent rounds and caps at one hundred");
  expect(OpOutcome(3,0,false)==1&&OpOutcome(0,0,false)==0&&OpOutcome(0,0,true)==4,"OpOutcome tells success, nothing done and pure cancel apart");
  expect(OpOutcome(2,1,false)==2&&OpOutcome(0,2,false)==3&&OpOutcome(2,0,true)==1&&OpOutcome(2,1,true)==2,"OpOutcome reports partial success, total failure and cancelled batches");
+ expect(DropOperation(false,false)==0&&DropOperation(false,true)==0,"a normal zone keeps the reference drop whatever the modifier says");
+ expect(DropOperation(true,false)==1&&DropOperation(true,true)==2,"a mapped zone copies on drop and moves on Shift+drop");
  expect(IsReservedDeviceName(L"CON")&&IsReservedDeviceName(L"con.txt")&&IsReservedDeviceName(L"NUL")&&IsReservedDeviceName(L"COM1")&&IsReservedDeviceName(L"lpt9.log")&&IsReservedDeviceName(L"CLOCK$"),"reserved device names are recognised");
  expect(!IsReservedDeviceName(L"content.txt")&&!IsReservedDeviceName(L"console")&&!IsReservedDeviceName(L"comm1")&&!IsReservedDeviceName(L"lpt0")&&!IsReservedDeviceName(L"lpt10")&&!IsReservedDeviceName(L""),"ordinary names pass the reserved check");
  {

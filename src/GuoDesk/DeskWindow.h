@@ -32,6 +32,10 @@ class DeskWindow {
  static LRESULT CALLBACK Subclass(HWND,UINT,WPARAM,LPARAM,UINT_PTR,DWORD_PTR);
  std::vector<RECT> Peers(); void SnapResize(RECT&,int); void CapResize(RECT&,int); void DragUpdate(); void SetCollapsed(bool on); void Reanchor(int fromHeight,int toHeight); void ToggleLock(); RECT WorkRect();
  winrt::fire_and_forget Drop(winrt::Microsoft::UI::Xaml::DragEventArgs args,size_t position,std::wstring stackId={});
+ // 映射分区拖入：真实复制（按住 Shift 则移动）进当前浏览的文件夹
+ void DropIntoFolder(std::vector<std::wstring> const& paths,std::wstring const& dest,bool move);
+ void OnZoneDragOver(winrt::Microsoft::UI::Xaml::DragEventArgs const& args);
+ void OnZoneDrop(winrt::Microsoft::UI::Xaml::DragEventArgs const& args);
  void Menu(winrt::Microsoft::UI::Xaml::FrameworkElement const& target);
  void EntryMenu(std::wstring const& path,std::wstring const& key,std::wstring const& stackId);
  void RebuildTabs(); void SwitchTab(int index);

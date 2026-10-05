@@ -365,6 +365,7 @@ int ProgressPercent(long long done,long long total){
  if(done>=total)return 100;
  return static_cast<int>((done*100+total/2)/total);
 }
+int DropOperation(bool mappedZone,bool shiftPressed){return mappedZone?(shiftPressed?2:1):0;}
 int OpOutcome(long long ok,long long failed,bool cancelled){
  if(cancelled&&ok==0&&failed==0)return 4;
  if(ok>0&&failed>0)return 2;

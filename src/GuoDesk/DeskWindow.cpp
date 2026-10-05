@@ -76,9 +76,9 @@ auto add=Action(L"\uE710",[this]{Pick();});ToolTipService::SetToolTip(add,box_va
  lockBtn=Action(L"\uE72E",[this]{ToggleLock();});ToolTipService::SetToolTip(lockBtn,box_value(i18n::Tr(L"分区已锁定 · 点击解锁")));lockBtn.PointerMoved(DragMove);lockBtn.Visibility(Visibility::Collapsed);actions.Children().InsertAt(1,lockBtn);
  auto more=Action(L"\uE712",[]{});ToolTipService::SetToolTip(more,box_value(i18n::Tr(L"更多操作")));more.Click([this,more](auto&&,auto&&){Menu(more);});more.PointerMoved(DragMove);actions.Children().Append(more);bar.Children().Append(actions);root.Children().Append(bar);
  grid=GridView();grid.SelectionMode(ListViewSelectionMode::None);grid.IsItemClickEnabled(false);grid.AllowDrop(true);grid.HorizontalAlignment(HorizontalAlignment::Stretch);Grid::SetRow(grid,3);root.Children().Append(grid);
- grid.DragOver([this](auto&&,DragEventArgs const& a){a.AcceptedOperation(!View().mappedFolder.empty()?DataPackageOperation::None:(a.DataView().Contains(StandardDataFormats::StorageItems())?DataPackageOperation::Link:DataPackageOperation::Move));a.Handled(true);});grid.Drop([this](auto&&,DragEventArgs const& a){if(!View().mappedFolder.empty()){Notify(i18n::Tr(L"映射分区为只读视图，无法拖入。"));return;}Drop(a,View().entries.size());});
+ grid.DragOver([this](auto&&,DragEventArgs const& a){OnZoneDragOver(a);});grid.Drop([this](auto&&,DragEventArgs const& a){OnZoneDrop(a);});
  listHost=ScrollViewer();listPanel=StackPanel();listPanel.Orientation(Orientation::Vertical);listPanel.Spacing(2);listPanel.Padding(Thickness{2,2,2,2});listHost.Content(listPanel);listHost.AllowDrop(true);listHost.Visibility(Visibility::Collapsed);Grid::SetRow(listHost,3);root.Children().Append(listHost);
- listHost.DragOver([this](auto&&,DragEventArgs const& a){a.AcceptedOperation(View().mappedFolder.empty()?(a.DataView().Contains(StandardDataFormats::StorageItems())?DataPackageOperation::Link:DataPackageOperation::Move):DataPackageOperation::None);a.Handled(true);});listHost.Drop([this](auto&&,DragEventArgs const& a){a.Handled(true);if(!View().mappedFolder.empty()){Notify(i18n::Tr(L"映射分区为只读视图，无法拖入。"));return;}Drop(a,View().entries.size());});
+ listHost.DragOver([this](auto&&,DragEventArgs const& a){OnZoneDragOver(a);});listHost.Drop([this](auto&&,DragEventArgs const& a){OnZoneDrop(a);});
  grid.PointerPressed([this](auto&&,Input::PointerRoutedEventArgs const&){FocusBody();});listHost.PointerPressed([this](auto&&,Input::PointerRoutedEventArgs const&){FocusBody();});
  status=TextBlock();status.FontSize(11);status.TextWrapping(TextWrapping::Wrap);status.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,160,160,160}));
  opBar=ProgressBar();opBar.Minimum(0);opBar.Maximum(100);opBar.Height(4);opBar.ShowError(false);opBar.CornerRadius(CornerRadius{2,2,2,2});opBar.Visibility(Visibility::Collapsed);
@@ -197,7 +197,7 @@ void DeskWindow::BeginOp(std::wstring const& label,std::function<void(shell::Can
  opState=st;opRunning=true;
  opBar.Value(0);opBar.Visibility(Visibility::Visible);opCancelBtn.Visibility(Visibility::Visible);opCancelBtn.IsEnabled(true);
  status.Text(label);
- std::thread([st]{
+ auto body=[st]{
   auto co=CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);
   try{
    shell::CancelFlag cancel(st,&st->cancel);
@@ -207,7 +207,15 @@ void DeskWindow::BeginOp(std::wstring const& label,std::function<void(shell::Can
   st->work=nullptr;
   st->finished.store(true);
   if(co==S_OK)CoUninitialize();
- }).detach();
+ };
+ // 线程创建失败（资源耗尽）时必须复位互斥标志，否则此后所有文件操作都会被"上一个还在进行"挡死
+ try{std::thread(body).detach();}
+ catch(...){
+  opRunning=false;opState.reset();
+  opBar.Visibility(Visibility::Collapsed);opCancelBtn.Visibility(Visibility::Collapsed);
+  Notify(i18n::Tr(L"无法启动后台任务：系统资源不足，请稍候重试。"));
+  return;
+ }
  opTimer.Start();
 }
 void DeskWindow::OpTick(){
@@ -255,22 +263,22 @@ void DeskWindow::CopyClip(bool cut){
 }
 void DeskWindow::PasteClip(){
  if(opRunning){Notify(i18n::Tr(L"上一个文件操作还在进行，请稍候或点击“取消”。"));return;}
- auto paths=shell::ClipPaths();
- if(paths.empty()){Notify(i18n::Tr(L"剪贴板中没有文件。"));return;}
+ auto clip=shell::ReadClipFiles();
+ if(clip.paths.empty()){Notify(i18n::Tr(clip.busy?L"剪贴板正被其它程序占用，请稍候重试。":L"剪贴板中没有文件。"));return;}
  auto here=TargetFolder();
  if(here.empty()){
   auto& v=View();
-  owner.PushUndo(i18n::TrF(L"粘贴 {0} 个入口到分区「{1}」",{std::to_wstring(paths.size()),v.name}));
+  owner.PushUndo(i18n::TrF(L"粘贴 {0} 个入口到分区「{1}」",{std::to_wstring(clip.paths.size()),v.name}));
   int added=0;
-  for(auto const& p:paths){if(std::any_of(v.entries.begin(),v.entries.end(),[&](auto const& x){return PathKey(x.path)==PathKey(p);}))continue;if(AddEntry(v,p))++added;}
+  for(auto const& p:clip.paths){if(std::any_of(v.entries.begin(),v.entries.end(),[&](auto const& x){return PathKey(x.path)==PathKey(p);}))continue;if(AddEntry(v,p))++added;}
   Refresh();owner.Save();
   Notify(i18n::TrF(L"已按引用添加 {0} 个入口，原文件未移动。",{std::to_wstring(added)}));
   return;
  }
- long long const total=static_cast<long long>(paths.size());
- auto res=std::make_shared<shell::PasteResult>();
+ long long const total=static_cast<long long>(clip.paths.size());
+ auto res=std::make_shared<shell::TransferResult>();
  BeginOp(i18n::TrF(L"正在粘贴 {0} 项…",{std::to_wstring(total)}),
-  [here,res](shell::CancelFlag const& cancel,shell::ProgressFn const& prog){*res=shell::PasteFiles(here,cancel,prog);},
+  [clip,here,res](shell::CancelFlag const& cancel,shell::ProgressFn const& prog){*res=shell::TransferFiles(clip.paths,here,clip.move,cancel,prog);},
   [this,guard=alive,res,here,total]{
    if(!*guard)return;
    auto& q=View();
@@ -343,8 +351,7 @@ void DeskWindow::DeleteSelected(bool permanent){
  auto paths=OpPaths();
  if(paths.empty()){Notify(i18n::Tr(L"请先选中要删除的条目。"));return;}
  if(opRunning){Notify(i18n::Tr(L"上一个文件操作还在进行，请稍候或点击“取消”。"));return;}
- long long unrecycled=0;
- if(!permanent)for(auto const& p:paths)if(!shell::RecycleCapable(p))++unrecycled;
+ long long unrecycled=permanent?0:shell::CountNonRecyclable(paths);
  ContentDialog dlg;
  dlg.Title(box_value(i18n::Tr(permanent?L"彻底删除文件":L"移到回收站")));
  TextBlock msg;msg.Text(i18n::TrF(permanent?L"将直接从磁盘删除 {0} 项，不经过回收站，可能无法找回：{1}":L"将把 {0} 项移到回收站，可从回收站还原：{1}",{std::to_wstring(paths.size()),shell::Name(paths.front())}));
@@ -570,8 +577,8 @@ void DeskWindow::Refresh(){auto& z=Model();auto& v=View();bool bodyFocus=listHos
   front.PointerPressed([this](auto&&,Input::PointerRoutedEventArgs const&){FocusBody();});
   front.DoubleTapped([this,sid](auto&&,auto&&){expandedStack=sid;Refresh();});
   if(!mapped)front.DragStarting([this,sid,vkey=v.id](auto&&,DragStartingEventArgs const& a){a.Data().SetText(L"guodesk-stack:"+vkey+L"|"+sid);a.Data().RequestedOperation(DataPackageOperation::Move);});
-  front.DragOver([mapped](auto&&,DragEventArgs const& a){a.AcceptedOperation(mapped?DataPackageOperation::None:(a.DataView().Contains(StandardDataFormats::StorageItems())?DataPackageOperation::Link:DataPackageOperation::Move));a.Handled(true);});
-  if(!mapped)front.Drop([this,at,sid](auto&&,DragEventArgs const& a){a.Handled(true);Drop(a,at,sid);});
+  front.DragOver([this,mapped](auto&&,DragEventArgs const& a){if(mapped)OnZoneDragOver(a);else a.AcceptedOperation(a.DataView().Contains(StandardDataFormats::StorageItems())?DataPackageOperation::Link:DataPackageOperation::Move);a.Handled(true);});
+  front.Drop([this,mapped,at,sid](auto&&,DragEventArgs const& a){a.Handled(true);if(mapped){OnZoneDrop(a);return;}Drop(a,at,sid);});
   grid.Items().Append(wrap);RegisterNav(path,front,false);};
  for(size_t i=0;i<std::min(total,limit);++i){auto const& e=items[i];auto path=e.path,key=e.id;auto index=i;bool exists=GetFileAttributesW(path.c_str())!=INVALID_FILE_ATTRIBUTES;
   if(v.viewMode!=L"list"&&!e.stack.empty()&&expandedStack!=e.stack){if(!rendered.count(e.stack)){renderPile(e.stack,i);rendered.insert(e.stack);}continue;}
@@ -588,8 +595,8 @@ void DeskWindow::Refresh(){auto& z=Model();auto& v=View();bool bodyFocus=listHos
    Border tile;tile.Width(TW[tier]);tile.Height(TH[tier]);tile.Padding(Thickness{4,4,4,4});tile.CornerRadius(CornerRadius{8,8,8,8});tile.Background(ItemFill(path));tile.CanDrag(!mapped);tile.AllowDrop(true);ToolTipService::SetToolTip(tile,box_value(path));tile.PointerEntered([weak=make_weak(tile),this](auto&&,auto&&){if(auto t=weak.get())t.Background(ThemeBrush(L"CardBackgroundFillColorSecondary",Windows::UI::Color{255,80,80,80}));});tile.PointerExited([weak=make_weak(tile),path,this](auto&&,auto&&){if(auto t=weak.get())t.Background(ItemFill(path));});tile.Tapped([this,path](auto&&,Input::TappedRoutedEventArgs const& t){t.Handled(true);TapSelect(path);});StackPanel content;content.Spacing(5);Image icon;icon.Width(TI[tier]);icon.Height(TI[tier]);content.Children().Append(icon);shell::LoadIcon(path,icon);TextBlock label;label.Text((exists?L"":L"⚠ ")+shell::Name(path));label.FontSize(ScaledFont(owner.layout.settings.textSize,12));label.TextAlignment(TextAlignment::Center);label.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,180,180,180}));if(v.nameLines==0)label.Visibility(Visibility::Collapsed);else if(v.nameLines==1){label.TextWrapping(TextWrapping::NoWrap);label.TextTrimming(TextTrimming::CharacterEllipsis);label.MaxHeight(18);}else{label.TextWrapping(TextWrapping::Wrap);label.MaxHeight(36);}content.Children().Append(label);tile.Child(content);
    tile.DoubleTapped([this,path](auto&&,auto&&){OpenFocused(path);});
    if(!mapped)tile.DragStarting([key](auto&&,DragStartingEventArgs const& a){a.Data().SetText(L"guodesk-entry:"+key);a.Data().RequestedOperation(DataPackageOperation::Move);});
-   tile.DragOver([mapped](auto&&,DragEventArgs const& a){a.AcceptedOperation(mapped?DataPackageOperation::None:(a.DataView().Contains(StandardDataFormats::StorageItems())?DataPackageOperation::Link:DataPackageOperation::Move));a.Handled(true);});
-   if(!mapped)tile.Drop([this,index,sid=e.stack](auto&&,DragEventArgs const& a){a.Handled(true);Drop(a,index,sid);});
+   tile.DragOver([this,mapped](auto&&,DragEventArgs const& a){if(mapped)OnZoneDragOver(a);else a.AcceptedOperation(a.DataView().Contains(StandardDataFormats::StorageItems())?DataPackageOperation::Link:DataPackageOperation::Move);a.Handled(true);});
+   tile.Drop([this,mapped,index,sid=e.stack](auto&&,DragEventArgs const& a){a.Handled(true);if(mapped){OnZoneDrop(a);return;}Drop(a,index,sid);});
    if(mapped)tile.ContextFlyout(itemMenu(path));else tile.ContextRequested([this,path,key,sid=e.stack](auto&&,auto&& a){a.Handled(true);EntryMenu(path,key,sid);});AttachDrag(tile,path);grid.Items().Append(tile);RegisterNav(path,tile,true);}
  }
  if(focusIdx>=static_cast<int>(navPaths.size()))focusIdx=static_cast<int>(navPaths.size())-1;
@@ -598,7 +605,40 @@ void DeskWindow::Refresh(){auto& z=Model();auto& v=View();bool bodyFocus=listHos
  if(mapped){std::wstring here=v.browseFolder.empty()?v.mappedFolder:v.browseFolder;std::wstring head=total==0?i18n::Tr(L"映射文件夹为空或不可访问"):i18n::TrF(L"映射视图（只读）· {0} · 共 {1} 项",{shell::Name(here),std::to_wstring(total)});if(total>limit)head+=i18n::TrF(L" · 已显示前 {0} 项",{std::to_wstring(limit)});if(v.browseInPlace)head+=i18n::Tr(L" · 双击文件夹可进入");Notify(head+i18n::Tr(L" · 右键更多"));}
  else Notify(v.entries.empty()?i18n::Tr(L"拖入文件、文件夹或应用快捷方式 · 原文件保持原位"):selected.empty()?i18n::Tr(L"双击打开 · 右键管理 · 拖拽排序 · 单击后方向键选择"):i18n::TrF(L"已选 {0} 项 · 拖出包含全部选中",{std::to_wstring(selected.size())}));
  RebuildPins();if(bodyFocus)FocusBody();}
-fire_and_forget DeskWindow::Drop(DragEventArgs a,size_t position,std::wstring stackId){auto deferral=a.GetDeferral();auto weak=winrt::make_weak(root);auto key=viewId;auto* controller=&owner;try{auto data=a.DataView();auto zoneOf=[&](std::wstring const& kid)->Zone*{auto it=std::find_if(controller->layout.zones.begin(),controller->layout.zones.end(),[&](auto const& z){return z.id==kid;});return it==controller->layout.zones.end()?nullptr:&*it;};if(data.Contains(StandardDataFormats::StorageItems())){auto items=co_await data.GetStorageItemsAsync();if(auto zt=zoneOf(key))for(auto const& item:items)if(!item.Path().empty()){auto pk=PathKey(std::wstring(item.Path()));if(AddEntry(*zt,std::wstring(item.Path()))&&!stackId.empty())for(auto& e:zt->entries)if(PathKey(e.path)==pk)e.stack=stackId;}}else if(data.Contains(StandardDataFormats::Text())){std::wstring text(co_await data.GetTextAsync());if(text.starts_with(L"guodesk-entry:")){auto eid=text.substr(14);controller->MoveEntry(eid,key,position);if(!stackId.empty())if(auto zt=zoneOf(key))AssignStack(*zt,eid,stackId);}else if(text.starts_with(L"guodesk-stack:")){auto rest=text.substr(14);auto bar=rest.find(L'|');if(bar!=std::wstring::npos)MoveStack(controller->layout,rest.substr(bar+1),rest.substr(0,bar),key);}}if(auto live=weak.get())live.DispatcherQueue().TryEnqueue([controller]{controller->Refresh();controller->Save();});}catch(...){if(auto live=weak.get())MessageBoxW(nullptr,i18n::Tr(L"无法添加拖入项目。").c_str(),L"GuoDesk",MB_OK);}deferral.Complete();}
+fire_and_forget DeskWindow::Drop(DragEventArgs a,size_t position,std::wstring stackId){auto deferral=a.GetDeferral();auto weak=winrt::make_weak(root);auto key=viewId;auto* controller=&owner;auto dest=TargetFolder();bool mapped=!dest.empty();bool move=(GetAsyncKeyState(VK_SHIFT)&0x8000)!=0;try{auto data=a.DataView();auto zoneOf=[&](std::wstring const& kid)->Zone*{auto it=std::find_if(controller->layout.zones.begin(),controller->layout.zones.end(),[&](auto const& z){return z.id==kid;});return it==controller->layout.zones.end()?nullptr:&*it;};if(data.Contains(StandardDataFormats::StorageItems())){auto items=co_await data.GetStorageItemsAsync();if(mapped){std::vector<std::wstring> paths;for(auto const& item:items)if(!item.Path().empty())paths.push_back(std::wstring(item.Path()));if(!paths.empty())if(auto live=weak.get())live.DispatcherQueue().TryEnqueue([this,guard=alive,paths=std::move(paths),dest,move]{if(!*guard)return;DropIntoFolder(paths,dest,move);});}else if(auto zt=zoneOf(key))for(auto const& item:items)if(!item.Path().empty()){auto pk=PathKey(std::wstring(item.Path()));if(AddEntry(*zt,std::wstring(item.Path()))&&!stackId.empty())for(auto& e:zt->entries)if(PathKey(e.path)==pk)e.stack=stackId;}}else if(data.Contains(StandardDataFormats::Text())){std::wstring text(co_await data.GetTextAsync());if(text.starts_with(L"guodesk-entry:")){auto eid=text.substr(14);controller->MoveEntry(eid,key,position);if(!stackId.empty())if(auto zt=zoneOf(key))AssignStack(*zt,eid,stackId);}else if(text.starts_with(L"guodesk-stack:")){auto rest=text.substr(14);auto bar=rest.find(L'|');if(bar!=std::wstring::npos)MoveStack(controller->layout,rest.substr(bar+1),rest.substr(0,bar),key);}}if(auto live=weak.get())live.DispatcherQueue().TryEnqueue([controller]{controller->Refresh();controller->Save();});}catch(...){if(auto live=weak.get())MessageBoxW(nullptr,i18n::Tr(L"无法添加拖入项目。").c_str(),L"GuoDesk",MB_OK);}deferral.Complete();}
+void DeskWindow::OnZoneDragOver(DragEventArgs const& a){
+ // 映射分区只接受文件负载（真实落盘），普通分区保持"拖入=按引用加入口"的语义
+ auto data=a.DataView();bool storage=data.Contains(StandardDataFormats::StorageItems());
+ if(!View().mappedFolder.empty()){
+  int const op=DropOperation(true,(GetAsyncKeyState(VK_SHIFT)&0x8000)!=0);
+  a.AcceptedOperation(!storage?DataPackageOperation::None:(op==2?DataPackageOperation::Move:DataPackageOperation::Copy));
+ }else a.AcceptedOperation(storage?DataPackageOperation::Link:DataPackageOperation::Move);
+ a.Handled(true);
+}
+void DeskWindow::OnZoneDrop(DragEventArgs const& a){a.Handled(true);Drop(a,View().entries.size());}
+void DeskWindow::DropIntoFolder(std::vector<std::wstring> const& paths,std::wstring const& dest,bool move){
+ if(paths.empty()||dest.empty())return;
+ if(opRunning){Notify(i18n::Tr(L"上一个文件操作还在进行，请稍候或点击“取消”。"));return;}
+ long long const total=static_cast<long long>(paths.size());
+ auto res=std::make_shared<shell::TransferResult>();
+ BeginOp(i18n::TrF(move?L"正在移动 {0} 项到映射文件夹…":L"正在复制 {0} 项到映射文件夹…",{std::to_wstring(total)}),
+  [paths,dest,move,res](shell::CancelFlag const& cancel,shell::ProgressFn const& prog){*res=shell::TransferFiles(paths,dest,move,cancel,prog);},
+  [this,guard=alive,res,dest,total,move]{
+   if(!*guard)return;
+   long long const ok=static_cast<long long>(res->made.size());
+   auto const state=OpOutcome(ok,res->failed,res->cancelled);
+   std::wstring text;
+   if(state==3)text=i18n::Tr(move?L"移动未完成：文件可能被占用或目标文件夹不可写。":L"复制未完成：文件可能被占用或目标文件夹不可写。");
+   else if(state==4)text=i18n::Tr(move?L"已取消移动，未移动任何文件。":L"已取消复制，未复制任何文件。");
+   else if(!ok)text=i18n::Tr(L"没有新增副本（项目已在目标文件夹中）。");
+   else if(state==2)text=i18n::TrF(move?L"已移动 {0} 项，{1} 项失败。":L"已复制 {0} 项，{1} 项失败。",{std::to_wstring(ok),std::to_wstring(res->failed)});
+   else text=i18n::TrF(move?L"已移动 {0} 项到「{1}」。":L"已复制 {0} 项到「{1}」。",{std::to_wstring(ok),shell::Name(dest)});
+   if(ok&&res->skipped)text+=L" "+i18n::TrF(L"跳过 {0} 项（已在目标文件夹中）。",{std::to_wstring(res->skipped)});
+   if(ok&&res->cancelled)text+=L" "+i18n::TrF(L"已取消剩余 {0} 项。",{std::to_wstring(std::max<long long>(0,total-ok-res->skipped-res->failed))});
+   SyncMapped(View());Refresh();
+   Notify(text);
+  });
+}
 LRESULT CALLBACK DeskWindow::Subclass(HWND h,UINT msg,WPARAM w,LPARAM l,UINT_PTR,DWORD_PTR data){auto* self=reinterpret_cast<DeskWindow*>(data);if(!self->Exists())return DefSubclassProc(h,msg,w,l);if(msg==WM_NCCALCSIZE&&w&&self->desktop)return 0;if(msg==WM_NCHITTEST&&self->Model().locked){auto res=DefSubclassProc(h,msg,w,l);if(res>=HTLEFT&&res<=HTBOTTOMRIGHT)return HTCLIENT;return res;}if(msg==WM_ENTERSIZEMOVE){self->lockRevert=self->Model().locked;if(self->lockRevert)GetWindowRect(h,&self->lockRect);}if(msg==WM_SIZING&&l){auto* rr=reinterpret_cast<RECT*>(l);if(!self->Model().locked)self->SnapResize(*rr,static_cast<int>(w));self->CapResize(*rr,static_cast<int>(w));return TRUE;}if(msg==WM_EXITSIZEMOVE){if(self->lockRevert){self->lockRevert=false;SetWindowPos(h,nullptr,self->lockRect.left,self->lockRect.top,self->lockRect.right-self->lockRect.left,self->lockRect.bottom-self->lockRect.top,SWP_NOZORDER|SWP_NOACTIVATE);self->Notify(i18n::Tr(L"分区已锁定：位置与尺寸已还原。"));}self->Capture();self->owner.Save();}if(msg==WM_DISPLAYCHANGE)self->Place();if(msg==WM_DPICHANGED){auto* rect=reinterpret_cast<RECT*>(l);SetWindowPos(h,nullptr,rect->left,rect->top,rect->right-rect->left,rect->bottom-rect->top,SWP_NOZORDER|SWP_NOACTIVATE);self->Capture();self->Place();self->owner.Save();}return DefSubclassProc(h,msg,w,l);}
 }
 

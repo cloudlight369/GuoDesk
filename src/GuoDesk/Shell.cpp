@@ -172,12 +172,13 @@ static int Run(SHFILEOPSTRUCTW& op){
  return 1;
 }
 // 一次剪贴板会话同时读取文件列表与首选拖放效果：分两次打开会让剪切在两次读取之间被其它程序清掉
-static bool ReadClip(std::vector<std::wstring>& out,bool& move){
+// 0=取到内容 1=剪贴板没有文件 2=剪贴板正被其它程序占用
+static int ReadClip(std::vector<std::wstring>& out,bool& move){
  out.clear();move=false;
- if(!IsClipboardFormatAvailable(CF_HDROP))return false;
+ if(!IsClipboardFormatAvailable(CF_HDROP))return 1;
  bool opened=false;
  for(int i=0;i<10;++i){if(OpenClipboard(nullptr)){opened=true;break;}Sleep(40);}
- if(!opened)return false;
+ if(!opened)return 2;
  if(HANDLE h=GetClipboardData(CF_HDROP)){
   auto* df=reinterpret_cast<HDROP>(GlobalLock(h));
   if(df){
@@ -201,12 +202,13 @@ static bool ReadClip(std::vector<std::wstring>& out,bool& move){
   }
  }
  CloseClipboard();
- return !out.empty();
+ return out.empty()?1:0;
 }
-std::vector<std::wstring> ClipPaths(){
- std::vector<std::wstring> out;bool move=false;
- ReadClip(out,move);
- return out;
+ClipFiles ReadClipFiles(){
+ ClipFiles c;bool move=false;
+ auto r=ReadClip(c.paths,move);
+ c.move=move;c.busy=r==2;
+ return c;
 }
 bool HasClipFiles(){return IsClipboardFormatAvailable(CF_HDROP)!=FALSE;}
 static std::wstring VolumeRoot(std::wstring const& path){
@@ -224,6 +226,19 @@ bool RecycleCapable(std::wstring const& path){
  }
  auto exists=[&](wchar_t const* name){WIN32_FIND_DATAW fd{};HANDLE h=FindFirstFileW((root+name).c_str(),&fd);if(h==INVALID_HANDLE_VALUE)return false;FindClose(h);return true;};
  return exists(L"$Recycle.Bin")||exists(L"Recycler");
+}
+// 逐路径判定会在失效盘/网络盘上反复阻塞 UI（GetDriveTypeW 可挂起数秒），故按卷根去重后再计数
+long long CountNonRecyclable(std::vector<std::wstring> const& paths){
+ std::vector<std::pair<std::wstring,bool>> cache;long long n=0;
+ auto find=[&](std::wstring const& root)->int{for(size_t i=0;i<cache.size();++i)if(cache[i].first==root)return static_cast<int>(i);return -1;};
+ for(auto const& p:paths){
+  auto root=VolumeRoot(p);
+  if(root.empty()){++n;continue;}
+  int at=find(root);
+  if(at<0){cache.emplace_back(root,RecycleCapable(p));at=static_cast<int>(cache.size()-1);}
+  if(!cache[at].second)++n;
+ }
+ return n;
 }
 void ClipboardCopy(std::vector<std::wstring> const& paths,bool cut){
  if(paths.empty())return;
@@ -252,37 +267,40 @@ static bool InsideRoot(std::wstring const& root,std::wstring const& path){
  if(b.compare(0,a.size(),a)!=0)return false;
  return b[a.size()]==L'\\';
 }
-PasteResult PasteFiles(std::wstring const& destDir,CancelFlag const& cancel,ProgressFn const& progress){
- PasteResult r;
- std::vector<std::wstring> sources;bool move=false;
- if(!ReadClip(sources,move))return r;
+TransferResult TransferFiles(std::vector<std::wstring> const& sources,std::wstring const& destDir,bool move,CancelFlag const& cancel,ProgressFn const& progress){
+ TransferResult r;
  auto dest=TrimTail(std::filesystem::path(destDir).wstring());
- if(dest.empty())throw std::runtime_error("no target folder");
+ if(dest.empty()){r.failed=static_cast<long long>(sources.size());return r;}
  auto taken=ExistingNames(dest);
  long long const total=static_cast<long long>(sources.size());
  long long done=0;
+ if(progress)progress(0,total,std::wstring());
  for(auto const& src:sources){
   if(cancel&&cancel->load()){r.cancelled=true;break;}
-  if(progress)progress(done,total,Name(src));
-  ++done;
+  bool keepGoing=true;
   try{
    std::filesystem::path p(src);
    auto name=p.filename().wstring();
-   if(name.empty()){++r.failed;continue;}
-   if(SamePath(src,dest+L"\\"+name)||SamePath(TrimTail(p.parent_path().wstring()),dest)){++r.skipped;continue;}
-   if(InsideRoot(dest,src)){++r.skipped;continue;}
-   std::error_code ec;bool dir=std::filesystem::is_directory(p,ec);
-   auto unique=UniqueName(taken,dir?name:p.stem().wstring(),dir?std::wstring():p.extension().wstring());
-   auto target=dest+L"\\"+unique;
-   auto from=Zipped({src}),to=Zipped({target});
-   SHFILEOPSTRUCTW op{};op.wFunc=move?FO_MOVE:FO_COPY;op.pFrom=from.c_str();op.pTo=to.c_str();
-   auto res=RunOp(op);
-   if(res==0){r.cancelled=true;break;}
-   if(res<0){++r.failed;continue;}
-   taken.push_back(unique);
-   r.made.push_back(target);
+   if(name.empty())++r.failed;
+   // 同目录粘贴、把文件夹放进它自己的子目录：跳过而不是自我嵌套副本
+   else if(SamePath(src,dest+L"\\"+name)||SamePath(TrimTail(p.parent_path().wstring()),dest)||InsideRoot(dest,src))++r.skipped;
+   else{
+    std::error_code ec;bool dir=std::filesystem::is_directory(p,ec);
+    auto unique=UniqueName(taken,dir?name:p.stem().wstring(),dir?std::wstring():p.extension().wstring());
+    auto target=dest+L"\\"+unique;
+    auto from=Zipped({src}),to=Zipped({target});
+    SHFILEOPSTRUCTW op{};op.wFunc=move?FO_MOVE:FO_COPY;op.pFrom=from.c_str();op.pTo=to.c_str();
+    auto res=RunOp(op);
+    if(res<0)++r.failed;
+    else if(res==0){r.cancelled=true;keepGoing=false;}
+    else{taken.push_back(unique);r.made.push_back(target);}
+   }
   }catch(...){++r.failed;}
+  ++done;
+  if(progress)progress(done,total,Name(src));
+  if(!keepGoing)break;
  }
+ if(progress&&done>=total)progress(total,total,std::wstring());
  return r;
 }
 std::wstring CreateFolder(std::wstring const& dir,std::wstring const& baseName){
@@ -312,10 +330,10 @@ DeleteResult DeleteFiles(std::vector<std::wstring> const& paths,bool permanent,C
  DeleteResult r;
  long long const total=static_cast<long long>(paths.size());
  long long done=0;
+ if(progress)progress(0,total,std::wstring());
  for(auto const& src:paths){
   if(cancel&&cancel->load()){r.cancelled=true;break;}
-  if(progress)progress(done,total,Name(src));
-  ++done;
+  bool keepGoing=true;
   // 请求回收站但所在卷不支持时，SHFileOperation 会在无提示下永久删除，必须先判定并如实告知
   bool undo=!permanent&&RecycleCapable(src);
   if(!permanent&&!undo)++r.nuked;
@@ -324,10 +342,16 @@ DeleteResult DeleteFiles(std::vector<std::wstring> const& paths,bool permanent,C
   op.wFunc=FO_DELETE;op.pFrom=from.c_str();
   if(undo)op.fFlags|=FOF_ALLOWUNDO;
   auto res=RunOp(op);
-  if(res==0){r.cancelled=true;break;}
-  if(res<0){++r.failed;continue;}
-  r.gone.push_back(src);
+  if(res<0)++r.failed;
+  else if(res==0){r.cancelled=true;keepGoing=false;}
+  // 只有确认从磁盘消失才算删掉：仍存在的文件保留在分区里，避免"看起来丢了"的假象
+  else if(GetFileAttributesW(src.c_str())==INVALID_FILE_ATTRIBUTES)r.gone.push_back(src);
+  else ++r.failed;
+  ++done;
+  if(progress)progress(done,total,Name(src));
+  if(!keepGoing)break;
  }
+ if(progress&&done>=total)progress(total,total,std::wstring());
  return r;
 }
 }

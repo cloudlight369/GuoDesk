@@ -89,6 +89,8 @@ std::wstring PreviewSizeText(long long bytes);
 int ProgressPercent(long long done,long long total);
 int OpOutcome(long long ok,long long failed,bool cancelled);
 bool IsReservedDeviceName(std::wstring const& name);
+// 拖入落盘语义：0=按引用加入口（普通分区），1=复制到映射文件夹，2=移动到映射文件夹
+int DropOperation(bool mappedZone,bool shiftPressed);
 std::wstring BuildDiagnostics(Layout const& l,std::wstring const& version,std::wstring const& machine,std::wstring const& osBuild,long long today);
 std::wstring DueText(long long due);
 bool DueReached(long long due);
