@@ -5,7 +5,7 @@ namespace guodesk {
 class Controller;
 struct already_running {};
 class DeskWindow {
- Controller& owner; bool desktop=false,closing=false,dragging=false,capsuleNow=false;
+ Controller& owner; bool desktop=false,closing=false,dragging=false,capsuleNow=false,raised=false;
  std::wstring expandedStack;
  POINT dragStart{}; RECT dragOrigin{};
  winrt::Microsoft::UI::Xaml::Controls::Grid root{nullptr};
@@ -59,7 +59,7 @@ public:
  DeskWindow(Controller&,std::wstring);
  ~DeskWindow();
  Zone& Model();
- void Refresh(); void Place(); void Show(); void SetDesktop(bool enabled); void Capture();
+ void Refresh(); void Place(); void Show(); void SetDesktop(bool enabled); void Raise(bool on); void Capture();
  void ApplySettings();
  void Notify(std::wstring const& text);
  void Pick(bool folder=false);
@@ -70,9 +70,9 @@ class SettingsWindow;
 class Controller {
  HWND messageWindow{}; NOTIFYICONDATAW tray{}; UINT taskbarCreated{}; HANDLE mutex{}; bool quitting=false; std::map<std::wstring,std::wstring> mappedStamp; std::shared_ptr<bool> syncAlive{std::make_shared<bool>(true)};
  HHOOK ctrlHook=nullptr;
- HHOOK revealHook=nullptr; bool revealShowing=false;
+ HHOOK revealHook=nullptr; bool revealShowing=false; bool raising=false;
  static LRESULT CALLBACK MessageProc(HWND,UINT,WPARAM,LPARAM);
- void AddTray(); void InstallCtrlHook(); void RemoveCtrlHook(); void InstallRevealHook(); void RemoveRevealHook(); void RevealBegin(); void RevealEnd();
+ void AddTray(); void InstallCtrlHook(); void RemoveCtrlHook(); void InstallRevealHook(); void RemoveRevealHook(); void RevealBegin(); void RevealEnd(); void StartRaise(); void EndRaise();
 public:
  Store store; Layout layout; UndoStack undo; std::vector<std::unique_ptr<DeskWindow>> windows; bool desktopMode=false; HWND host{};
  explicit Controller(std::filesystem::path root={}); ~Controller();

@@ -360,6 +360,8 @@ KV const table[]{
  {L"检测到显示器变化，已恢复该显示器的布局。",L"Display change detected. Restored the layout saved for this monitor setup."},
  {L"透桌面热键",L"Reveal-desktop hotkey"},
  {L"按住热键期间临时隐藏所有分区，松开即恢复，方便直接操作桌面。",L"Hold the hotkey to temporarily hide all zones and click the desktop directly; release to restore them."},
+ {L"浮层热键",L"Floating-layer hotkey"},
+ {L"按住热键期间把可见分区临时浮到其他窗口之上，松开即回到桌面层。",L"Hold the hotkey to float the visible zones above other windows; releasing returns them to the desktop layer."},
  {L"钉选快捷方式…",L"Pin a shortcut…"},
  {L"已钉选 {0} 个快捷方式。",L"Pinned {0} shortcut(s)."},
  {L"钉选快捷方式「{0}」",L"Pin shortcut \"{0}\""},
