@@ -131,7 +131,7 @@ KV const table[]{
  {L"文件夹就地打开",L"Open folders in place"},
  {L"返回上一级",L"Up one level"},
  {L"拖入文件、文件夹或应用快捷方式 · 原文件保持原位",L"Drop files, folders or app shortcuts · originals stay in place"},
- {L"双击打开 · 右键管理 · 拖拽排序",L"Double-click to open · right-click to manage · drag to reorder"},
+ {L"双击打开 · 右键管理 · 拖拽排序 · 单击后方向键选择",L"Double-click to open · right-click to manage · drag to reorder · click then use arrow keys"},
  {L"无法添加拖入项目。",L"Could not add the dropped items."},
  {L"实验性桌面宿主 · 添加入口不会移动原文件",L"Experimental desktop host — entries never move the original files"},
  {L"嵌入失败，已保留普通窗口模式",L"Embed failed — kept normal window mode"},

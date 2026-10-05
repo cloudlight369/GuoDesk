@@ -36,6 +36,12 @@ class DeskWindow {
  void SetCapsule(bool on); void ExpandCapsule(); void ShrinkCapsule(); void ApplyPerformance(); void ApplyBackground();
  void AttachDrag(winrt::Microsoft::UI::Xaml::FrameworkElement const& el,std::wstring const& path);
  std::vector<std::wstring> selected;
+ std::vector<std::wstring> navPaths; int focusIdx=-1;
+ void OnNavKey(winrt::Microsoft::UI::Xaml::Input::KeyRoutedEventArgs const& a);
+ void FocusBody();
+ bool NavOn(std::wstring const& path);
+ winrt::Microsoft::UI::Xaml::Media::Brush FocusRing();
+ void OpenFocused(std::wstring const& path);
  bool IsSel(std::wstring const& path); void ToggleSel(std::wstring const& path);
  winrt::Microsoft::UI::Xaml::Media::Brush ItemFill(std::wstring const& path);
  winrt::Microsoft::UI::Xaml::Controls::Border dimLayer{nullptr};

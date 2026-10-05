@@ -134,6 +134,7 @@ inline bool IsDoubleCtrlHotkey(std::wstring const& text){return text==L"DoubleCt
 void PushSearchHistory(std::vector<std::wstring>& history,std::wstring const& query,size_t limit=20);
 bool ToggleSearchFavorite(std::vector<std::wstring>& favorites,std::wstring const& query,size_t limit=50);
 bool ToggleSelect(std::vector<std::wstring>& keys,std::wstring const& key,size_t limit=50);
+int NavStep(int cur,int count,int delta);
 std::wstring WmoText(int code);
 std::wstring WmoEmoji(int code);
 int WeatherSkinCount();
