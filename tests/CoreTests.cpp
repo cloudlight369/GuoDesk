@@ -463,6 +463,23 @@ void RunTests(std::filesystem::path const& output){std::ofstream report(output);
  auto dEmpty370=BuildDiagnostics(Layout{},L"1.0",L"ARM64",L"",20261004);
  expect(dEmpty370.find(L"zones=0")!=std::wstring::npos&&dEmpty370.find(L"webdav=off")!=std::wstring::npos&&dEmpty370.find(L"os=unknown")!=std::wstring::npos,"default layout diagnostics is all-zero with webdav off");
  expect(dEmpty370.find(L"topologyLast=none")!=std::wstring::npos&&dEmpty370.find(L"clockStyle=digital")!=std::wstring::npos,"diagnostics normalizes empty optional values");
+ auto md0=ParseInlineMarkdown(L"plain text");
+ expect(md0.size()==1&&md0[0].style==0&&md0[0].text==L"plain text","markdown plain text is one segment");
+ auto md1=ParseInlineMarkdown(L"**urgent** call");
+ expect(md1.size()==2&&md1[0].style==1&&md1[0].text==L"urgent"&&md1[1].style==0&&md1[1].text==L" call","markdown bold segment split");
+ auto md2=ParseInlineMarkdown(L"~~done~~ and `code`");
+ expect(md2.size()==3&&md2[0].style==2&&md2[1].style==0&&md2[2].style==3&&md2[2].text==L"code","markdown strike and code styles");
+ auto md3=ParseInlineMarkdown(L"#home fix #later");
+ expect(md3.size()==3&&md3[0].style==4&&md3[0].text==L"#home"&&md3[1].style==0&&md3[2].style==4,"markdown tags at word starts");
+ auto md4=ParseInlineMarkdown(L"a#b unclosed **x");
+ expect(md4.size()==1&&md4[0].style==0&&md4[0].text==L"a#b unclosed **x","markdown literal when no boundary or unclosed");
+ TodoItem tf1;tf1.due=20200101;TodoItem tf2;tf2.due=20991231;tf2.repeat=1;
+ expect(TodoMatchesFilter(tf1,3)&&!TodoMatchesFilter(tf2,3)&&!TodoMatchesFilter(tf1,4)&&TodoMatchesFilter(tf2,4),"overdue and repeating filters select correctly");
+ TodoItem tq;tq.text=L"Buy Milk";
+ expect(TodoMatchesQuery(tq,L"")&&TodoMatchesQuery(tq,L"milk")&&TodoMatchesQuery(tq,L"buy mi")&&!TodoMatchesQuery(tq,L"juice"),"query is case-insensitive substring");
+ Widgets bw380;AddTodo(bw380,L"a");auto idAx=bw380.todos[0].id;AddTodo(bw380,L"b");auto idBy=bw380.todos[1].id;AddTodo(bw380,L"c");auto idCz=bw380.todos[2].id;
+ expect(RemoveTodos(bw380,{idAx,idCz})==2&&bw380.todos.size()==1&&bw380.todos[0].text==L"b","bulk remove keeps order and counts");
+ expect(RemoveTodos(bw380,{})==0&&RemoveTodos(bw380,{L"ghost"})==0&&bw380.todos.size()==1&&bw380.todos[0].id==idBy,"bulk remove no-op on empty or unknown ids");
 report<<"TOTAL "<<passed<<" passed\n";
 }
 }

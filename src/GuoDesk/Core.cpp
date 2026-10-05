@@ -4,6 +4,7 @@
 #include "WebDav.h"
 #include <shlwapi.h>
 #include <cmath>
+#include <cwctype>
 using namespace winrt;
 using namespace Windows::Data::Json;
 namespace guodesk {
@@ -362,7 +363,49 @@ long long NextDue(long long due,int repeat,long long today){
 }
 int TodoFlagCount(){return 4;}
 unsigned TodoFlagRGB(int flag){switch(flag){case 1:return 0xE81123;case 2:return 0xFFB900;case 3:return 0x13A10E;default:return 0;}}
-bool TodoMatchesFilter(TodoItem const& t,int filter){if(filter==1)return !t.done;if(filter==2)return t.done;return true;}
+bool TodoMatchesFilter(TodoItem const& t,int filter){
+ if(filter==1)return !t.done;
+ if(filter==2)return t.done;
+ if(filter==3)return !t.done&&t.due>0&&t.due<DueFromOffset(0);
+ if(filter==4)return t.repeat>0;
+ return true;
+}
+std::vector<MdSeg> ParseInlineMarkdown(std::wstring const& s){
+ std::vector<MdSeg> out;std::wstring plain;size_t i=0;
+ auto em=[&](std::wstring const& t,int st){if(!t.empty())out.push_back({t,st});};
+ static const std::pair<wchar_t const*,int> marks[]={ {L"**",1},{L"~~",2},{L"`",3} };
+ while(i<s.size()){
+  bool hit=false;
+  for(auto const& mk:marks){
+   size_t n=wcslen(mk.first);
+   if(s.compare(i,n,mk.first)==0){
+    auto e=s.find(mk.first,i+n);
+    if(e!=std::wstring::npos&&e>i+n){em(plain,0);plain.clear();em(s.substr(i+n,e-i-n),mk.second);i=e+n;hit=true;break;}
+   }
+  }
+  if(hit)continue;
+  if(s[i]==L'#'&&(i==0||s[i-1]==L' ')){
+   size_t j=i+1;while(j<s.size()&&s[j]!=L' '&&s[j]!=L'\n')++j;
+   if(j>i+1){em(plain,0);plain.clear();em(s.substr(i,j-i),4);i=j;continue;}
+  }
+  plain+=s[i++];
+ }
+ em(plain,0);
+ if(out.empty())out.push_back({L"",0});
+ return out;
+}
+bool TodoMatchesQuery(TodoItem const& t,std::wstring const& q){
+ if(q.empty())return true;
+ auto a=t.text,b=q;
+ for(auto& ch:a)ch=static_cast<wchar_t>(towlower(ch));
+ for(auto& ch:b)ch=static_cast<wchar_t>(towlower(ch));
+ return a.find(b)!=std::wstring::npos;
+}
+int RemoveTodos(Widgets& w,std::vector<std::wstring> const& ids){
+ size_t before=w.todos.size();
+ std::erase_if(w.todos,[&](auto const& t){return std::find(ids.begin(),ids.end(),t.id)!=ids.end();});
+ return static_cast<int>(before-w.todos.size());
+}
 int ClearDoneTodos(Widgets& w){size_t before=w.todos.size();std::erase_if(w.todos,[](auto const& t){return t.done;});return static_cast<int>(before-w.todos.size());}
 bool ShouldListApp(std::wstring const& name,std::wstring const& target){if(name.empty()||target.empty())return false;auto n=Lower(name);if(n.find(L"unins")!=std::wstring::npos)return false;if(n.starts_with(L"卸载")||n.starts_with(L"卸 载"))return false;return true;}
 bool AppMatches(std::wstring const& name,std::wstring const& query){if(query.empty())return true;return Lower(name).find(Lower(query))!=std::wstring::npos;}

@@ -11,6 +11,10 @@ class TodoWindow {
  winrt::Microsoft::UI::Xaml::Controls::TextBox input{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::ComboBox filter{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::Button clearDone{nullptr};
+ winrt::Microsoft::UI::Xaml::Controls::TextBox query{nullptr};
+ winrt::Microsoft::UI::Xaml::Controls::Border selBar{nullptr};
+ winrt::Microsoft::UI::Xaml::Controls::TextBlock selCount{nullptr};
+ std::vector<std::wstring> selected;
  int filterKind=0;
  winrt::Microsoft::UI::Xaml::Media::Brush ThemeBrush(wchar_t const* key,winrt::Windows::UI::Color fallback);
  void Rebuild();
