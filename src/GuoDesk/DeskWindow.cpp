@@ -145,7 +145,7 @@ void DeskWindow::SetCapsule(bool on){auto& z=Model();z.capsule=on;capsuleNow=on;
 void DeskWindow::ExpandCapsule(){if(!capsuleNow||dragging)return;capsuleNow=false;Refresh();Place();}
 void DeskWindow::ShrinkCapsule(){if(capsuleNow||dragging)return;Capture();capsuleNow=true;Refresh();Place();}
 void DeskWindow::AttachDrag(FrameworkElement const& el,std::wstring const& path){
- el.PointerPressed([this,path](auto&&,Input::PointerRoutedEventArgs const&){POINT sp{};GetCursorPos(&sp);dragSX=sp.x;dragSY=sp.y;dragPath=path;dragArmed=true;});
+ el.PointerPressed([this,path](auto&&,Input::PointerRoutedEventArgs const&){FocusBody();POINT sp{};GetCursorPos(&sp);dragSX=sp.x;dragSY=sp.y;dragPath=path;dragArmed=true;});
  el.PointerReleased([this](auto&&,Input::PointerRoutedEventArgs const&){dragArmed=false;});
  el.PointerCaptureLost([this](auto&&,auto&&){dragArmed=false;});
  if(!rootDragHooked){rootDragHooked=true;
@@ -160,25 +160,45 @@ winrt::Microsoft::UI::Xaml::Media::Brush DeskWindow::ItemFill(std::wstring const
  try{if(auto b=ThemeBrush(L"SystemAccentColor",Windows::UI::Color{255,0,120,215}).as<SolidColorBrush>()){auto a=b.Color();c=Windows::UI::Color{80,a.R,a.G,a.B};}}catch(...){}
  return SolidColorBrush(c);
 }
-bool DeskWindow::NavOn(std::wstring const& path){return focusIdx>=0&&focusIdx<static_cast<int>(navPaths.size())&&navPaths[focusIdx]==path;}
 winrt::Microsoft::UI::Xaml::Media::Brush DeskWindow::FocusRing(){Windows::UI::Color c{255,0,120,215};try{if(auto b=ThemeBrush(L"SystemAccentColor",Windows::UI::Color{255,0,120,215}).as<SolidColorBrush>()){auto a=b.Color();c=Windows::UI::Color{255,a.R,a.G,a.B};}}catch(...){}return SolidColorBrush(c);}
 void DeskWindow::FocusBody(){auto& v=View();try{if(v.viewMode==L"list")listHost.Focus(FocusState::Pointer);else grid.Focus(FocusState::Pointer);}catch(...){}}
-void DeskWindow::OpenFocused(std::wstring const& path){auto& q=View();if(!q.mappedFolder.empty()&&q.browseInPlace&&(GetFileAttributesW(path.c_str())&FILE_ATTRIBUTE_DIRECTORY)){Navigate(path);return;}try{shell::Open(hwnd,path);}catch(...){Notify(i18n::Tr(L"无法打开目标，请右键重新定位。 "));}}
+void DeskWindow::RegisterNav(std::wstring const& path,winrt::Microsoft::UI::Xaml::Controls::Border const& el,bool tinted){if(Model().collapsed)return;navPaths.push_back(path);navVis.push_back(NavVis{el,tinted});}
+void DeskWindow::RepaintNav(){
+ for(size_t i=0;i<navPaths.size()&&i<navVis.size();++i){auto const& vis=navVis[i];if(!vis.el)continue;
+  if(vis.tinted)vis.el.Background(ItemFill(navPaths[i]));
+  bool on=static_cast<int>(i)==focusIdx;
+  vis.el.BorderThickness(on?Thickness{2,2,2,2}:Thickness{0,0,0,0});
+  vis.el.BorderBrush(on?Brush(FocusRing()):Brush{nullptr});
+ }
+}
+void DeskWindow::SetFocus(int index){
+ focusIdx=index;RepaintNav();
+ try{if(index>=0&&index<static_cast<int>(navVis.size())&&navVis[index].el)navVis[index].el.StartBringIntoView();}catch(...){}
+}
+void DeskWindow::MoveFocus(int delta){
+ int const n=static_cast<int>(navPaths.size());if(n==0){focusIdx=-1;return;}
+ SetFocus(NavStep(focusIdx,n,delta));
+}
+void DeskWindow::SelHint(){Notify(selected.empty()?i18n::Tr(L"双击打开 · 右键管理 · 拖拽排序 · 单击后方向键选择"):i18n::TrF(L"已选 {0} 项 · 拖出包含全部选中",{std::to_wstring(selected.size())}));}
+void DeskWindow::OpenFocused(std::wstring const& path){auto& q=View();auto fa=GetFileAttributesW(path.c_str());if(!q.mappedFolder.empty()&&q.browseInPlace&&fa!=INVALID_FILE_ATTRIBUTES&&(fa&FILE_ATTRIBUTE_DIRECTORY)){Navigate(path);return;}try{shell::Open(hwnd,path);}catch(...){Notify(i18n::Tr(L"无法打开目标，请右键重新定位。 "));}}
 void DeskWindow::OnNavKey(Input::KeyRoutedEventArgs const& a){
- if(capsuleNow||title.FocusState()!=FocusState::Unfocused)return;
- auto key=a.Key();bool ctrl=(GetAsyncKeyState(VK_CONTROL)&0x8000)!=0;
+ if(capsuleNow||menuOpen||Model().collapsed||title.FocusState()!=FocusState::Unfocused)return;
+ auto key=a.Key();bool ctrl=(GetKeyState(VK_CONTROL)&0x8000)!=0;
  if(key==Windows::System::VirtualKey::Escape){if(!selected.empty()||focusIdx>=0||!expandedStack.empty()){selected.clear();focusIdx=-1;expandedStack.clear();Refresh();}a.Handled(true);return;}
- if(ctrl&&key==Windows::System::VirtualKey::Left){auto& z=Model();auto members=GroupMemberIds(owner.layout,z.group);if(members.empty())return;SwitchTab(std::max(0,z.groupTab-1));a.Handled(true);return;}
- if(ctrl&&key==Windows::System::VirtualKey::Right){auto& z=Model();auto members=GroupMemberIds(owner.layout,z.group);if(members.empty())return;SwitchTab(std::min(static_cast<int>(members.size())-1,z.groupTab+1));a.Handled(true);return;}
+ if(ctrl&&key==Windows::System::VirtualKey::Left){auto& z=Model();auto members=GroupMemberIds(owner.layout,z.group);if(!members.empty()){SwitchTab(std::max(0,z.groupTab-1));a.Handled(true);return;}}
+ if(ctrl&&key==Windows::System::VirtualKey::Right){auto& z=Model();auto members=GroupMemberIds(owner.layout,z.group);if(!members.empty()){SwitchTab(std::min(static_cast<int>(members.size())-1,z.groupTab+1));a.Handled(true);return;}}
+ winrt::Windows::Foundation::IInspectable focused{nullptr};
+ try{focused=Input::FocusManager::GetFocusedElement(root.XamlRoot());}catch(...){}
+ if(focused&&(focused.try_as<Primitives::ButtonBase>()||focused.try_as<TextBox>()))return;
  if(navPaths.empty())return;
- if(key==Windows::System::VirtualKey::Up||key==Windows::System::VirtualKey::Left){focusIdx=NavStep(focusIdx,static_cast<int>(navPaths.size()),-1);Refresh();a.Handled(true);return;}
- if(key==Windows::System::VirtualKey::Down||key==Windows::System::VirtualKey::Right){focusIdx=NavStep(focusIdx,static_cast<int>(navPaths.size()),1);Refresh();a.Handled(true);return;}
- if(key==Windows::System::VirtualKey::Home){if(!navPaths.empty()){focusIdx=0;Refresh();}a.Handled(true);return;}
- if(key==Windows::System::VirtualKey::End){if(!navPaths.empty()){focusIdx=static_cast<int>(navPaths.size())-1;Refresh();}a.Handled(true);return;}
+ if(key==Windows::System::VirtualKey::Up||key==Windows::System::VirtualKey::Left){MoveFocus(-1);a.Handled(true);return;}
+ if(key==Windows::System::VirtualKey::Down||key==Windows::System::VirtualKey::Right){MoveFocus(1);a.Handled(true);return;}
+ if(key==Windows::System::VirtualKey::Home){SetFocus(0);a.Handled(true);return;}
+ if(key==Windows::System::VirtualKey::End){SetFocus(static_cast<int>(navPaths.size())-1);a.Handled(true);return;}
  if(focusIdx<0||focusIdx>=static_cast<int>(navPaths.size()))return;
  auto path=navPaths[focusIdx];
  if(key==Windows::System::VirtualKey::Enter){OpenFocused(path);a.Handled(true);return;}
- if(key==Windows::System::VirtualKey::Space){if(!View().mappedFolder.empty())return;ToggleSel(path);a.Handled(true);return;}
+ if(key==Windows::System::VirtualKey::Space){if(!View().mappedFolder.empty())return;ToggleSelect(selected,PathKey(path));RepaintNav();SelHint();a.Handled(true);return;}
 }
 std::vector<RECT> DeskWindow::Peers(){std::vector<RECT> list;for(auto& w:owner.windows)if(w.get()!=this&&IsWindow(w->hwnd)&&IsWindowVisible(w->hwnd)){RECT r{};GetWindowRect(w->hwnd,&r);list.push_back(r);}return list;}
 void DeskWindow::DragUpdate(){if(!dragging)return;POINT p{};GetCursorPos(&p);int x=dragOrigin.left+p.x-dragStart.x,y=dragOrigin.top+p.y-dragStart.y,w=dragOrigin.right-dragOrigin.left,h=dragOrigin.bottom-dragOrigin.top;int threshold=MulDiv(8,GetDpiForWindow(hwnd),96);std::vector<int> xs,ys;auto peers=Peers();for(auto const& r:peers){int cx=r.left+(r.right-r.left)/2,cy=r.top+(r.bottom-r.top)/2;xs.push_back(r.left);xs.push_back(r.right-w);xs.push_back(r.left-w);xs.push_back(r.right);xs.push_back(cx-w/2);ys.push_back(r.top);ys.push_back(r.bottom-h);ys.push_back(r.top-h);ys.push_back(r.bottom);ys.push_back(cy-h/2);}MONITORINFO mi{sizeof(mi)};GetMonitorInfoW(MonitorFromWindow(hwnd,MONITOR_DEFAULTTONEAREST),&mi);xs.push_back(mi.rcWork.left);xs.push_back(mi.rcWork.right-w);ys.push_back(mi.rcWork.top);ys.push_back(mi.rcWork.bottom-h);x+=Snap(x,xs,threshold);y+=Snap(y,ys,threshold);SetWindowPos(hwnd,nullptr,x,y,0,0,SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE);}
@@ -256,8 +276,7 @@ void DeskWindow::Refresh(){auto& z=Model();auto& v=View();if(z.group.empty())vie
  std::vector<Entry> browseItems;if(mapped&&!v.browseFolder.empty())browseItems=ListMapped(v.browseFolder);
  std::vector<Entry> const& items=mapped&&!v.browseFolder.empty()?browseItems:v.entries;
  size_t const limit=500,total=items.size();
- navPaths.clear();navPaths.reserve(std::min(total,limit));for(size_t i=0;i<std::min(total,limit);++i)navPaths.push_back(items[i].path);
- if(focusIdx>=static_cast<int>(navPaths.size()))focusIdx=static_cast<int>(navPaths.size())-1;
+ navPaths.clear();navVis.clear();
  auto itemMenu=[this](std::wstring const& path){MenuFlyout menu;auto& m=View();if(!m.browseFolder.empty())menu.Items().Append(MenuItem(i18n::Tr(L"返回上一级"),[this]{auto& q=View();Navigate(CrumbParent(q.mappedFolder,q.browseFolder));}));menu.Items().Append(MenuItem(i18n::Tr(L"打开"),[this,path]{shell::Open(hwnd,path);}));menu.Items().Append(MenuItem(i18n::Tr(L"定位原文件"),[this,path]{shell::Reveal(hwnd,path);}));keepCapsuleOpen(this,menu);return menu;};
  std::map<std::wstring,size_t> firstIdx;for(size_t i=0;i<v.entries.size();++i)if(!v.entries[i].stack.empty())firstIdx.emplace(v.entries[i].stack,i);
  std::set<std::wstring> rendered;
@@ -275,30 +294,33 @@ void DeskWindow::Refresh(){auto& z=Model();auto& v=View();if(z.group.empty())vie
   pmenu.Items().Append(MenuItem(i18n::Tr(L"重命名叠放…"),[this,sid]{TextBox box;for(auto const& s:View().stacks)if(s.id==sid)box.Text(s.name);ContentDialog dlg;dlg.Title(box_value(i18n::Tr(L"重命名叠放")));dlg.PrimaryButtonText(i18n::Tr(L"保存"));dlg.CloseButtonText(i18n::Tr(L"取消"));dlg.DefaultButton(ContentDialogButton::Primary);StackPanel p;p.Spacing(8);p.MaxWidth(300);p.Children().Append(box);dlg.Content(p);try{dlg.XamlRoot(root.XamlRoot());}catch(...){return;}auto op=dlg.ShowAsync();op.Completed([this,sid,box](auto&&async,auto&&){if(async.GetResults()!=ContentDialogResult::Primary)return;auto t=std::wstring(box.Text());size_t a=t.find_first_not_of(L" \t");if(a==std::wstring::npos)return;t=t.substr(a,t.find_last_not_of(L" \t")-a+1);for(auto& s:View().stacks)if(s.id==sid)s.name=t;Refresh();owner.Save();});}));
   pmenu.Items().Append(MenuItem(i18n::Tr(L"解散叠放"),[this,sid]{std::wstring sname;for(auto const& s:View().stacks)if(s.id==sid)sname=s.name;owner.PushUndo(i18n::TrF(L"解散叠放「{0}」",{sname}));DissolveStack(View(),sid);Refresh();owner.Save();}));
   keepCapsuleOpen(this,pmenu);front.ContextFlyout(pmenu);
+  front.PointerPressed([this](auto&&,Input::PointerRoutedEventArgs const&){FocusBody();});
   front.DoubleTapped([this,sid](auto&&,auto&&){expandedStack=sid;Refresh();});
   if(!mapped)front.DragStarting([this,sid,vkey=v.id](auto&&,DragStartingEventArgs const& a){a.Data().SetText(L"guodesk-stack:"+vkey+L"|"+sid);a.Data().RequestedOperation(DataPackageOperation::Move);});
   front.DragOver([mapped](auto&&,DragEventArgs const& a){a.AcceptedOperation(mapped?DataPackageOperation::None:(a.DataView().Contains(StandardDataFormats::StorageItems())?DataPackageOperation::Link:DataPackageOperation::Move));a.Handled(true);});
   if(!mapped)front.Drop([this,at,sid](auto&&,DragEventArgs const& a){a.Handled(true);Drop(a,at,sid);});
-  grid.Items().Append(wrap);};
+  grid.Items().Append(wrap);RegisterNav(path,front,false);};
  for(size_t i=0;i<std::min(total,limit);++i){auto const& e=items[i];auto path=e.path,key=e.id;auto index=i;bool exists=GetFileAttributesW(path.c_str())!=INVALID_FILE_ATTRIBUTES;
   if(v.viewMode!=L"list"&&!e.stack.empty()&&expandedStack!=e.stack){if(!rendered.count(e.stack)){renderPile(e.stack,i);rendered.insert(e.stack);}continue;}
   if(v.viewMode!=L"list"&&!e.stack.empty()&&expandedStack==e.stack&&firstIdx[e.stack]==i)renderCollapse(e.stack);
   if(v.viewMode==L"list"){
-   Border row;row.Height(30);row.CornerRadius(CornerRadius{4,4,4,4});row.Padding(Thickness{8,3,8,3});row.Background(ItemFill(path));if(NavOn(path)){row.BorderThickness(Thickness{2,2,2,2});row.BorderBrush(FocusRing());}ToolTipService::SetToolTip(row,box_value(path));row.PointerEntered([weak=make_weak(row),this](auto&&,auto&&){if(auto r=weak.get())r.Background(ThemeBrush(L"CardBackgroundFillColorSecondary",Windows::UI::Color{255,80,80,80}));});row.PointerExited([weak=make_weak(row),path,this](auto&&,auto&&){if(auto r=weak.get())r.Background(ItemFill(path));});row.Tapped([this,path](auto&&,Input::TappedRoutedEventArgs const& t){if(GetAsyncKeyState(VK_CONTROL)&0x8000){t.Handled(true);ToggleSel(path);}});
+   Border row;row.Height(30);row.CornerRadius(CornerRadius{4,4,4,4});row.Padding(Thickness{8,3,8,3});row.Background(ItemFill(path));ToolTipService::SetToolTip(row,box_value(path));row.PointerEntered([weak=make_weak(row),this](auto&&,auto&&){if(auto r=weak.get())r.Background(ThemeBrush(L"CardBackgroundFillColorSecondary",Windows::UI::Color{255,80,80,80}));});row.PointerExited([weak=make_weak(row),path,this](auto&&,auto&&){if(auto r=weak.get())r.Background(ItemFill(path));});row.Tapped([this,path](auto&&,Input::TappedRoutedEventArgs const& t){if(GetAsyncKeyState(VK_CONTROL)&0x8000){t.Handled(true);ToggleSel(path);}});
    Grid line;ColumnDefinition ci,cn,cp;ci.Width(GridLength{0,GridUnitType::Auto});cn.Width(GridLength{2,GridUnitType::Star});cp.Width(GridLength{3,GridUnitType::Star});line.ColumnDefinitions().Append(ci);line.ColumnDefinitions().Append(cn);line.ColumnDefinitions().Append(cp);
    Image icon;icon.Width(18);icon.Height(18);line.Children().Append(icon);shell::LoadIcon(path,icon);
    TextBlock name;name.Text((exists?L"":L"⚠ ")+shell::Name(path));name.FontSize(ScaledFont(owner.layout.settings.textSize,12));name.VerticalAlignment(VerticalAlignment::Center);name.Margin(Thickness{8,0,8,0});name.TextTrimming(TextTrimming::CharacterEllipsis);name.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,180,180,180}));Grid::SetColumn(name,1);line.Children().Append(name);
    TextBlock where;where.Text(path);where.FontSize(11);where.VerticalAlignment(VerticalAlignment::Center);where.TextTrimming(TextTrimming::CharacterEllipsis);where.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,160,160,160}));Grid::SetColumn(where,2);line.Children().Append(where);
-   row.Child(line);row.DoubleTapped([this,path](auto&&,auto&&){auto& q=View();if(!q.mappedFolder.empty()&&q.browseInPlace&&(GetFileAttributesW(path.c_str())&FILE_ATTRIBUTE_DIRECTORY)){Navigate(path);return;}try{shell::Open(hwnd,path);}catch(...){Notify(i18n::Tr(L"无法打开目标，请右键重新定位。 "));}});if(mapped)row.ContextFlyout(itemMenu(path));else row.ContextRequested([this,path,key,sid=e.stack](auto&&,auto&& a){a.Handled(true);EntryMenu(path,key,sid);});AttachDrag(row,path);listPanel.Children().Append(row);
+   row.Child(line);row.DoubleTapped([this,path](auto&&,auto&&){OpenFocused(path);});if(mapped)row.ContextFlyout(itemMenu(path));else row.ContextRequested([this,path,key,sid=e.stack](auto&&,auto&& a){a.Handled(true);EntryMenu(path,key,sid);});AttachDrag(row,path);listPanel.Children().Append(row);RegisterNav(path,row,true);
   }else{
    int tier=v.tileSize-(compact?1:0);tier=std::clamp(tier,0,2);static int const TW[3]={72,88,112},TH[3]={78,94,118},TI[3]={32,40,56};
-   Border tile;tile.Width(TW[tier]);tile.Height(TH[tier]);tile.Padding(Thickness{4,4,4,4});tile.CornerRadius(CornerRadius{8,8,8,8});tile.Background(ItemFill(path));if(NavOn(path)){tile.BorderThickness(Thickness{2,2,2,2});tile.BorderBrush(FocusRing());}tile.CanDrag(!mapped);tile.AllowDrop(true);ToolTipService::SetToolTip(tile,box_value(path));tile.PointerEntered([weak=make_weak(tile),this](auto&&,auto&&){if(auto t=weak.get())t.Background(ThemeBrush(L"CardBackgroundFillColorSecondary",Windows::UI::Color{255,80,80,80}));});tile.PointerExited([weak=make_weak(tile),path,this](auto&&,auto&&){if(auto t=weak.get())t.Background(ItemFill(path));});tile.Tapped([this,path](auto&&,Input::TappedRoutedEventArgs const& t){if(GetAsyncKeyState(VK_CONTROL)&0x8000){t.Handled(true);ToggleSel(path);}});StackPanel content;content.Spacing(5);Image icon;icon.Width(TI[tier]);icon.Height(TI[tier]);content.Children().Append(icon);shell::LoadIcon(path,icon);TextBlock label;label.Text((exists?L"":L"⚠ ")+shell::Name(path));label.FontSize(ScaledFont(owner.layout.settings.textSize,12));label.TextAlignment(TextAlignment::Center);label.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,180,180,180}));if(v.nameLines==0)label.Visibility(Visibility::Collapsed);else if(v.nameLines==1){label.TextWrapping(TextWrapping::NoWrap);label.TextTrimming(TextTrimming::CharacterEllipsis);label.MaxHeight(18);}else{label.TextWrapping(TextWrapping::Wrap);label.MaxHeight(36);}content.Children().Append(label);tile.Child(content);
-   tile.DoubleTapped([this,path](auto&&,auto&&){auto& q=View();if(!q.mappedFolder.empty()&&q.browseInPlace&&(GetFileAttributesW(path.c_str())&FILE_ATTRIBUTE_DIRECTORY)){Navigate(path);return;}try{shell::Open(hwnd,path);}catch(...){Notify(i18n::Tr(L"无法打开目标，请右键重新定位。 "));}});
+   Border tile;tile.Width(TW[tier]);tile.Height(TH[tier]);tile.Padding(Thickness{4,4,4,4});tile.CornerRadius(CornerRadius{8,8,8,8});tile.Background(ItemFill(path));tile.CanDrag(!mapped);tile.AllowDrop(true);ToolTipService::SetToolTip(tile,box_value(path));tile.PointerEntered([weak=make_weak(tile),this](auto&&,auto&&){if(auto t=weak.get())t.Background(ThemeBrush(L"CardBackgroundFillColorSecondary",Windows::UI::Color{255,80,80,80}));});tile.PointerExited([weak=make_weak(tile),path,this](auto&&,auto&&){if(auto t=weak.get())t.Background(ItemFill(path));});tile.Tapped([this,path](auto&&,Input::TappedRoutedEventArgs const& t){if(GetAsyncKeyState(VK_CONTROL)&0x8000){t.Handled(true);ToggleSel(path);}});StackPanel content;content.Spacing(5);Image icon;icon.Width(TI[tier]);icon.Height(TI[tier]);content.Children().Append(icon);shell::LoadIcon(path,icon);TextBlock label;label.Text((exists?L"":L"⚠ ")+shell::Name(path));label.FontSize(ScaledFont(owner.layout.settings.textSize,12));label.TextAlignment(TextAlignment::Center);label.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,180,180,180}));if(v.nameLines==0)label.Visibility(Visibility::Collapsed);else if(v.nameLines==1){label.TextWrapping(TextWrapping::NoWrap);label.TextTrimming(TextTrimming::CharacterEllipsis);label.MaxHeight(18);}else{label.TextWrapping(TextWrapping::Wrap);label.MaxHeight(36);}content.Children().Append(label);tile.Child(content);
+   tile.DoubleTapped([this,path](auto&&,auto&&){OpenFocused(path);});
    if(!mapped)tile.DragStarting([key](auto&&,DragStartingEventArgs const& a){a.Data().SetText(L"guodesk-entry:"+key);a.Data().RequestedOperation(DataPackageOperation::Move);});
    tile.DragOver([mapped](auto&&,DragEventArgs const& a){a.AcceptedOperation(mapped?DataPackageOperation::None:(a.DataView().Contains(StandardDataFormats::StorageItems())?DataPackageOperation::Link:DataPackageOperation::Move));a.Handled(true);});
    if(!mapped)tile.Drop([this,index,sid=e.stack](auto&&,DragEventArgs const& a){a.Handled(true);Drop(a,index,sid);});
-   if(mapped)tile.ContextFlyout(itemMenu(path));else tile.ContextRequested([this,path,key,sid=e.stack](auto&&,auto&& a){a.Handled(true);EntryMenu(path,key,sid);});AttachDrag(tile,path);grid.Items().Append(tile);}
+   if(mapped)tile.ContextFlyout(itemMenu(path));else tile.ContextRequested([this,path,key,sid=e.stack](auto&&,auto&& a){a.Handled(true);EntryMenu(path,key,sid);});AttachDrag(tile,path);grid.Items().Append(tile);RegisterNav(path,tile,true);}
  }
+ if(focusIdx>=static_cast<int>(navPaths.size()))focusIdx=static_cast<int>(navPaths.size())-1;
+ RepaintNav();
  RenderCrumbs();
  if(mapped){std::wstring here=v.browseFolder.empty()?v.mappedFolder:v.browseFolder;std::wstring head=total==0?i18n::Tr(L"映射文件夹为空或不可访问"):i18n::TrF(L"映射视图（只读）· {0} · 共 {1} 项",{shell::Name(here),std::to_wstring(total)});if(total>limit)head+=i18n::TrF(L" · 已显示前 {0} 项",{std::to_wstring(limit)});if(v.browseInPlace)head+=i18n::Tr(L" · 双击文件夹可进入");Notify(head+i18n::Tr(L" · 右键更多"));}
  else Notify(v.entries.empty()?i18n::Tr(L"拖入文件、文件夹或应用快捷方式 · 原文件保持原位"):selected.empty()?i18n::Tr(L"双击打开 · 右键管理 · 拖拽排序 · 单击后方向键选择"):i18n::TrF(L"已选 {0} 项 · 拖出包含全部选中",{std::to_wstring(selected.size())}));
