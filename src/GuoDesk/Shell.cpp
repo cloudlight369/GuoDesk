@@ -98,6 +98,7 @@ fire_and_forget LoadIcon(std::wstring path,Microsoft::UI::Xaml::Controls::Image 
   uint8_t* target{};
   check_hresult(bytes->Buffer(&target));
   memcpy(target,pixels.data(),pixels.size());
+  if(cache.size()>2048)cache.clear();
   cache.insert_or_assign(path,bitmap);
   image.Source(bitmap);
  }catch(...){}

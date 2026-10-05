@@ -12,6 +12,7 @@ using namespace Microsoft::UI::Xaml::Controls;
 using namespace Microsoft::UI::Xaml::Media;
 namespace guodesk {
 static std::wstring ExePath(){wchar_t buf[MAX_PATH]{};GetModuleFileNameW(nullptr,buf,MAX_PATH);return buf;}
+static std::wstring DiagVersion();
 static bool AutostartEnabled(){HKEY k{};if(RegOpenKeyExW(HKEY_CURRENT_USER,L"Software\\Microsoft\\Windows\\CurrentVersion\\Run",0,KEY_READ,&k)!=ERROR_SUCCESS)return false;DWORD type{},size{};LONG rc=RegQueryValueExW(k,L"GuoDesk",nullptr,&type,nullptr,&size);RegCloseKey(k);return rc==ERROR_SUCCESS&&(type==REG_SZ||type==REG_EXPAND_SZ)&&size>2;}
 static void SetAutostart(bool on){HKEY k{};if(RegOpenKeyExW(HKEY_CURRENT_USER,L"Software\\Microsoft\\Windows\\CurrentVersion\\Run",0,KEY_SET_VALUE,&k)!=ERROR_SUCCESS){MessageBoxW(nullptr,i18n::Tr(L"无法写入注册表，请检查权限。").c_str(),L"GuoDesk",MB_OK|MB_ICONERROR);return;}if(on){auto quoted=L"\""+ExePath()+L"\"";RegSetValueExW(k,L"GuoDesk",0,REG_SZ,reinterpret_cast<BYTE const*>(quoted.c_str()),static_cast<DWORD>((quoted.size()+1)*sizeof(wchar_t)));}else RegDeleteValueW(k,L"GuoDesk");RegCloseKey(k);}
 static TextBlock Caption(std::wstring const& text){TextBlock t;t.Text(text);t.FontSize(13);t.Margin(Thickness{0,14,0,6});t.Opacity(0.7);return t;}
@@ -127,6 +128,7 @@ SettingsWindow::SettingsWindow(Controller& c):owner(c){
  syncUser=TextBox();syncUser.PlaceholderText(i18n::Tr(L"账号（可选）"));syncUser.HorizontalAlignment(HorizontalAlignment::Stretch);syncUser.Margin(Thickness{0,6,0,0});panel.Children().Append(syncUser);
  syncPass=PasswordBox();syncPass.PlaceholderText(i18n::Tr(L"密码（本机加密保存）"));syncPass.HorizontalAlignment(HorizontalAlignment::Stretch);syncPass.Margin(Thickness{0,6,0,0});panel.Children().Append(syncPass);
  syncAuto=ToggleSwitch();syncAuto.OnContent(box_value(i18n::Tr(L"自动同步")));syncAuto.OffContent(box_value(i18n::Tr(L"自动同步")));syncAuto.Margin(Thickness{0,6,0,0});syncAuto.Toggled([this](auto&&,auto&&){if(applying)return;OnSyncAuto(syncAuto.IsOn());});panel.Children().Append(syncAuto);
+ syncInsecure=ToggleSwitch();syncInsecure.OnContent(box_value(i18n::Tr(L"忽略证书错误（仅受信网络）")));syncInsecure.OffContent(box_value(i18n::Tr(L"忽略证书错误（仅受信网络）")));syncInsecure.Margin(Thickness{0,6,0,0});syncInsecure.Toggled([this](auto&&,auto&&){if(applying)return;owner.layout.settings.syncInsecure=syncInsecure.IsOn();owner.Save();});panel.Children().Append(syncInsecure);
  StackPanel syncBar;syncBar.Orientation(Orientation::Horizontal);syncBar.Spacing(8);syncBar.Margin(Thickness{0,8,0,0});
  auto syncUpBtn=Button();syncUpBtn.Content(box_value(i18n::Tr(L"上传到云端")));syncUpBtn.Click([this](auto&&,auto&&){OnSyncUpload();});syncBar.Children().Append(syncUpBtn);
  auto syncDownBtn=Button();syncDownBtn.Content(box_value(i18n::Tr(L"从云端恢复")));syncDownBtn.Click([this](auto&&,auto&&){OnSyncDownload();});syncBar.Children().Append(syncDownBtn);
@@ -141,7 +143,7 @@ SettingsWindow::SettingsWindow(Controller& c):owner(c){
  panel.Children().Append(ruleBar);
  RebuildRules();
  panel.Children().Append(Caption(i18n::Tr(L"关于")));
- TextBlock about;about.Text(i18n::Tr(L"GuoDesk v2.0.0 · 桌面分区整理\n引用式入口：只存引用，不动原文件\n缺失入口可右键重新定位\n便签与待办：托盘右键开启，待办可设截止日期提醒\n时钟：托盘右键开启，右键时钟查看日历\n音乐·搜索·天气：托盘右键开启\n双击 Ctrl 或自定义热键随时唤起\n分区模板：托盘或设置一键铺好常用文件夹分区\n映射分区可就地浏览，面包屑返回\n快速捕获：Enter 记便签，Ctrl+Enter 存待办\n组件字号三档可调，时钟支持数字与模拟表盘\n搜索窗可直连 Everything，秒级检索本地文件\n分区主题色与背景图：右键菜单随时换装\n误操作可撤销：Ctrl+Alt+U 或托盘，最多 20 步\n标签组支持悬停秒切，跨分区拖动也能回退\nWebDAV 同步：设置中配置网盘，多机同步布局\n\nMIT License · cloudlight369"));about.FontSize(12);about.TextWrapping(TextWrapping::Wrap);about.Opacity(0.8);panel.Children().Append(about);
+ TextBlock about;auto aboutText=i18n::Tr(L"GuoDesk · 桌面分区整理\n引用式入口：只存引用，不动原文件\n缺失入口可右键重新定位\n便签与待办：托盘右键开启，待办可设截止日期提醒\n时钟：托盘右键开启，右键时钟查看日历\n音乐·搜索·天气：托盘右键开启\n双击 Ctrl 或自定义热键随时唤起\n分区模板：托盘或设置一键铺好常用文件夹分区\n映射分区可就地浏览，面包屑返回\n快速捕获：Enter 记便签，Ctrl+Enter 存待办\n组件字号三档可调，时钟支持数字与模拟表盘\n搜索窗可直连 Everything，秒级检索本地文件\n分区主题色与背景图：右键菜单随时换装\n误操作可撤销：Ctrl+Alt+U 或托盘，最多 20 步\n标签组支持悬停秒切，跨分区拖动也能回退\nWebDAV 同步：设置中配置网盘，多机同步布局\n\nMIT License · cloudlight369");aboutText.replace(0,8,L"GuoDesk v"+DiagVersion()+L" ");about.Text(aboutText);about.FontSize(12);about.TextWrapping(TextWrapping::Wrap);about.Opacity(0.8);panel.Children().Append(about);
  scroll.Content(panel);window.Content(scroll);
  window.Closed([this](auto&&,auto&&){if(closing)return;closing=true;window.DispatcherQueue().TryEnqueue([this]{owner.CloseSettings();});});
  window.Activate();
@@ -175,7 +177,9 @@ void SettingsWindow::OnSyncSave(){
  s.syncUrl=TrimSpace(std::wstring(syncUrl.Text()));
  if(!s.syncUrl.empty()){webdav::UrlParts up;if(!webdav::ParseUrl(s.syncUrl,up)){s.syncUrl.clear();SyncHintWarn(syncHint,i18n::Tr(L"地址无效：需以 http:// 或 https:// 开头。"));return;}}
  s.syncUser=TrimSpace(std::wstring(syncUser.Text()));
- s.syncPass=webdav::ProtectSecret(TrimSpace(std::wstring(syncPass.Password())));
+ auto pw=TrimSpace(std::wstring(syncPass.Password()));
+ if(!pw.empty()){auto prot=webdav::ProtectSecret(pw);if(prot.empty()){SyncHintWarn(syncHint,i18n::Tr(L"密码加密失败（系统凭据保护不可用），已保留原密码。"));owner.Save();return;}s.syncPass=prot;}
+ else s.syncPass.clear();
  owner.Save();
 }
 void SettingsWindow::OnSyncAuto(bool on){
@@ -192,9 +196,10 @@ void SettingsWindow::OnSyncUpload(){
  auto data=Serialize(owner.layout);
  auto url=webdav::JoinUrl(owner.layout.settings.syncUrl,L"guodesk-layout.json");
  auto user=owner.layout.settings.syncUser;auto pass=webdav::UnprotectSecret(owner.layout.settings.syncPass);
+ auto insecure=owner.layout.settings.syncInsecure;
  auto weak=std::weak_ptr<bool>(alive);
- std::thread([this,weak,data=std::move(data),url,user,pass](){
-  bool ok=webdav::UploadText(url,user,pass,data);
+ std::thread([this,weak,data=std::move(data),url,user,pass,insecure](){
+  bool ok=webdav::UploadText(url,user,pass,data,insecure);
   window.DispatcherQueue().TryEnqueue([this,weak,ok]{if(weak.lock()==nullptr||closing||!syncHint)return;SyncHintInfo(syncHint,ok?i18n::Tr(L"上传完成。"):i18n::Tr(L"上传失败：请检查地址、账号密码或网络。"));});
  }).detach();
 }
@@ -204,9 +209,10 @@ void SettingsWindow::OnSyncDownload(){
  SyncHintInfo(syncHint,i18n::Tr(L"正在下载…"));
  auto url=webdav::JoinUrl(owner.layout.settings.syncUrl,L"guodesk-layout.json");
  auto user=owner.layout.settings.syncUser;auto pass=webdav::UnprotectSecret(owner.layout.settings.syncPass);
+ auto insecure=owner.layout.settings.syncInsecure;
  auto weak=std::weak_ptr<bool>(alive);
- std::thread([this,weak,url,user,pass](){
-  std::string data;bool ok=webdav::DownloadText(url,user,pass,data);
+ std::thread([this,weak,url,user,pass,insecure](){
+  std::string data;bool ok=webdav::DownloadText(url,user,pass,data,insecure);
   Layout next;bool valid=false;
   if(ok){try{next=Deserialize(data);valid=true;}catch(...){}}
   window.DispatcherQueue().TryEnqueue([this,weak,ok,valid,next=std::move(next)]()mutable{
@@ -217,7 +223,7 @@ void SettingsWindow::OnSyncDownload(){
   });
  }).detach();
 }
-void SettingsWindow::Apply(){applying=true;auto const& s=owner.layout.settings;theme.SelectedIndex(s.theme==L"Light"?1:s.theme==L"Dark"?2:0);compact.IsOn(s.compact);performance.IsOn(s.performance);autostart.IsOn(AutostartEnabled());everythingToggle.IsOn(s.everything);evHint.Text(ev::Available()?i18n::Tr(L"已检测到 Everything，搜索窗会附带本地文件结果。"):i18n::Tr(L"未检测到正在运行的 Everything，安装并启动后搜索窗可附带本地文件结果。"));lang.SelectedIndex(s.language==L"en-US"?2:s.language==L"zh-CN"?1:0);hotkey.SelectedIndex(s.hotkey==L"DoubleCtrl"?0:s.hotkey==L"Ctrl+Alt+G"?1:s.hotkey==L"Ctrl+Alt+Z"?2:s.hotkey==L"Ctrl+Shift+Space"?3:s.hotkey==L"Win+Z"?4:s.hotkey.empty()?6:5);hotkeyCustom.Text(s.hotkey==L"DoubleCtrl"?i18n::Tr(L"双击 Ctrl"):s.hotkey);hotkeySearch.SelectedIndex(s.hotkeySearch==L"Ctrl+Alt+F"?1:s.hotkeySearch==L"Ctrl+Shift+F"?2:s.hotkeySearch==L"Alt+Q"?3:0);hotkeyCapture.SelectedIndex(s.hotkeyCapture==L"Ctrl+Alt+V"?1:s.hotkeyCapture==L"Ctrl+Shift+V"?2:s.hotkeyCapture==L"Alt+C"?3:0);hotkeyUndo.SelectedIndex(s.hotkeyUndo==L"Ctrl+Alt+U"?1:s.hotkeyUndo==L"Ctrl+Alt+Z"?2:s.hotkeyUndo==L"Ctrl+Shift+Z"?3:0);hotkeyReveal.SelectedIndex(s.revealHotkey==L"Ctrl+Alt+Space"?1:s.revealHotkey==L"Ctrl+Alt+Shift+Space"?2:0);tabHover.IsOn(s.tabHover);memTrim.IsOn(s.memTrim);textSize.SelectedIndex(s.textSize<0?0:s.textSize>2?2:s.textSize);clockStyle.SelectedIndex(s.clockStyle==L"analog"?1:0);backdrop.SelectedIndex(ClampBackdropKind(s.backdrop));weatherSkin.SelectedIndex(owner.layout.widgets.weatherSkin==1?1:0);weatherCity.Text(owner.layout.widgets.weatherCity);snapshots.IsOn(s.snapshots);syncUrl.Text(s.syncUrl);syncUser.Text(s.syncUser);try{syncPass.Password(webdav::UnprotectSecret(s.syncPass));}catch(...){}syncAuto.IsOn(s.syncAuto);if(syncHint){syncHint.Foreground(nullptr);syncHint.Text(L"");}hotkeyHint.Visibility(Visibility::Collapsed);hotkeySearchHint.Visibility(Visibility::Collapsed);hotkeyCaptureHint.Visibility(Visibility::Collapsed);hotkeyUndoHint.Visibility(Visibility::Collapsed);applying=false;}
+void SettingsWindow::Apply(){applying=true;auto const& s=owner.layout.settings;theme.SelectedIndex(s.theme==L"Light"?1:s.theme==L"Dark"?2:0);compact.IsOn(s.compact);performance.IsOn(s.performance);autostart.IsOn(AutostartEnabled());everythingToggle.IsOn(s.everything);evHint.Text(ev::Available()?i18n::Tr(L"已检测到 Everything，搜索窗会附带本地文件结果。"):i18n::Tr(L"未检测到正在运行的 Everything，安装并启动后搜索窗可附带本地文件结果。"));lang.SelectedIndex(s.language==L"en-US"?2:s.language==L"zh-CN"?1:0);hotkey.SelectedIndex(s.hotkey==L"DoubleCtrl"?0:s.hotkey==L"Ctrl+Alt+G"?1:s.hotkey==L"Ctrl+Alt+Z"?2:s.hotkey==L"Ctrl+Shift+Space"?3:s.hotkey==L"Win+Z"?4:s.hotkey.empty()?6:5);hotkeyCustom.Text(s.hotkey==L"DoubleCtrl"?i18n::Tr(L"双击 Ctrl"):s.hotkey);hotkeySearch.SelectedIndex(s.hotkeySearch==L"Ctrl+Alt+F"?1:s.hotkeySearch==L"Ctrl+Shift+F"?2:s.hotkeySearch==L"Alt+Q"?3:0);hotkeyCapture.SelectedIndex(s.hotkeyCapture==L"Ctrl+Alt+V"?1:s.hotkeyCapture==L"Ctrl+Shift+V"?2:s.hotkeyCapture==L"Alt+C"?3:0);hotkeyUndo.SelectedIndex(s.hotkeyUndo==L"Ctrl+Alt+U"?1:s.hotkeyUndo==L"Ctrl+Alt+Z"?2:s.hotkeyUndo==L"Ctrl+Shift+Z"?3:0);hotkeyReveal.SelectedIndex(s.revealHotkey==L"Ctrl+Alt+Space"?1:s.revealHotkey==L"Ctrl+Alt+Shift+Space"?2:0);tabHover.IsOn(s.tabHover);memTrim.IsOn(s.memTrim);textSize.SelectedIndex(s.textSize<0?0:s.textSize>2?2:s.textSize);clockStyle.SelectedIndex(s.clockStyle==L"analog"?1:0);backdrop.SelectedIndex(ClampBackdropKind(s.backdrop));weatherSkin.SelectedIndex(owner.layout.widgets.weatherSkin==1?1:0);weatherCity.Text(owner.layout.widgets.weatherCity);snapshots.IsOn(s.snapshots);syncUrl.Text(s.syncUrl);syncUser.Text(s.syncUser);try{syncPass.Password(webdav::UnprotectSecret(s.syncPass));}catch(...){}syncAuto.IsOn(s.syncAuto);syncInsecure.IsOn(s.syncInsecure);if(syncHint){syncHint.Foreground(nullptr);syncHint.Text(L"");}hotkeyHint.Visibility(Visibility::Collapsed);hotkeySearchHint.Visibility(Visibility::Collapsed);hotkeyCaptureHint.Visibility(Visibility::Collapsed);hotkeyUndoHint.Visibility(Visibility::Collapsed);applying=false;}
 static std::string ReadTextFile(std::filesystem::path const& p){std::ifstream f(p,std::ios::binary);if(!f)throw std::runtime_error("Cannot read file");return {std::istreambuf_iterator<char>(f),{}};}
 void SettingsWindow::OnExport(){owner.Save();auto target=shell::SaveFile(hwnd,L"guodesk-layout.json");if(target.empty())return;try{std::filesystem::copy_file(owner.store.Directory()/L"layout.json",target,std::filesystem::copy_options::overwrite_existing);}catch(...){MessageBoxW(hwnd,i18n::Tr(L"导出失败：请检查目标位置是否可写。").c_str(),L"GuoDesk",MB_OK|MB_ICONERROR);return;}if(!owner.windows.empty())owner.windows.front()->Notify(i18n::TrF(L"已导出到 {0}",{target}));}
 void SettingsWindow::OnImport(){auto picked=shell::Pick(hwnd,false,i18n::Tr(L"选择要导入的 GuoDesk 配置"));if(picked.size()!=1)return;std::string text;try{text=ReadTextFile(std::filesystem::path(picked[0]));}catch(...){MessageBoxW(hwnd,i18n::Tr(L"导入失败：文件不是有效的 GuoDesk 配置。").c_str(),L"GuoDesk",MB_OK|MB_ICONERROR);return;}Layout next;try{next=Deserialize(text);}catch(...){MessageBoxW(hwnd,i18n::Tr(L"导入失败：文件不是有效的 GuoDesk 配置。").c_str(),L"GuoDesk",MB_OK|MB_ICONERROR);return;}owner.ImportLayout(std::move(next));Controller* c=&owner;winrt::Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread().TryEnqueue([c](){c->CloseSettings();});}

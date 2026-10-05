@@ -129,7 +129,7 @@ AppGridWindow::AppGridWindow(Controller& c):owner(c){
  list=StackPanel();list.Spacing(6);scroll.Content(list);Grid::SetRow(scroll,2);root.Children().Append(scroll);
  TextBlock hint;hint.Text(i18n::Tr(L"点击启动 · 把文件拖到磁贴即用该应用打开"));hint.FontSize(ScaledFont(owner.layout.settings.textSize,11));hint.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,140,140,140}));hint.HorizontalAlignment(HorizontalAlignment::Center);hint.Margin(Thickness{0,2,0,8});
  Grid::SetRow(hint,3);root.Children().Append(hint);
- root.SizeChanged([this](auto&&,auto&&){static double lastW=-1;double wpx=root.ActualWidth();if(wpx<=0)return;int cols=static_cast<int>(std::clamp(wpx/96.0,3.0,8.0));static int lastCols=-1;if(cols==lastCols&&wpx==lastW)return;lastCols=cols;lastW=wpx;Rebuild();});
+ root.SizeChanged([this](auto&&,auto&&){double wpx=root.ActualWidth();if(wpx<=0)return;int cols=static_cast<int>(std::clamp(wpx/96.0,3.0,8.0));if(cols==lastGridCols&&wpx==lastGridW)return;lastGridCols=cols;lastGridW=wpx;Rebuild();});
  window.Content(root);
  window.Closed([this](auto&&,auto&&){if(closing)return;closing=true;window.DispatcherQueue().TryEnqueue([this]{owner.CloseAppGrid();});});
  int x=w.appGridX,y=w.appGridY,wd=w.appGridW,ht=w.appGridH;SetWindowPos(hwnd,nullptr,x,y,wd,ht,SWP_NOZORDER);

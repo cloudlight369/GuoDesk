@@ -55,7 +55,7 @@ std::wstring UnprotectSecret(std::wstring const& blob){
  LocalFree(out.pbData);
  return plain;
 }
-Result Request(std::wstring const& method,std::wstring const& url,std::wstring const& user,std::wstring const& pass,std::string const& body){
+Result Request(std::wstring const& method,std::wstring const& url,std::wstring const& user,std::wstring const& pass,std::string const& body,bool insecure){
  Result r;UrlParts up;
  if(!ParseUrl(url,up))return r;
  HINTERNET session=WinHttpOpen(L"GuoDesk/1.1",WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,WINHTTP_NO_PROXY_NAME,WINHTTP_NO_PROXY_BYPASS,0);
@@ -69,7 +69,7 @@ Result Request(std::wstring const& method,std::wstring const& url,std::wstring c
   if(!user.empty()||!pass.empty())headers=L"Authorization: Basic "+ToWide(Base64(ToUtf8(user+L":"+pass)))+L"\r\n";
   if(!body.empty())headers+=L"Content-Type: application/json\r\n";
   BOOL sent=WinHttpSendRequest(request,headers.empty()?WINHTTP_NO_ADDITIONAL_HEADERS:headers.c_str(),(DWORD)headers.size(),(LPVOID)(body.empty()?nullptr:body.data()),(DWORD)body.size(),(DWORD)body.size(),0);
-  if(!sent&&GetLastError()==ERROR_WINHTTP_SECURE_FAILURE){
+  if(insecure&&!sent&&GetLastError()==ERROR_WINHTTP_SECURE_FAILURE){
    DWORD flags=SECURITY_FLAG_IGNORE_UNKNOWN_CA|SECURITY_FLAG_IGNORE_CERT_CN_INVALID|SECURITY_FLAG_IGNORE_CERT_DATE_INVALID|SECURITY_FLAG_IGNORE_CERT_WRONG_USAGE;
    WinHttpSetOption(request,WINHTTP_OPTION_SECURITY_FLAGS,&flags,sizeof(flags));
    sent=WinHttpSendRequest(request,headers.empty()?WINHTTP_NO_ADDITIONAL_HEADERS:headers.c_str(),(DWORD)headers.size(),(LPVOID)(body.empty()?nullptr:body.data()),(DWORD)body.size(),(DWORD)body.size(),0);
@@ -88,18 +88,18 @@ Result Request(std::wstring const& method,std::wstring const& url,std::wstring c
  WinHttpCloseHandle(session);
  return r;
 }
-bool UploadText(std::wstring const& url,std::wstring const& user,std::wstring const& pass,std::string const& content){
- auto r=Request(L"PUT",url,user,pass,content);
+bool UploadText(std::wstring const& url,std::wstring const& user,std::wstring const& pass,std::string const& content,bool insecure){
+ auto r=Request(L"PUT",url,user,pass,content,insecure);
  if(r.ok)return true;
  auto slash=url.find_last_of(L'/');auto schemeend=url.find(L"//");
  if(slash!=std::wstring::npos&&(schemeend==std::wstring::npos||slash>schemeend+1)){
-  Request(L"MKCOL",url.substr(0,slash),user,pass);
-  r=Request(L"PUT",url,user,pass,content);
+  Request(L"MKCOL",url.substr(0,slash),user,pass,std::string(),insecure);
+  r=Request(L"PUT",url,user,pass,content,insecure);
  }
  return r.ok;
 }
-bool DownloadText(std::wstring const& url,std::wstring const& user,std::wstring const& pass,std::string& content){
- auto r=Request(L"GET",url,user,pass);
+bool DownloadText(std::wstring const& url,std::wstring const& user,std::wstring const& pass,std::string& content,bool insecure){
+ auto r=Request(L"GET",url,user,pass,std::string(),insecure);
  if(!r.ok)return false;
  content=std::move(r.body);
  return true;

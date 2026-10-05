@@ -8,7 +8,7 @@ std::string Base64(std::string const& bytes);
 std::wstring ProtectSecret(std::wstring const& plain);
 std::wstring UnprotectSecret(std::wstring const& blob);
 struct Result { bool ok=false; unsigned status=0; std::string body; };
-Result Request(std::wstring const& method,std::wstring const& url,std::wstring const& user,std::wstring const& pass,std::string const& body=std::string());
-bool UploadText(std::wstring const& url,std::wstring const& user,std::wstring const& pass,std::string const& content);
-bool DownloadText(std::wstring const& url,std::wstring const& user,std::wstring const& pass,std::string& content);
+Result Request(std::wstring const& method,std::wstring const& url,std::wstring const& user,std::wstring const& pass,std::string const& body=std::string(),bool insecure=false);
+bool UploadText(std::wstring const& url,std::wstring const& user,std::wstring const& pass,std::string const& content,bool insecure=false);
+bool DownloadText(std::wstring const& url,std::wstring const& user,std::wstring const& pass,std::string& content,bool insecure=false);
 }

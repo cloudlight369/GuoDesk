@@ -10,6 +10,7 @@ class AppGridWindow {
  winrt::Microsoft::UI::Xaml::Controls::TextBox input{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::TextBlock count{nullptr};
  std::vector<AppShortcut> apps; std::wstring query;
+ double lastGridW=-1;int lastGridCols=-1;
  winrt::Microsoft::UI::Xaml::Media::Brush ThemeBrush(wchar_t const* key,winrt::Windows::UI::Color fallback);
  void Scan(); void Rebuild(); void SaveGeometry();
  void Launch(AppShortcut const& a,std::wstring const& file={});

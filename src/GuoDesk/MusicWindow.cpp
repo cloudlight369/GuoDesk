@@ -126,7 +126,7 @@ MusicWindow::MusicWindow(Controller& c):owner(c){
   auto picked=shell::Pick(hwnd,true,i18n::Tr(L"选择音乐文件夹"));
   if(picked.empty())return;
   owner.layout.widgets.musicFolder=picked.front();current=0;
-  PlayIndex(owner.layout.widgets.musicIndex,true);
+  PlayIndex(0,true);
  });
  Grid::SetColumn(folderBtn,1);headGrid.Children().Append(folderBtn);
  header.Child(headGrid);root.Children().Append(header);

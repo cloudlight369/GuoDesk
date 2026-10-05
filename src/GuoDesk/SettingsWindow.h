@@ -39,6 +39,7 @@ class SettingsWindow {
  winrt::Microsoft::UI::Xaml::Controls::TextBox syncUser{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::PasswordBox syncPass{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::ToggleSwitch syncAuto{nullptr};
+ winrt::Microsoft::UI::Xaml::Controls::ToggleSwitch syncInsecure{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::TextBlock syncHint{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::ScrollViewer scroll{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::StackPanel rulesPanel{nullptr};
