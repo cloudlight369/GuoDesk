@@ -89,6 +89,8 @@ public:
  Zone& Model();
  bool Exists() const;
  void Refresh(); void Place(); void Show(); void SetDesktop(bool enabled); void Raise(bool on); void EmbedRetry(); void Capture();
+ // 把某个文件在当前分区里"指出来"：需要时先展开/取消胶囊/切到它所在的那一页，再聚焦并滚动到可见
+ bool RevealEntry(std::wstring const& path);
  void ApplySettings();
  void Notify(std::wstring const& text);
  void Pick(bool folder=false);
@@ -109,6 +111,9 @@ public:
  explicit Controller(std::filesystem::path root={}); ~Controller();
  void Start(); void Save(); void ImportLayout(Layout&& next,wchar_t const* notice=L"导入完成，界面已按新配置重建。"); void HealTopology(); void Add(); int Remove(std::wstring const& id); void Refresh(); void Show(); void HideAll(); void ToggleAll(); bool ApplyHotkey(); void Quit(); void ToggleDesktop();
  void PushUndo(std::wstring const& label); std::string UndoMark(); void UndoPush(std::wstring const& label,std::string mark); void Undo(); void Toast(std::wstring const& title,std::wstring const& text);
+ // 下载完成后留一个"点气泡就带我去看它"的钩子：只记最后一条
+ void RevealLater(std::wstring path){pendingReveal=std::move(path);} bool RevealPending();
+ std::wstring pendingReveal;
  void QuickZone(std::wstring const& tag); void UseTemplate(ZoneTemplate const& tpl);
  void ShowSettings(); void CloseSettings(); void ApplySettings();
  bool ArchiveRootBusy(std::wstring const& root,DeskWindow const& self)const;

@@ -74,6 +74,8 @@ int ClampExpandDir(int v);
 int ClampMaxHeight(int v);
 int ZoneCapHeight(int maxHeight,int workHeight);
 int ZoneExpandedHeight(int height,int maxHeight,int workHeight);
+// 在渲染出来的条目里找一个路径（大小写/短路径无关），返回下标，找不到返回 -1
+int NavIndexOf(std::vector<std::wstring> const& paths,std::wstring const& want);
 int ZoneAnchorTop(int top,int height,int targetHeight,int dir,int workTop,int workBottom);
 wchar_t const* ExpandDirName(int dir);
 std::wstring MediaTrackLine(std::wstring const& title,std::wstring const& artist);

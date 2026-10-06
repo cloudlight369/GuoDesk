@@ -604,6 +604,21 @@ void DeskWindow::SetFocus(int index){
  focusIdx=index;RepaintNav();
  try{if(index>=0&&index<static_cast<int>(navVis.size())&&navVis[index].el)navVis[index].el.StartBringIntoView();}catch(...){}
 }
+// 让某个文件"出现在眼前"：必要时先展开折叠、退出胶囊、切到它所在的那一页，再聚焦并滚动到可见
+bool DeskWindow::RevealEntry(std::wstring const& path){
+ if(path.empty()||!Exists())return false;
+ auto const find=[&](int& i){i=NavIndexOf(navPaths,path);return i>=0;};
+ int idx=-1;
+ for(int pass=0;pass<3;++pass){if(find(idx))break;if(Model().collapsed)SetCollapsed(false);else if(capsuleNow)SetCapsule(false);else break;}
+ if(idx<0){
+  auto const members=GroupMemberIds(owner.layout,Model().group);
+  for(auto const& m:members){if(m==viewId)continue;viewId=m;Refresh();if(find(idx))break;}
+ }
+ if(idx<0)return false;
+ FocusBody();SetFocus(idx);
+ try{SetForegroundWindow(hwnd);}catch(...){}
+ return true;
+}
 void DeskWindow::MoveFocus(int delta){
  int const n=static_cast<int>(navPaths.size());if(n==0){focusIdx=-1;return;}
  SetFocus(NavStep(focusIdx,n,delta));
@@ -670,6 +685,8 @@ void DeskWindow::Menu(FrameworkElement const& target){auto& z=Model();auto& v=Vi
  if(!owner.undo.Empty()){auto* ctrl=&owner;menu.Items().Append(MenuItem(i18n::TrF(L"撤销：{0}",{owner.undo.TopLabel()}),[ctrl]{ctrl->Undo();}));menu.Items().Append(MenuFlyoutSeparator());}
  menu.Items().Append(MenuItem(i18n::Tr(L"添加文件 / 应用"),[this,mapped]{if(mapped){Notify(i18n::Tr(L"映射分区为只读视图：请在资源管理器中修改文件夹后右键刷新。"));return;}Pick();}));
  menu.Items().Append(MenuItem(i18n::Tr(L"添加文件夹"),[this,mapped]{if(mapped){Notify(i18n::Tr(L"映射分区为只读视图：请在资源管理器中修改文件夹后右键刷新。"));return;}Pick(true);}));
+ // 下载以前只能从浏览器把链接拖进来，键盘用户和"已经复制了链接"的人没有入口
+ menu.Items().Append(MenuItem(i18n::Tr(L"从链接下载…"),[this]{TextBox box;box.PlaceholderText(i18n::Tr(L"粘贴 http 或 https 链接"));box.HorizontalAlignment(HorizontalAlignment::Stretch);ContentDialog dlg;dlg.Title(box_value(i18n::Tr(L"从链接下载")));dlg.PrimaryButtonText(i18n::Tr(L"下载"));dlg.CloseButtonText(i18n::Tr(L"取消"));dlg.DefaultButton(ContentDialogButton::Primary);StackPanel p;p.Spacing(8);p.MaxWidth(320);p.Children().Append(box);dlg.Content(p);try{dlg.XamlRoot(root.XamlRoot());}catch(...){return;}auto op=dlg.ShowAsync();op.Completed([this,box](auto&&async,auto&&){if(async.GetResults()!=ContentDialogResult::Primary)return;auto url=std::wstring(box.Text());size_t const a=url.find_first_not_of(L" \t\r\n");if(a==std::wstring::npos){Notify(i18n::Tr(L"请先粘贴一个链接。"));return;}size_t const b=url.find_last_not_of(L" \t\r\n");url=url.substr(a,b-a+1);StartDownload(url);});}));
  menu.Items().Append(MenuItem(i18n::Tr(L"新建文件夹…"),[this,mapped]{if(!mapped){Notify(i18n::Tr(L"普通分区请用「添加文件夹」，映射分区可直接在此新建文件夹。"));return;}CreateFolderHere();}));
  menu.Items().Append(MenuItem(i18n::Tr(L"按规则归档此文件夹…"),[this,mapped]{if(!mapped){Notify(i18n::Tr(L"普通分区没有映射文件夹，无法按规则归档。"));return;}ArchiveHere();}));
  menu.Items().Append(MenuItem(shell::HasClipFiles()?(mapped?i18n::Tr(L"粘贴文件到此处"):i18n::Tr(L"粘贴为入口")):i18n::Tr(L"粘贴（剪贴板无文件）"),[this]{PasteClip();}));
@@ -870,7 +887,12 @@ void DeskWindow::StartDownload(std::wstring url){
    if(res->path.empty()){Notify(res->status?i18n::TrF(L"下载失败（HTTP {0}）。",{std::to_wstring(res->status)}):i18n::Tr(L"下载失败：链接无法访问。"));return;}
    if(mapped){SyncMapped(View());Refresh();}else{AddEntry(View(),res->path);Refresh();}
    owner.Save();
-   Notify(i18n::TrF(L"已下载「{0}」（{1}）。",{shell::Name(res->path),PreviewSizeText(res->bytes)}));
+   auto const name=shell::Name(res->path);
+   bool const located=RevealEntry(res->path);
+   // 气泡是可点的：人在别的程序里时，点一下气泡就会回到这里并选中这个文件
+   owner.RevealLater(res->path);
+   owner.Toast(i18n::Tr(L"下载完成"),i18n::TrF(L"「{0}」已放进「{1}」，点这条通知可以看它在哪儿。",{name,View().name}));
+   Notify(located?i18n::TrF(L"已下载「{0}」（{1}）·已定位，回车打开。",{name,PreviewSizeText(res->bytes)}):i18n::TrF(L"已下载「{0}」（{1}）。",{name,PreviewSizeText(res->bytes)}));
   });
 }
 void DeskWindow::DropIntoFolder(std::vector<std::wstring> const& paths,std::wstring const& dest,bool move){
@@ -1048,6 +1070,13 @@ bool Controller::CommitCapture(std::wstring const& text,bool asTodo){
  NOTIFYICONDATAW nif{sizeof(nif)};nif.hWnd=messageWindow;nif.uID=1;nif.uFlags=NIF_INFO;nif.dwInfoFlags=NIIF_INFO;wcscpy_s(nif.szInfoTitle,i18n::Tr(L"快速捕获").c_str());wcscpy_s(nif.szInfo,i18n::TrF(asTodo?L"已添加待办「{0}」":L"已记入便签「{0}」",{preview}).c_str());Shell_NotifyIconW(NIM_MODIFY,&nif);
  return true;}
 void Controller::Toast(std::wstring const& title,std::wstring const& text){NOTIFYICONDATAW nif{sizeof(nif)};nif.hWnd=messageWindow;nif.uID=1;nif.uFlags=NIF_INFO;nif.dwInfoFlags=NIIF_INFO;wcscpy_s(nif.szInfoTitle,title.c_str());wcscpy_s(nif.szInfo,text.c_str());Shell_NotifyIconW(NIM_MODIFY,&nif);}
+// 点下载气泡：先让分区露出来，再把那个文件指出来；找不到（分区被删了）就安静放弃
+bool Controller::RevealPending(){
+ if(pendingReveal.empty())return false;
+ auto const path=pendingReveal;pendingReveal.clear();
+ for(auto& w:windows)if(w->RevealEntry(path))return true;
+ return false;
+}
 void Controller::CheckReminders(){bool save=false;for(auto& t:layout.widgets.todos){if(t.done||t.reminded||!DueReached(t.due))continue;t.reminded=true;save=true;std::wstring text=t.text;if(text.size()>100)text=text.substr(0,100)+L"…";NOTIFYICONDATAW nif{sizeof(nif)};nif.hWnd=messageWindow;nif.uID=1;nif.uFlags=NIF_INFO;nif.dwInfoFlags=NIIF_INFO;wcscpy_s(nif.szInfoTitle,i18n::Tr(L"待办到期提醒").c_str());wcscpy_s(nif.szInfo,i18n::TrF(L"「{0}」已到截止日期",{text}).c_str());Shell_NotifyIconW(NIM_MODIFY,&nif);}if(save)Save();}
 void Controller::ApplySettings(){for(auto& w:windows)w->ApplySettings();}
 void Controller::MoveEntry(std::wstring const& key,std::wstring const& target,size_t index){auto to=std::find_if(layout.zones.begin(),layout.zones.end(),[&](auto const& z){return z.id==target;});if(to==layout.zones.end())return;for(auto& from:layout.zones){auto entry=std::find_if(from.entries.begin(),from.entries.end(),[&](auto const& e){return e.id==key;});if(entry==from.entries.end())continue;if(&from!=&*to){for(auto const& existing:to->entries)if(PathKey(existing.path)==PathKey(entry->path))return;PushUndo(i18n::TrF(L"移动入口到「{0}」",{to->name}));}auto value=*entry;if(&from!=&*to)value.stack.clear();auto old=static_cast<size_t>(entry-from.entries.begin());from.entries.erase(entry);if(&from==&*to && index>old)--index;index=std::min(index,to->entries.size());to->entries.insert(to->entries.begin()+index,std::move(value));return;}}
@@ -1062,7 +1091,7 @@ static void TrimMemoryIfIdle(){
 LRESULT CALLBACK Controller::MessageProc(HWND h,UINT msg,WPARAM w,LPARAM l){auto* self=reinterpret_cast<Controller*>(GetWindowLongPtrW(h,GWLP_USERDATA));if(msg==WM_NCCREATE){self=static_cast<Controller*>(reinterpret_cast<CREATESTRUCTW*>(l)->lpCreateParams);SetWindowLongPtrW(h,GWLP_USERDATA,reinterpret_cast<LONG_PTR>(self));}if(!self)return DefWindowProcW(h,msg,w,l);try{if(msg==self->taskbarCreated&&self->taskbarCreated){self->AddTray();if(self->desktopMode){if(self->raising)self->EndRaise();self->host=shell::DesktopHost();for(auto& item:self->windows)if(IsWindow(item->hwnd))item->SetDesktop(true);}}if(msg==WM_TIMER&&w==1){if(self->desktopMode){auto host=shell::DesktopHost();if(host&&host!=self->host){self->host=host;if(!self->raising)for(auto& item:self->windows)if(IsWindow(item->hwnd))item->SetDesktop(true);}}if(!self->raising)for(auto& item:self->windows)if(IsWindow(item->hwnd))item->EmbedRetry();
  if(self->raising&&!(g_raiseKey.vk&&(GetAsyncKeyState(g_raiseKey.vk)&0x8000)&&RevealModsDown(g_raiseKey.mods)))self->EndRaise();
  if(self->revealShowing&&!(g_revealKey.vk&&(GetAsyncKeyState(g_revealKey.vk)&0x8000)&&RevealModsDown(g_revealKey.mods)))self->RevealEnd();
- for(auto& z:self->layout.zones){if(z.mappedFolder.empty())continue;auto stamp=StampOf(z.mappedFolder);if(stamp.empty())continue;auto key=PathKey(z.mappedFolder);auto it=self->mappedStamp.find(key);if(it==self->mappedStamp.end()){self->mappedStamp[key]=stamp;continue;}if(it->second!=stamp){it->second=stamp;SyncMapped(z);for(auto& item:self->windows)if(item->id==z.id||item->viewId==z.id)item->Refresh();}}self->CheckReminders();for(auto& item:self->windows)if(IsWindow(item->hwnd))item->AutoArchiveTick();static int healTick=0;if((++healTick%5)==0){self->ApplyHotkey();self->HealTopology();}if(self->layout.settings.memTrim)TrimMemoryIfIdle();}if(msg==WM_TIMER&&w==2){KillTimer(h,2);self->SyncUploadAuto();return 0;}if(msg==WM_APP+3){for(auto& item:self->windows)item->Notify(i18n::Tr(L"自动同步上传失败：请检查网络或 WebDAV 设置。"));return 0;}if(msg==WM_APP+2){self->Show();if(!self->windows.empty())SetForegroundWindow(self->windows.front()->hwnd);return 0;}if(msg==WM_HOTKEY&&w==1){self->ToggleAll();return 0;}if(msg==WM_HOTKEY&&w==2){self->ShowSearch();return 0;}if(msg==WM_HOTKEY&&w==3){self->ShowCapture();return 0;}if(msg==WM_HOTKEY&&w==4){self->Undo();return 0;}if(msg==WM_APP+4){self->ToggleAll();return 0;}if(msg==WM_APP+5){self->RevealBegin();return 0;}if(msg==WM_APP+6){self->RevealEnd();return 0;}if(msg==WM_APP+7){self->StartRaise();return 0;}if(msg==WM_APP+8){self->EndRaise();return 0;}if(msg==WM_APP+1){if(l==WM_LBUTTONUP)self->Show();if(l==WM_RBUTTONUP){HMENU menu=CreatePopupMenu();AppendMenuW(menu,MF_STRING,1,i18n::Tr(L"新增分区").c_str());
+ for(auto& z:self->layout.zones){if(z.mappedFolder.empty())continue;auto stamp=StampOf(z.mappedFolder);if(stamp.empty())continue;auto key=PathKey(z.mappedFolder);auto it=self->mappedStamp.find(key);if(it==self->mappedStamp.end()){self->mappedStamp[key]=stamp;continue;}if(it->second!=stamp){it->second=stamp;SyncMapped(z);for(auto& item:self->windows)if(item->id==z.id||item->viewId==z.id)item->Refresh();}}self->CheckReminders();for(auto& item:self->windows)if(IsWindow(item->hwnd))item->AutoArchiveTick();static int healTick=0;if((++healTick%5)==0){self->ApplyHotkey();self->HealTopology();}if(self->layout.settings.memTrim)TrimMemoryIfIdle();}if(msg==WM_TIMER&&w==2){KillTimer(h,2);self->SyncUploadAuto();return 0;}if(msg==WM_APP+3){for(auto& item:self->windows)item->Notify(i18n::Tr(L"自动同步上传失败：请检查网络或 WebDAV 设置。"));return 0;}if(msg==WM_APP+2){self->Show();if(!self->windows.empty())SetForegroundWindow(self->windows.front()->hwnd);return 0;}if(msg==WM_HOTKEY&&w==1){self->ToggleAll();return 0;}if(msg==WM_HOTKEY&&w==2){self->ShowSearch();return 0;}if(msg==WM_HOTKEY&&w==3){self->ShowCapture();return 0;}if(msg==WM_HOTKEY&&w==4){self->Undo();return 0;}if(msg==WM_APP+4){self->ToggleAll();return 0;}if(msg==WM_APP+5){self->RevealBegin();return 0;}if(msg==WM_APP+6){self->RevealEnd();return 0;}if(msg==WM_APP+7){self->StartRaise();return 0;}if(msg==WM_APP+8){self->EndRaise();return 0;}if(msg==WM_APP+1){if(l==WM_LBUTTONUP){self->Show();self->RevealPending();}if(l==WM_RBUTTONUP){HMENU menu=CreatePopupMenu();AppendMenuW(menu,MF_STRING,1,i18n::Tr(L"新增分区").c_str());
  {static wchar_t const* tags[]={L"downloads",L"documents",L"pictures",L"music",L"videos"};HMENU quick=CreatePopupMenu();for(int i=0;i<5;++i)AppendMenuW(quick,MF_STRING,21+i,KnownFolderName(tags[i]).c_str());AppendMenuW(menu,MF_POPUP,(UINT_PTR)quick,i18n::Tr(L"快速分区").c_str());
   auto tpls=BuiltInTemplates();HMENU tmenu=CreatePopupMenu();for(int i=0;i<static_cast<int>(tpls.size());++i)AppendMenuW(tmenu,MF_STRING,31+i,i18n::Tr(tpls[i].name).c_str());AppendMenuW(menu,MF_POPUP,(UINT_PTR)tmenu,i18n::Tr(L"分区模板").c_str());}
 AppendMenuW(menu,MF_STRING,2,i18n::Tr(L"显示全部").c_str());AppendMenuW(menu,MF_STRING,9,i18n::Tr(L"全部隐藏").c_str());AppendMenuW(menu,MF_STRING,3,self->desktopMode?i18n::Tr(L"切换普通窗口").c_str():i18n::Tr(L"试验桌面嵌入").c_str());AppendMenuW(menu,MF_STRING,6,i18n::Tr(L"整理桌面…").c_str());AppendMenuW(menu,MF_STRING|(self->layout.widgets.noteVisible?MF_CHECKED:0),7,i18n::Tr(L"便签").c_str());AppendMenuW(menu,MF_STRING|(self->layout.widgets.todoVisible?MF_CHECKED:0),8,i18n::Tr(L"待办").c_str());AppendMenuW(menu,MF_STRING|(self->layout.widgets.clockVisible?MF_CHECKED:0),10,i18n::Tr(L"时钟").c_str());AppendMenuW(menu,MF_STRING|(self->layout.widgets.musicVisible?MF_CHECKED:0),11,i18n::Tr(L"音乐").c_str());AppendMenuW(menu,MF_STRING,12,i18n::Tr(L"搜索").c_str());AppendMenuW(menu,MF_STRING|(self->layout.widgets.weatherVisible?MF_CHECKED:0),13,i18n::Tr(L"天气").c_str());AppendMenuW(menu,MF_STRING|(self->layout.widgets.appGridVisible?MF_CHECKED:0),16,i18n::Tr(L"应用网格").c_str());AppendMenuW(menu,MF_STRING,14,i18n::Tr(L"快速捕获…").c_str());

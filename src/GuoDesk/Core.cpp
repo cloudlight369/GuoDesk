@@ -427,6 +427,7 @@ int ClampExpandDir(int v){return v<0||v>3?0:v;}
 int ClampMaxHeight(int v){return v<25?0:(v>100?100:v);}
 int ZoneCapHeight(int maxHeight,int workHeight){if(maxHeight<=0||workHeight<=0)return 1<<20;int cap=static_cast<int>(static_cast<long long>(workHeight)*maxHeight/100);return cap<88?88:cap;}
 int ZoneExpandedHeight(int height,int maxHeight,int workHeight){int cap=ZoneCapHeight(maxHeight,workHeight);return height>cap?cap:height;}
+int NavIndexOf(std::vector<std::wstring> const& paths,std::wstring const& want){if(want.empty())return -1;auto const k=PathKey(want);for(size_t i=0;i<paths.size();++i)if(!paths[i].empty()&&PathKey(paths[i])==k)return static_cast<int>(i);return -1;}
 int ZoneAnchorTop(int top,int height,int targetHeight,int dir,int workTop,int workBottom){
  int bottom=top+height;int t=ClampExpandDir(dir);int next;
  if(t==1)next=top;
