@@ -275,6 +275,8 @@ DownloadResult DownloadFile(std::wstring const& url,std::wstring const& destDir,
  do{
   if(!request)break;
   DWORD t=30000;for(auto opt:{WINHTTP_OPTION_CONNECT_TIMEOUT,WINHTTP_OPTION_SEND_TIMEOUT,WINHTTP_OPTION_RECEIVE_TIMEOUT})WinHttpSetOption(request,opt,&t,sizeof(t));
+  // 重定向照跟，但不许 https 降到 http：否则一个"看着安全"的链接可以被换成明文来源，而界面仍报下载成功
+  DWORD policy=WINHTTP_OPTION_REDIRECT_POLICY_DISALLOW_HTTPS_TO_HTTP;WinHttpSetOption(request,WINHTTP_OPTION_REDIRECT_POLICY,&policy,sizeof(policy));
   if(!WinHttpSendRequest(request,WINHTTP_NO_ADDITIONAL_HEADERS,0,WINHTTP_NO_REQUEST_DATA,0,0,0)||!WinHttpReceiveResponse(request,nullptr))break;
   DWORD status=0,size=sizeof(status);
   if(!WinHttpQueryHeaders(request,WINHTTP_QUERY_STATUS_CODE|WINHTTP_QUERY_FLAG_NUMBER,WINHTTP_HEADER_NAME_BY_INDEX,&status,&size,WINHTTP_NO_HEADER_INDEX))break;
@@ -284,24 +286,31 @@ DownloadResult DownloadFile(std::wstring const& url,std::wstring const& destDir,
   if(WinHttpQueryHeaders(request,WINHTTP_QUERY_CONTENT_TYPE,WINHTTP_HEADER_NAME_BY_INDEX,meta,&size,WINHTTP_NO_HEADER_INDEX))type=meta;
   size=0;std::wstring finalUrl;
   {wchar_t buf[2048]{};size=sizeof(buf)-2;if(WinHttpQueryOption(request,WINHTTP_OPTION_URL,buf,&size))finalUrl=buf;}
-  DWORD len=0;
-  if(WinHttpQueryHeaders(request,WINHTTP_QUERY_CONTENT_LENGTH,WINHTTP_HEADER_NAME_BY_INDEX,&len,WINHTTP_NO_HEADER_INDEX,WINHTTP_NO_HEADER_INDEX))r.total=len;
+  wchar_t cl[32]{};DWORD clSize=sizeof(cl)-2;
+  // Content-Length 是文本头，用 DWORD 收会拿不到值（进度就永远是 0%），必须按字符串读再转数
+  if(WinHttpQueryHeaders(request,WINHTTP_QUERY_CONTENT_LENGTH,WINHTTP_HEADER_NAME_BY_INDEX,cl,&clSize,WINHTTP_NO_HEADER_INDEX)){try{r.total=_wcstoi64(cl,nullptr,10);}catch(...){r.total=0;}}
   auto const name=DownloadName(finalUrl.empty()?url:finalUrl,type);
   auto const dot=name.find_last_of(L'.');
   auto stem=(dot==std::wstring::npos||dot==0)?name:name.substr(0,dot);
   auto ext=(dot==std::wstring::npos||dot==0)?std::wstring():name.substr(dot);
   std::filesystem::path dir(destDir);
-  auto const finalName=UniqueName(ExistingNames(destDir),stem,ext);
-  auto target=dir/finalName;
-  auto temp=std::filesystem::path(target.wstring()+L".guodesk-part");
-  HANDLE file=CreateFileW(temp.c_str(),GENERIC_WRITE,0,nullptr,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
+  auto taken=ExistingNames(destDir);
+  HANDLE file=INVALID_HANDLE_VALUE;std::filesystem::path target,temp;
+  // 半成品一律隐藏创建：否则下载过程中它会作为一条可双击、可归档的乱码条目出现在映射分区里
+  for(int attempt=0;attempt<5&&file==INVALID_HANDLE_VALUE;++attempt){
+   auto const finalName=UniqueName(taken,stem,ext);
+   target=dir/finalName;temp=std::filesystem::path(target.wstring()+L".guodesk-part");
+   file=CreateFileW(temp.c_str(),GENERIC_WRITE,0,nullptr,CREATE_ALWAYS,FILE_ATTRIBUTE_HIDDEN,nullptr);
+   // 另一个窗口可能正在写同一个 x.txt.guodesk-part：share 为 0 会拒绝第二个句柄，换个候选名重试
+   if(file==INVALID_HANDLE_VALUE){taken.push_back(finalName);taken.push_back(finalName+L".guodesk-part");}
+  }
   if(file==INVALID_HANDLE_VALUE){r.status=0;break;}
   bool failed=false;
   char buf[65536];
   while(true){
    if(cancel&&cancel->load()){r.cancelled=true;break;}
    DWORD avail=0;
-   if(!WinHttpQueryDataAvailable(request,&avail))break;
+   if(!WinHttpQueryDataAvailable(request,&avail)){failed=true;break;}
    if(avail==0)break;
    while(avail>0){
     DWORD got=0;
@@ -315,8 +324,12 @@ DownloadResult DownloadFile(std::wstring const& url,std::wstring const& destDir,
    if(progress)progress(r.bytes,r.total,std::wstring());
   }
   CloseHandle(file);
+  // 长度对不上就是被截断（断网、RST、提前 FIN）：这种文件改名成正式名字比删掉更危险
+  if(!failed&&!r.cancelled&&!r.tooLarge&&r.total>0&&r.bytes<r.total)failed=true;
   if(r.cancelled||failed||r.tooLarge){DeleteFileW(temp.c_str());break;}
   if(!MoveFileExW(temp.c_str(),target.c_str(),MOVEFILE_WRITE_THROUGH)){DeleteFileW(temp.c_str());failed=true;break;}
+  // 改名会继承半成品的隐藏属性，成品必须回到正常可见
+  SetFileAttributesW(target.c_str(),FILE_ATTRIBUTE_NORMAL);
   r.path=target.wstring();
  }while(false);
  if(request)WinHttpCloseHandle(request);
