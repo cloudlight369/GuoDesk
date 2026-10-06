@@ -202,7 +202,7 @@ KV const table[]{
  {L"不垫底",L"None"},
  {L"半透明黑底",L"Semi-transparent"},
  {L"高对比深底",L"High contrast"},
- {L"壁纸花哨时给磁贴上的文件名垫一层底色，立即生效。",L"Places a tinted backing behind tile file names so they stay readable on busy wallpapers; applies immediately."},
+ {L"壁纸花哨时给文件名垫一层底色（分区磁贴、列表和搜索结果），立即生效。",L"Places a tinted backing behind file names (zone tiles, lists and search results) so they stay readable on busy wallpapers; applies immediately."},
  {L"叠放缩略图：省电模式下不显示",L"Stack thumbnails: hidden in power saver"},
  {L"省电模式不加载叠放缩略图；在设置的「界面性能」切回精简或完整特效后即可使用。",L"Power saver does not load stack thumbnails; switch back to Lean or Full effects under Interface performance."},
  {L"完整特效",L"Full effects"},

@@ -91,6 +91,8 @@ public:
  winrt::Microsoft::UI::Xaml::Media::Brush ThemeBrush(wchar_t const* key,winrt::Windows::UI::Color fallback);
 };
 winrt::Microsoft::UI::Xaml::Media::SystemBackdrop MakeBackdrop(int kind,int tier);
+// 条目名底板：style 1/2 时把文字包进一块深色底，花壁纸下才看得清；style 0 原样返回。childMargin 用来抵消底板内边距，切换设置时文字不跳位
+winrt::Microsoft::UI::Xaml::FrameworkElement LabelChrome(winrt::Microsoft::UI::Xaml::FrameworkElement const& el,int style,winrt::Microsoft::UI::Xaml::HorizontalAlignment align=winrt::Microsoft::UI::Xaml::HorizontalAlignment::Center,winrt::Microsoft::UI::Xaml::Thickness childMargin={0,0,0,0});
 class SettingsWindow;
 class Controller {
  HWND messageWindow{}; NOTIFYICONDATAW tray{}; UINT taskbarCreated{}; HANDLE mutex{}; bool quitting=false; std::map<std::wstring,std::wstring> mappedStamp; std::shared_ptr<bool> syncAlive{std::make_shared<bool>(true)};

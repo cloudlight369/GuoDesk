@@ -44,6 +44,12 @@ bool PerfMaterial(int tier){return ClampPerfTier(tier)<2;}
 bool PerfMosaic(int tier){return ClampPerfTier(tier)<2;}
 int PerfTierFromLegacy(bool performance){return performance?2:0;}
 int ClampLabelStyle(int v){return (v>=0&&v<=2)?v:0;}
+int LabelHeightPx(int nameLines,int textSizeTier,int chromePadding){
+ if(nameLines<=0)return 0;
+ int const pad=chromePadding>0?2*std::min(chromePadding,4):0;
+ int const lh=static_cast<int>(ScaledFont(textSizeTier,12.0)*1.45)+1;
+ return (nameLines>1?2:1)*lh+pad;
+}
 static int HexDigit(wchar_t c){if(c>=L'0'&&c<=L'9')return c-L'0';if(c>=L'a'&&c<=L'f')return c-L'a'+10;if(c>=L'A'&&c<=L'F')return c-L'A'+10;return -1;}
 // 链接里的文件名要能直接当 Windows 文件名用：百分号编码还原、去禁用字符、去查询串、保留设备名加下划线
 std::wstring DownloadName(std::wstring const& url,std::wstring const& contentType){
@@ -520,7 +526,7 @@ std::wstring BuildDiagnostics(Layout const& l,std::wstring const& version,std::w
  std::wstring s=L"GuoDesk Diagnostics\n";
  s+=L"version="+version+L"\nmachine="+machine+L"\nos="+orNone(osBuild,L"unknown")+L"\n\n";
  s+=L"theme="+orNone(l.settings.theme,L"System")+L" language="+orNone(l.settings.language,L"zh")+L" textSize="+n(l.settings.textSize)+L" clockStyle="+(l.settings.clockStyle.empty()?L"digital":l.settings.clockStyle)+L" backdrop="+n(l.settings.backdrop)+L"\n";
- s+=L"perfTier="+std::to_wstring(l.settings.perfTier)+L" memTrim="+b(l.settings.memTrim)+L" snapshots="+b(l.settings.snapshots)+L" tabHover="+b(l.settings.tabHover)+L" guideDone="+b(l.settings.guideDone)+L" everything="+b(l.settings.everything)+L"\n";
+ s+=L"perfTier="+std::to_wstring(l.settings.perfTier)+L" labelStyle="+std::to_wstring(l.settings.labelStyle)+L" memTrim="+b(l.settings.memTrim)+L" snapshots="+b(l.settings.snapshots)+L" tabHover="+b(l.settings.tabHover)+L" guideDone="+b(l.settings.guideDone)+L" everything="+b(l.settings.everything)+L"\n";
  s+=L"hotkey="+orNone(l.settings.hotkey,L"none")+L" search="+orNone(l.settings.hotkeySearch,L"none")+L" capture="+orNone(l.settings.hotkeyCapture,L"none")+L" undo="+orNone(l.settings.hotkeyUndo,L"none")+L" reveal="+orNone(l.settings.revealHotkey,L"none")+L" raise="+orNone(l.settings.hotkeyRaise,L"none")+L"\n\n";
  s+=L"zones="+n(l.zones.size())+L" entries="+n(entries)+L" stacks="+n(stacks)+L" pins="+n(pins)+L" mapped="+n(mapped)+L" capsules="+n(capsules)+L" collapsed="+n(collapsed)+L" grouped="+n(grouped)+L" colored="+n(colored)+L" backgrounds="+n(bg)+L" rules="+n(l.rules.size())+L"\n";
  s+=L"todos="+n(l.widgets.todos.size())+L" done="+n(done)+L" overdue="+n(overdue)+L" repeating="+n(repeating)+L" flags="+n(flags)+L" notePages="+n(l.widgets.pages.size())+L" searchHistory="+n(l.settings.searchHistory.size())+L" searchFavorites="+n(l.settings.searchFavorites.size())+L"\n";

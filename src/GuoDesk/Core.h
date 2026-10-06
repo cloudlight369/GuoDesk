@@ -149,6 +149,8 @@ bool PerfMosaic(int tier);
 int PerfTierFromLegacy(bool performance);
 // 条目名称底板：0=不加（跟随主题）1=半透明黑底 2=高对比不透明底，花壁纸下保证看得清
 int ClampLabelStyle(int value);
+// 名称占位高度（像素）：按字号算行高，再把底板 Border 的上下 padding 一起算进去，磁贴和叠放宫格都按这个数留地方
+int LabelHeightPx(int nameLines,int textSizeTier,int chromePadding);
 // URL 拖入下载：只接受 http/https，文件名从路径尾部取（百分号解码+非法字符清洗），取不到就用 fallback
 bool IsHttpUrl(std::wstring const& url);
 std::wstring DownloadName(std::wstring const& url,std::wstring const& contentType={});

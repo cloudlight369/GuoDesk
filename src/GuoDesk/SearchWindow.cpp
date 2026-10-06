@@ -70,7 +70,7 @@ void SearchWindow::Rebuild(std::wstring const& q){
    FontIcon ic;ic.FontFamily(FontFamily(L"Segoe Fluent Icons"));ic.Glyph(glyph);ic.FontSize(ScaledFont(owner.layout.settings.textSize,14));ic.Margin(Thickness{2,1,12,0});ic.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));
    Grid::SetColumn(ic,0);g.Children().Append(ic);
    TextBlock name;name.Text(text);name.FontSize(ScaledFont(owner.layout.settings.textSize,13));name.TextTrimming(TextTrimming::CharacterEllipsis);
-   Grid::SetColumn(name,1);g.Children().Append(name);
+   auto jc=LabelChrome(name,ClampLabelStyle(owner.layout.settings.labelStyle),HorizontalAlignment::Left);Grid::SetColumn(jc,1);g.Children().Append(jc);
    Button row;row.HorizontalAlignment(HorizontalAlignment::Stretch);row.HorizontalContentAlignment(HorizontalAlignment::Stretch);row.Padding(Thickness{6,4,6,4});row.BorderThickness(Thickness{0});row.Background(SolidColorBrush(Windows::UI::Colors::Transparent()));row.Content(g);
    row.Click([this,text](auto&&,auto&&){query.Text(text);});
    results.Children().Append(row);
@@ -110,7 +110,7 @@ void SearchWindow::Rebuild(std::wstring const& q){
   TextBlock name;name.Text(hit.name);name.FontSize(ScaledFont(owner.layout.settings.textSize,13));name.TextTrimming(TextTrimming::CharacterEllipsis);
   TextBlock meta;meta.FontSize(ScaledFont(owner.layout.settings.textSize,11));meta.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));
   meta.Text(widget?i18n::Tr(hit.kind==L"todo"?L"待办":L"便签"):hit.zone+L" · "+hit.path);meta.TextTrimming(TextTrimming::CharacterEllipsis);
-  texts.Children().Append(name);texts.Children().Append(meta);
+  texts.Children().Append(LabelChrome(name,ClampLabelStyle(owner.layout.settings.labelStyle),HorizontalAlignment::Left));texts.Children().Append(meta);
   Grid::SetColumn(texts,1);g.Children().Append(texts);
   addRow(g);
   auto row=results.Children().GetAt(results.Children().Size()-1).as<Button>();
@@ -149,7 +149,7 @@ void SearchWindow::AppendEverything(std::wstring const& q){
     StackPanel texts;texts.Spacing(1);
     TextBlock name;name.Text(hit.name);name.FontSize(ScaledFont(owner.layout.settings.textSize,13));name.TextTrimming(TextTrimming::CharacterEllipsis);
     TextBlock meta;meta.FontSize(ScaledFont(owner.layout.settings.textSize,11));meta.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,120,120,120}));meta.Text(L"Everything · "+hit.path);meta.TextTrimming(TextTrimming::CharacterEllipsis);
-    texts.Children().Append(name);texts.Children().Append(meta);
+    texts.Children().Append(LabelChrome(name,ClampLabelStyle(owner.layout.settings.labelStyle),HorizontalAlignment::Left));texts.Children().Append(meta);
     Grid::SetColumn(texts,1);g.Children().Append(texts);
     Button row;row.HorizontalAlignment(HorizontalAlignment::Stretch);row.HorizontalContentAlignment(HorizontalAlignment::Stretch);row.Padding(Thickness{6,4,6,4});row.BorderThickness(Thickness{0});row.Background(SolidColorBrush(Windows::UI::Colors::Transparent()));row.Content(g);
     row.Click([this,hit](auto&&,auto&&){OpenHit(hit);});
