@@ -58,7 +58,7 @@ class DeskWindow {
  bool IsSel(std::wstring const& path); void ToggleSel(std::wstring const& path);
  void TapSelect(std::wstring const& path); int NavIndex(std::wstring const& path);
  std::vector<std::wstring> ListedPaths(); std::vector<std::wstring> OpPaths(); std::wstring TargetFolder();
- void CopyClip(bool cut); void PasteClip(); void CreateFolderHere(); void RenameOne(); void DeleteSelected(bool permanent);
+ void CopyClip(bool cut); void PasteClip(); void CreateFolderHere(); void ArchiveHere(); void RunArchive(std::shared_ptr<std::vector<ArchiveGroup>> groups,std::wstring here); void RenameOne(); void DeleteSelected(bool permanent);
  void PreviewSelection(); void PreviewPath(std::wstring const& path);
  int selAnchor=-1;
  winrt::Microsoft::UI::Xaml::Media::Brush ItemFill(std::wstring const& path);

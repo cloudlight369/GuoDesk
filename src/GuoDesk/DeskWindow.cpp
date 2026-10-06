@@ -306,6 +306,75 @@ void DeskWindow::CreateFolderHere(){
  SyncMapped(View());Refresh();owner.Save();
  Notify(i18n::TrF(L"已新建文件夹「{0}」。",{shell::Name(made)}));
 }
+void DeskWindow::ArchiveHere(){
+ if(opRunning){Notify(i18n::Tr(L"上一个文件操作还在进行，请稍候或点击“取消”。"));return;}
+ auto here=TargetFolder();
+ if(here.empty()){Notify(i18n::Tr(L"普通分区没有映射文件夹，无法按规则归档。"));return;}
+ auto const files=ListLooseFiles(here,false,1000);
+ std::vector<std::wstring> unmatched;
+ auto groups=ArchivePlan(owner.layout.rules,files,&unmatched);
+ long long hits=0;for(auto const& g:groups)hits+=static_cast<long long>(g.paths.size());
+ if(groups.empty()){Notify(files.empty()?i18n::TrF(L"「{0}」里没有可归档的散文件。",{shell::Name(here)}):i18n::TrF(L"{0} 个文件都没匹配上规则，请先在设置里配置规则。",{std::to_wstring(files.size())}));return;}
+ ContentDialog dlg;
+ dlg.Title(box_value(i18n::Tr(L"按规则归档")));
+ StackPanel box;box.Orientation(Orientation::Vertical);box.Spacing(5);box.MaxWidth(340);
+ TextBlock head;head.Text(i18n::TrF(L"将把「{0}」里 {1} 个文件移入分类子文件夹：",{shell::Name(here),std::to_wstring(hits)}));head.TextWrapping(TextWrapping::Wrap);box.Children().Append(head);
+ for(auto const& g:groups){TextBlock line;line.Text(L"· "+g.category+L" · "+std::to_wstring(g.paths.size()));line.FontSize(12);box.Children().Append(line);}
+ if(!unmatched.empty()){TextBlock rest;rest.Text(i18n::TrF(L"另有 {0} 项不匹配规则，保持原位。",{std::to_wstring(unmatched.size())}));rest.FontSize(12);rest.Opacity(0.75);box.Children().Append(rest);}
+ TextBlock note;note.Text(i18n::Tr(L"文件会被移动到本文件夹下的子文件夹，不会删除任何内容。"));note.FontSize(11);note.Opacity(0.7);note.TextWrapping(TextWrapping::Wrap);box.Children().Append(note);
+ dlg.Content(box);
+ dlg.PrimaryButtonText(i18n::TrF(L"移动 {0} 个文件",{std::to_wstring(hits)}));dlg.CloseButtonText(i18n::Tr(L"取消"));dlg.DefaultButton(ContentDialogButton::Close);
+ try{dlg.XamlRoot(root.XamlRoot());}catch(...){return;}
+ auto guard=this->alive;
+ if(opDialog)return;opDialog=true;
+ auto plan=std::make_shared<std::vector<ArchiveGroup>>(std::move(groups));
+ dlg.ShowAsync().Completed([this,guard,plan,here](auto&& async,auto&&){
+  if(!*guard)return;
+  opDialog=false;
+  if(async.GetResults()!=ContentDialogResult::Primary)return;
+  RunArchive(plan,here);
+ });
+}
+void DeskWindow::RunArchive(std::shared_ptr<std::vector<ArchiveGroup>> plan,std::wstring here){
+ long long total=0;for(auto const& g:*plan)total+=static_cast<long long>(g.paths.size());
+ auto res=std::make_shared<shell::TransferResult>();
+ auto cats=std::make_shared<long long>(0);
+ BeginOp(i18n::TrF(L"正在归档 {0} 项…",{std::to_wstring(total)}),
+  [plan,here,res,cats](shell::CancelFlag const& cancel,shell::ProgressFn const& prog){
+   long long base=0,totalAll=0;for(auto const& g:*plan)totalAll+=static_cast<long long>(g.paths.size());
+   for(auto const& g:*plan){
+    if(cancel->load())break;
+    auto const count=static_cast<long long>(g.paths.size());
+    std::error_code ec;auto dir=std::filesystem::path(here)/g.category;
+    std::filesystem::create_directories(dir,ec);
+    // 建不出子文件夹就是整组做不了，记账后继续下一组，别让一个分类卡住整批归档
+    if(ec){res->failed+=count;base+=count;prog(base,totalAll,g.category);continue;}
+    auto part=shell::TransferFiles(g.paths,dir.wstring(),true,cancel,[&](long long d,long long,std::wstring const& name){prog(base+d,totalAll,name);});
+    res->made.insert(res->made.end(),part.made.begin(),part.made.end());
+    res->skipped+=part.skipped;res->failed+=part.failed;res->cancelled=res->cancelled||part.cancelled;
+    if(!part.made.empty())++(*cats);
+    base+=count;prog(base,totalAll,std::wstring());
+   }
+  },
+  [this,guard=alive,res,cats,total,plan]{
+   if(!*guard)return;
+   auto& v=View();
+   SyncMapped(v);
+   selected.clear();for(auto const& p:res->made)if(selected.size()<50)selected.push_back(PathKey(p));
+   focusIdx=-1;Refresh();owner.Save();
+   long long const ok=static_cast<long long>(res->made.size());
+   auto const state=OpOutcome(ok,res->failed,res->cancelled);
+   std::wstring text;
+   if(state==3)text=i18n::Tr(L"归档未完成：文件可能被占用或文件夹不可写。");
+   else if(state==4)text=i18n::Tr(L"已取消归档，未移动任何文件。");
+   else if(!ok)text=i18n::Tr(L"没有文件被移动（分类文件夹里已有同名文件）。");
+   else text=i18n::TrF(L"已把 {0} 个文件归档到 {1} 个分类文件夹。",{std::to_wstring(ok),std::to_wstring(*cats)});
+   if(ok&&res->failed)text+=L" "+i18n::TrF(L"{0} 项归档失败。",{std::to_wstring(res->failed)});
+   if(ok&&res->skipped)text+=L" "+i18n::TrF(L"跳过 {0} 项（分类文件夹里已有同名文件）。",{std::to_wstring(res->skipped)});
+   if(res->cancelled&&ok)text+=L" "+i18n::TrF(L"已取消剩余 {0} 项。",{std::to_wstring(std::max<long long>(0,total-ok-res->skipped-res->failed))});
+   Notify(text);
+  });
+}
 void DeskWindow::PreviewSelection(){
  auto list=navPaths.empty()?ListedPaths():navPaths;
  if(list.empty()){Notify(i18n::Tr(L"没有可预览的条目。"));return;}
@@ -482,6 +551,7 @@ void DeskWindow::Menu(FrameworkElement const& target){auto& z=Model();auto& v=Vi
  menu.Items().Append(MenuItem(i18n::Tr(L"添加文件 / 应用"),[this,mapped]{if(mapped){Notify(i18n::Tr(L"映射分区为只读视图：请在资源管理器中修改文件夹后右键刷新。"));return;}Pick();}));
  menu.Items().Append(MenuItem(i18n::Tr(L"添加文件夹"),[this,mapped]{if(mapped){Notify(i18n::Tr(L"映射分区为只读视图：请在资源管理器中修改文件夹后右键刷新。"));return;}Pick(true);}));
  menu.Items().Append(MenuItem(i18n::Tr(L"新建文件夹…"),[this,mapped]{if(!mapped){Notify(i18n::Tr(L"普通分区请用「添加文件夹」，映射分区可直接在此新建文件夹。"));return;}CreateFolderHere();}));
+ menu.Items().Append(MenuItem(i18n::Tr(L"按规则归档此文件夹…"),[this,mapped]{if(!mapped){Notify(i18n::Tr(L"普通分区没有映射文件夹，无法按规则归档。"));return;}ArchiveHere();}));
  menu.Items().Append(MenuItem(shell::HasClipFiles()?(mapped?i18n::Tr(L"粘贴文件到此处"):i18n::Tr(L"粘贴为入口")):i18n::Tr(L"粘贴（剪贴板无文件）"),[this]{PasteClip();}));
  menu.Items().Append(MenuItem(i18n::Tr(L"重命名选中项…"),[this]{RenameOne();}));
  menu.Items().Append(MenuItem(i18n::Tr(L"删除选中项（回收站）…"),[this]{DeleteSelected(false);}));

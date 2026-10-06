@@ -275,7 +275,11 @@ void SettingsWindow::RebuildRules(){
   StackPanel left;left.Orientation(Orientation::Vertical);left.Spacing(1);
   TextBlock name;name.Text(r.name);name.FontSize(13);name.FontWeight(Windows::UI::Text::FontWeights::SemiBold());left.Children().Append(name);
   std::wstring match;for(size_t i=0;i<r.exts.size();++i){if(i)match+=L" / ";match+=r.exts[i];}if(!r.keywords.empty()){if(!match.empty())match+=i18n::Tr(L" · 关键词 ");for(size_t i=0;i<r.keywords.size();++i){if(i)match+=L" ";match+=r.keywords[i];}}
-  TextBlock matchText;matchText.Text(match.empty()?i18n::Tr(L"未设置匹配条件"):match);matchText.FontSize(11);matchText.Opacity(0.75);left.Children().Append(matchText);
+  std::wstring gates;if(r.minSizeKb>0)gates+=i18n::TrF(L"不小于 {0} KB",{std::to_wstring(r.minSizeKb)});if(r.maxSizeKb>0){if(!gates.empty())gates+=L" · ";gates+=i18n::TrF(L"不大于 {0} KB",{std::to_wstring(r.maxSizeKb)});}if(r.olderThanDays>0){if(!gates.empty())gates+=L" · ";gates+=i18n::TrF(L"早于 {0} 天",{std::to_wstring(r.olderThanDays)});}
+  if(!gates.empty()){if(!match.empty())match+=L" · ";match+=gates;}
+  if(match.empty())match=i18n::Tr(L"未设置匹配条件");
+  else if(r.exts.empty()&&r.keywords.empty())match=i18n::Tr(L"缺少扩展名或关键词")+L" · "+match;
+  TextBlock matchText;matchText.Text(match);matchText.FontSize(11);matchText.Opacity(0.75);left.Children().Append(matchText);
   TextBlock dest;dest.Text(r.targetZone.empty()?i18n::Tr(L"未绑定分区"):(L"→ "+zoneName(r.targetZone)));dest.FontSize(11);dest.Opacity(0.75);left.Children().Append(dest);
   open.Content(left);open.Click([this,key](auto&&,auto&&){EditRule(key);});Grid::SetColumn(open,0);g.Children().Append(open);
   FontIcon trashIcon;trashIcon.FontFamily(FontFamily(L"Segoe Fluent Icons"));trashIcon.Glyph(L"\uE74D");trashIcon.FontSize(14);
@@ -286,6 +290,7 @@ void SettingsWindow::RebuildRules(){
  }
  if(owner.layout.rules.empty()){TextBlock none;none.Text(i18n::Tr(L"暂无规则，点击下方“添加规则”。"));none.FontSize(12);none.Opacity(0.6);rulesPanel.Children().Append(none);}
 }
+template<class T> static T GateValue(std::vector<Rule> const& rules,std::wstring const& id,T Rule::* field){for(auto const& r:rules)if(r.id==id)return r.*field;return T{};}
 void SettingsWindow::EditRule(std::wstring ruleId){
  auto& rules=owner.layout.rules;
  bool isNew=ruleId.empty();
@@ -298,13 +303,17 @@ void SettingsWindow::EditRule(std::wstring ruleId){
  p.Children().Append(label(i18n::Tr(L"按扩展名匹配")));p.Children().Append(extBox);
  TextBox keyBox;keyBox.PlaceholderText(i18n::Tr(L"如：简历, 报告（文件名包含即可）"));if(!isNew){std::wstring v;for(auto const& r:rules)if(r.id==ruleId){for(size_t i=0;i<r.keywords.size();++i){if(i)v+=L", ";v+=r.keywords[i];}}keyBox.Text(v);}
  p.Children().Append(label(i18n::Tr(L"按文件名关键词匹配")));p.Children().Append(keyBox);
+ auto gateBox=[&](wchar_t const* labelKey,long long value){TextBox box;box.PlaceholderText(L"0");if(value>0)box.Text(std::to_wstring(value));p.Children().Append(label(i18n::Tr(labelKey)));p.Children().Append(box);return box;};
+ auto minBox=gateBox(L"最小大小（KB，0=不限）",GateValue(rules,ruleId,&Rule::minSizeKb));
+ auto maxBox=gateBox(L"最大大小（KB，0=不限）",GateValue(rules,ruleId,&Rule::maxSizeKb));
+ auto ageBox=gateBox(L"修改时间早于（天，0=不限）",GateValue(rules,ruleId,&Rule::olderThanDays));
  ComboBox zoneBox;zoneBox.HorizontalAlignment(HorizontalAlignment::Stretch);zoneBox.Items().Append(box_value(i18n::Tr(L"（未绑定）")));
  int defIndex=0,index=1;for(auto const& z:owner.layout.zones){zoneBox.Items().Append(box_value(z.name));if(!isNew)for(auto const& r:rules)if(r.id==ruleId&&r.targetZone==z.id)defIndex=index;++index;}
  zoneBox.SelectedIndex(defIndex);p.Children().Append(label(i18n::Tr(L"整理到分区")));p.Children().Append(zoneBox);
  dlg.Content(p);
  try{dlg.XamlRoot(scroll.XamlRoot());}catch(...){return;}
  auto op=dlg.ShowAsync();
- op.Completed([this,ruleId,isNew,nameBox,extBox,keyBox,zoneBox](auto&& async,auto&&){
+ op.Completed([this,ruleId,isNew,nameBox,extBox,keyBox,zoneBox,minBox,maxBox,ageBox](auto&& async,auto&&){
   if(async.GetResults()!=ContentDialogResult::Primary)return;
   auto& rs=owner.layout.rules;
   Rule* t=nullptr;for(auto& r:rs)if(r.id==ruleId)t=&r;
@@ -313,6 +322,10 @@ void SettingsWindow::EditRule(std::wstring ruleId){
   t->exts=SplitList(std::wstring(extBox.Text()));
   t->keywords=SplitList(std::wstring(keyBox.Text()));
   int sel=zoneBox.SelectedIndex();t->targetZone=(sel>0&&sel<=static_cast<int>(owner.layout.zones.size()))?owner.layout.zones[static_cast<size_t>(sel-1)].id:L"";
+  auto number=[](TextBox const& box){try{std::wstring s=std::wstring(box.Text());if(s.empty())return 0LL;return static_cast<long long>(std::stoll(s));}catch(...){return 0LL;}};
+  long long minSize=ClampSizeKb(number(minBox)),maxSize=ClampSizeKb(number(maxBox));
+  if(minSize>0&&maxSize>0&&maxSize<minSize)std::swap(minSize,maxSize);
+  t->minSizeKb=minSize;t->maxSizeKb=maxSize;t->olderThanDays=ClampAgeDays(static_cast<int>(number(ageBox)));
   owner.Save();RebuildRules();
  });
 }

@@ -5,7 +5,7 @@ struct Entry { std::wstring id, path; std::wstring stack; };
 struct Stack { std::wstring id, name; };
 struct Zone { std::wstring id, name=L"常用"; int x=120,y=120,width=440,height=360; bool collapsed=false; std::vector<Entry> entries; std::wstring mappedFolder; std::wstring viewMode=L"grid"; int nameLines=2; std::wstring sortKey; bool sortDescending=false; int tileSize=1; std::wstring mon; int mx=0,my=0; std::vector<Stack> stacks; std::wstring group; int groupTab=0; bool capsule=false; bool browseInPlace=true; std::wstring browseFolder; int color=0; std::wstring background; int dim=1; std::vector<std::wstring> pins; int opacity=100; int expandDir=0; int maxHeight=0; bool locked=false; };
 struct Settings { std::wstring theme; bool compact=false; std::wstring language; std::wstring hotkey=L"Ctrl+Alt+G"; bool snapshots=true; bool guideDone=false; std::wstring hotkeySearch; std::wstring hotkeyCapture; std::wstring hotkeyUndo=L"Ctrl+Alt+U"; bool performance=false; std::wstring syncUrl,syncUser,syncPass; bool syncAuto=false; bool syncInsecure=false; int textSize=1; std::wstring clockStyle; bool everything=true; bool tabHover=true; bool memTrim=true; std::wstring revealHotkey,hotkeyRaise; int backdrop=0; std::vector<std::wstring> searchHistory,searchFavorites; };
-struct Rule { std::wstring id, name; std::vector<std::wstring> exts, keywords; std::wstring targetZone; };
+struct Rule { std::wstring id, name; std::vector<std::wstring> exts, keywords; std::wstring targetZone; long long minSizeKb=0, maxSizeKb=0; int olderThanDays=0; };
 struct TodoItem { std::wstring id, text; bool done=false; long long due=0; bool reminded=false; int flag=0; int repeat=0; };
 struct NotePage { std::wstring text; int color=0; };
 struct Widgets {
@@ -118,7 +118,14 @@ std::vector<std::wstring> Crumbs(std::wstring const& root,std::wstring const& cu
 std::wstring CrumbParent(std::wstring const& root,std::wstring const& current);
 void Clamp(Zone& zone,RECT const& area);
 void DefaultRules(Layout& layout);
-std::vector<std::wstring> ListLooseFiles(std::wstring const& folder);
+long long ClampSizeKb(long long value);
+int ClampAgeDays(int value);
+// sizeKb/ageDays 传负数表示"取不到"：此时带尺寸或时间门槛的规则一律不命中，避免把没法度量的文件塞进它够格的分类
+bool RuleMatches(Rule const& rule,std::wstring const& ext,std::wstring const& lowerName,long long sizeKb,long long ageDays);
+std::wstring CategoryFolder(std::wstring const& name,std::wstring const& fallback);
+struct ArchiveGroup { std::wstring category; std::vector<std::wstring> paths; };
+std::vector<ArchiveGroup> ArchivePlan(std::vector<Rule> const& rules,std::vector<std::wstring> const& files,std::vector<std::wstring>* unmatched);
+std::vector<std::wstring> ListLooseFiles(std::wstring const& folder,bool recursive=false,size_t limit=2000);
 std::vector<std::wstring> DesktopFileList();
 std::vector<PlanItem> BuildPlan(std::vector<Rule> const& rules,std::vector<Zone> const& zones,std::vector<std::wstring> const& files,std::vector<std::wstring>* unmatched);
 int ApplyPlan(Layout& layout,std::vector<PlanItem> const& plan);
