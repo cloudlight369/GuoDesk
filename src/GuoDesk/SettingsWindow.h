@@ -8,7 +8,7 @@ class SettingsWindow {
  winrt::Microsoft::UI::Xaml::Window window{nullptr}; HWND hwnd{};
  winrt::Microsoft::UI::Xaml::Controls::ComboBox theme{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::ToggleSwitch compact{nullptr};
- winrt::Microsoft::UI::Xaml::Controls::ToggleSwitch performance{nullptr};
+ winrt::Microsoft::UI::Xaml::Controls::ComboBox perfTier{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::ToggleSwitch autostart{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::ToggleSwitch everythingToggle{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::TextBlock evHint{nullptr};
@@ -43,7 +43,7 @@ class SettingsWindow {
  winrt::Microsoft::UI::Xaml::Controls::TextBlock syncHint{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::ScrollViewer scroll{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::StackPanel rulesPanel{nullptr};
- void OnTheme(int index); void OnCompact(bool on); void OnPerformance(bool on); void OnAutostart(bool on); void OnLanguage(int index); void OnEverything(bool on);
+ void OnTheme(int index); void OnCompact(bool on); void OnPerfTier(int index); void OnAutostart(bool on); void OnLanguage(int index); void OnEverything(bool on);
  void OnTextSize(int index); void OnClockStyle(int index); void OnWeatherSkin(int index); void OnBackdrop(int index);
  void OnHotkey(int index); void OnSnapshots(bool on);
  void OnHotkeySearch(int index); void OnHotkeyCapture(int index); void OnHotkeyUndo(int index); void OnHotkeyReveal(int index); void OnHotkeyRaise(int index); void OnTabHover(bool on); void OnMemTrim(bool on); void OnGeoSearch(); void OnGeoSave(); void OnGeoAuto();

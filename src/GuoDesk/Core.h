@@ -4,7 +4,7 @@ namespace guodesk {
 struct Entry { std::wstring id, path; std::wstring stack; };
 struct Stack { std::wstring id, name; };
 struct Zone { std::wstring id, name=L"常用"; int x=120,y=120,width=440,height=360; bool collapsed=false; std::vector<Entry> entries; std::wstring mappedFolder; std::wstring viewMode=L"grid"; int nameLines=2; std::wstring sortKey; bool sortDescending=false; int tileSize=1; std::wstring mon; int mx=0,my=0; std::vector<Stack> stacks; std::wstring group; int groupTab=0; bool capsule=false; bool browseInPlace=true; std::wstring browseFolder; int color=0; std::wstring background; int dim=1; std::vector<std::wstring> pins; int opacity=100; int expandDir=0; int maxHeight=0; bool locked=false; int autoArchive=0; long long archiveAt=0; int stackGrid=0; };
-struct Settings { std::wstring theme; bool compact=false; std::wstring language; std::wstring hotkey=L"Ctrl+Alt+G"; bool snapshots=true; bool guideDone=false; std::wstring hotkeySearch; std::wstring hotkeyCapture; std::wstring hotkeyUndo=L"Ctrl+Alt+U"; bool performance=false; std::wstring syncUrl,syncUser,syncPass; bool syncAuto=false; bool syncInsecure=false; int textSize=1; std::wstring clockStyle; bool everything=true; bool tabHover=true; bool memTrim=true; std::wstring revealHotkey,hotkeyRaise; int backdrop=0; std::vector<std::wstring> searchHistory,searchFavorites; };
+struct Settings { std::wstring theme; bool compact=false; std::wstring language; std::wstring hotkey=L"Ctrl+Alt+G"; bool snapshots=true; bool guideDone=false; std::wstring hotkeySearch; std::wstring hotkeyCapture; std::wstring hotkeyUndo=L"Ctrl+Alt+U"; int perfTier=0; std::wstring syncUrl,syncUser,syncPass; bool syncAuto=false; bool syncInsecure=false; int textSize=1; std::wstring clockStyle; bool everything=true; bool tabHover=true; bool memTrim=true; std::wstring revealHotkey,hotkeyRaise; int backdrop=0; std::vector<std::wstring> searchHistory,searchFavorites; };
 struct Rule { std::wstring id, name; std::vector<std::wstring> exts, keywords; std::wstring targetZone; long long minSizeKb=0, maxSizeKb=0; int olderThanDays=0; };
 struct TodoItem { std::wstring id, text; bool done=false; long long due=0; bool reminded=false; int flag=0; int repeat=0; };
 struct NotePage { std::wstring text; int color=0; };
@@ -141,6 +141,12 @@ int ClampStackGrid(int value);
 int StackCells(int mode);
 // 宫格画得下几列：按磁贴里真正可用的像素高度算，每格至少 12px（含间隙），1 表示退回单图
 int StackSide(int availPx,int mode);
+// 性能三档：0=完整特效 1=精简（不播入场动画）2=省电（再关掉背景材质与叠放宫格）
+int ClampPerfTier(int value);
+bool PerfAnim(int tier);
+bool PerfMaterial(int tier);
+bool PerfMosaic(int tier);
+int PerfTierFromLegacy(bool performance);
 // URL 拖入下载：只接受 http/https，文件名从路径尾部取（百分号解码+非法字符清洗），取不到就用 fallback
 bool IsHttpUrl(std::wstring const& url);
 std::wstring DownloadName(std::wstring const& url,std::wstring const& contentType={});

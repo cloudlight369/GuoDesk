@@ -93,7 +93,7 @@ auto add=Action(L"\uE710",[this]{Pick();});ToolTipService::SetToolTip(add,box_va
  if(Model().capsule)SetCapsule(true);
  window.Content(root);window.Closed([this](auto&&,WindowEventArgs const& args){if(!closing){args.Handled(true);ShowWindow(hwnd,SW_HIDE);}});
  SetWindowSubclass(hwnd,Subclass,1,reinterpret_cast<DWORD_PTR>(this));window.Activate();auto presenter=window.AppWindow().Presenter().as<Microsoft::UI::Windowing::OverlappedPresenter>();presenter.SetBorderAndTitleBar(true,false);window.AppWindow().IsShownInSwitchers(false);ApplySettings();Place();
- if(!owner.layout.settings.performance){Storyboard fade;DoubleAnimation alpha;alpha.From(0.0);alpha.To(1.0);alpha.Duration(Duration{std::chrono::milliseconds(220),DurationType::TimeSpan});Storyboard::SetTarget(alpha,root);Storyboard::SetTargetProperty(alpha,L"Opacity");fade.Children().Append(alpha);fade.Begin();}
+ if(PerfAnim(owner.layout.settings.perfTier)){Storyboard fade;DoubleAnimation alpha;alpha.From(0.0);alpha.To(1.0);alpha.Duration(Duration{std::chrono::milliseconds(220),DurationType::TimeSpan});Storyboard::SetTarget(alpha,root);Storyboard::SetTargetProperty(alpha,L"Opacity");fade.Children().Append(alpha);fade.Begin();}
 }
 DeskWindow::~DeskWindow(){*alive=false;closing=true;if(hoverTimer)hoverTimer.Stop();if(embedTimer)embedTimer.Stop();if(hoverTabTimer)hoverTabTimer.Stop();if(opTimer)opTimer.Stop();
  // 工作线程只持有共享状态；退出前请求取消并做有界等待，避免进程在 SHFileOperation 中途销毁
@@ -105,12 +105,12 @@ winrt::Microsoft::UI::Xaml::Media::SystemBackdrop MakeBackdrop(int kind){
  try{return winrt::Microsoft::UI::Xaml::Media::SystemBackdrop{winrt::Microsoft::UI::Xaml::Media::MicaBackdrop()};}catch(...){return winrt::Microsoft::UI::Xaml::Media::SystemBackdrop{nullptr};}
 }
 void DeskWindow::ApplyPerformance(){
- bool perf=owner.layout.settings.performance;
+ bool perf=!PerfMaterial(owner.layout.settings.perfTier);
  try{window.SystemBackdrop(perf?winrt::Microsoft::UI::Xaml::Media::SystemBackdrop{nullptr}:MakeBackdrop(owner.layout.settings.backdrop));}catch(...){}
  ApplyBackground();
 }
 void DeskWindow::ApplyBackground(){
- auto& v=View();bool perf=owner.layout.settings.performance;
+ auto& v=View();bool perf=!PerfMaterial(owner.layout.settings.perfTier);
  if(v.background==bgPath&&v.dim==bgDim&&perf==bgPerf&&desktop==bgDesk)return;
  bgPath=v.background;bgDim=v.dim;bgPerf=perf;bgDesk=desktop;
  Brush next{nullptr};bool isImg=false;
@@ -718,7 +718,7 @@ void DeskWindow::Refresh(){auto& z=Model();auto& v=View();bool bodyFocus=listHos
   // 宫格预览：一叠里有多少东西，缩略图上就能看见多少张（3×3/4×4/5×5），只加载前 N 个图标
   int const labelH=v.nameLines==0?0:(v.nameLines==1?18:36);
   int const room=TH[tier]-8-(labelH?labelH+5:0);
-  int const side=StackSide(room,v.stackGrid);
+  int const side=StackSide(room,PerfMosaic(owner.layout.settings.perfTier)?v.stackGrid:0);
   int const cells=side*side;
   int const box=std::clamp(room,12,TI[tier]+10);
   int const pic=std::max(9,box/side-2);
