@@ -27,7 +27,7 @@ SettingsWindow::SettingsWindow(Controller& c):owner(c){
  theme=ComboBox();theme.HorizontalAlignment(HorizontalAlignment::Stretch);ComboBoxItem def;def.Content(box_value(i18n::Tr(L"跟随系统")));theme.Items().Append(def);ComboBoxItem light;light.Content(box_value(i18n::Tr(L"浅色")));theme.Items().Append(light);ComboBoxItem dark;dark.Content(box_value(i18n::Tr(L"深色")));theme.Items().Append(dark);
  theme.SelectionChanged([this](auto&&,auto&&){if(applying)return;OnTheme(theme.SelectedIndex());});panel.Children().Append(theme);
  compact=ToggleSwitch();compact.OnContent(box_value(i18n::Tr(L"紧凑磁贴")));compact.OffContent(box_value(i18n::Tr(L"紧凑磁贴")));compact.Toggled([this](auto&&,auto&&){if(applying)return;OnCompact(compact.IsOn());});panel.Children().Append(compact);
- perfTier=ComboBox();perfTier.HorizontalAlignment(HorizontalAlignment::Stretch);winrt::Microsoft::UI::Xaml::Automation::AutomationProperties::SetAutomationId(perfTier,L"perfTier");for(wchar_t const* p:{L"完整特效",L"精简",L"省电"}){ComboBoxItem it;it.Content(box_value(i18n::Tr(p)));perfTier.Items().Append(it);}
+ panel.Children().Append(Caption(i18n::Tr(L"界面性能")));perfTier=ComboBox();perfTier.HorizontalAlignment(HorizontalAlignment::Stretch);winrt::Microsoft::UI::Xaml::Automation::AutomationProperties::SetAutomationId(perfTier,L"perfTier");winrt::Microsoft::UI::Xaml::Automation::AutomationProperties::SetName(perfTier,i18n::Tr(L"界面性能"));for(wchar_t const* p:{L"完整特效",L"精简",L"省电"}){ComboBoxItem it;it.Content(box_value(i18n::Tr(p)));perfTier.Items().Append(it);}
  perfTier.SelectionChanged([this](auto&&,auto&&){if(applying)return;OnPerfTier(perfTier.SelectedIndex());});panel.Children().Append(perfTier);
  TextBlock perfHint;perfHint.Text(i18n::Tr(L"界面性能：完整特效＝保留窗口入场动画；精简＝不再播放入场动画；省电＝同时关掉背景材质与叠放宫格。"));perfHint.FontSize(11);perfHint.Opacity(0.6);perfHint.TextWrapping(TextWrapping::Wrap);panel.Children().Append(perfHint);
  panel.Children().Append(Caption(i18n::Tr(L"文字大小")));
@@ -156,7 +156,7 @@ SettingsWindow::SettingsWindow(Controller& c):owner(c){
 }
 void SettingsWindow::OnTheme(int index){auto& s=owner.layout.settings;s.theme=index==1?L"Light":index==2?L"Dark":L"";owner.ApplySettings();owner.Save();}
 void SettingsWindow::OnCompact(bool on){owner.layout.settings.compact=on;owner.ApplySettings();owner.Save();}
-void SettingsWindow::OnPerfTier(int index){index=ClampPerfTier(index);if(index==owner.layout.settings.perfTier)return;owner.layout.settings.perfTier=index;for(auto& w:owner.windows)w->ApplySettings();owner.Save();}
+void SettingsWindow::OnPerfTier(int index){index=ClampPerfTier(index);if(index==owner.layout.settings.perfTier)return;owner.layout.settings.perfTier=index;owner.Save();owner.RebuildWidgets();}
 void SettingsWindow::OnEverything(bool on){owner.layout.settings.everything=on;owner.Save();}
 void SettingsWindow::OnAutostart(bool on){SetAutostart(on);bool actual=AutostartEnabled();if(actual!=on){applying=true;autostart.IsOn(actual);applying=false;}}
 void SettingsWindow::OnLanguage(int index){owner.layout.settings.language=index==1?L"zh-CN":index==2?L"en-US":L"";owner.Save();}

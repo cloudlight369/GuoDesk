@@ -194,6 +194,20 @@ Start-Sleep -Seconds 2
 $powerImages = Image-Count (Find-Window $titleZone 2500)
 Note 'legacy-flag-becomes-power-saver' ($powerImages -ge 1 -and $powerImages -le 2) ('images=' + $powerImages)
 
+function Open-Menu($win) {
+  Press-Esc
+  $w = Find-Window ($win.Current.Name) 2500
+  if ($null -eq $w) { return $false }
+  $null = Focus-Window $w
+  return (Invoke-El (More-Button $w))
+}
+
+# 省电档下分区菜单必须说实话，而不是继续显示"5×5 宫格（点击切换）"
+$null = Open-Menu $zone
+$honest = Menu-Item '叠放缩略图：省电模式下不显示' 4000
+Note 'power-saver-menu-honest' ($null -ne $honest) ('label=' + $(if ($null -ne $honest) { $honest.Current.Name } else { 'none' }))
+Press-Esc
+
 # 设置页的下拉在 UIA 里没有可见文本（WinUI ComboBox 的选中项不进子树），所以按 AutomationId 找、按 SelectionItem 读
 $tiers = @('完整特效', '精简', '省电')
 function Perf-Combo($win) {
@@ -238,6 +252,10 @@ Note 'tier-persisted-as-number' ($after -match '"perfTier":\s*0') ('perfTier0=' 
 $back = Find-Window $titleZone 3000
 $fullImages = if ($null -ne $back) { Image-Count $back } else { -1 }
 Note 'full-effects-restores-grid' ($fullImages -ge 9) ('images=' + $fullImages)
+$null = Open-Menu (Find-Window $titleZone 2500)
+$toggle = Menu-Item '叠放缩略图：*（点击切换）' 4000
+Note 'full-effects-menu-offers-toggle' ($null -ne $toggle) ('label=' + $(if ($null -ne $toggle) { $toggle.Current.Name } else { 'none' }))
+Press-Esc
 $readBack = Perf-Selected (Find-Window $titleSettings 2500)
 Note 'tier-reads-back-in-ui' ($readBack -eq '完整特效') ('selected=' + $readBack)
 

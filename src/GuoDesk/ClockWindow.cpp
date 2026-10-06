@@ -66,7 +66,7 @@ void ClockWindow::SetBgBrush(std::wstring const& path){
  root.Background(next);
 }
 void ClockWindow::ApplyBackground(){
- auto const& p=owner.layout.widgets.clockBg;
+ auto const p=PerfMaterial(owner.layout.settings.perfTier)?owner.layout.widgets.clockBg:std::wstring();
  bgList.clear();
  if(!p.empty()){DWORD a=GetFileAttributesW(p.c_str());if(a!=INVALID_FILE_ATTRIBUTES&&(a&FILE_ATTRIBUTE_DIRECTORY))bgList=EnumFolderImages(p);}
  if(bgList.empty())SetBgBrush(p);
@@ -88,7 +88,7 @@ void ClockWindow::PopulateMenu(MenuFlyout const& menu){
 ClockWindow::ClockWindow(Controller& c):owner(c){
  window=Window();window.Title(i18n::Tr(L"GuoDesk 时钟"));hwnd=shell::Handle(window);
  try{auto dir=std::filesystem::path(ClockExePath()).parent_path();window.AppWindow().SetIcon((dir/L"guodesk.ico").wstring());}catch(...){}
- window.SystemBackdrop(MakeBackdrop(owner.layout.settings.backdrop));
+ window.SystemBackdrop(MakeBackdrop(owner.layout.settings.backdrop,owner.layout.settings.perfTier));
  try{auto presenter=window.AppWindow().Presenter().as<Microsoft::UI::Windowing::OverlappedPresenter>();presenter.SetBorderAndTitleBar(true,false);window.AppWindow().IsShownInSwitchers(false);}catch(...){}
  auto& w=owner.layout.widgets;
  root=Grid();

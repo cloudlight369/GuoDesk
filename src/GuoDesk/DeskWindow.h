@@ -90,7 +90,7 @@ public:
  void Pick(bool folder=false);
  winrt::Microsoft::UI::Xaml::Media::Brush ThemeBrush(wchar_t const* key,winrt::Windows::UI::Color fallback);
 };
-winrt::Microsoft::UI::Xaml::Media::SystemBackdrop MakeBackdrop(int kind);
+winrt::Microsoft::UI::Xaml::Media::SystemBackdrop MakeBackdrop(int kind,int tier);
 class SettingsWindow;
 class Controller {
  HWND messageWindow{}; NOTIFYICONDATAW tray{}; UINT taskbarCreated{}; HANDLE mutex{}; bool quitting=false; std::map<std::wstring,std::wstring> mappedStamp; std::shared_ptr<bool> syncAlive{std::make_shared<bool>(true)};

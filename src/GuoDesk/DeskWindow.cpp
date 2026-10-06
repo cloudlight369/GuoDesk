@@ -100,13 +100,13 @@ DeskWindow::~DeskWindow(){*alive=false;closing=true;if(hoverTimer)hoverTimer.Sto
  if(opState){opState->cancel.store(true);for(int i=0;i<60&&!opState->finished.load();++i)Sleep(50);opState.reset();}
  opRunning=false;
  try{window.Closed(nullptr);}catch(...){}if(IsWindow(hwnd)){RemoveWindowSubclass(hwnd,Subclass,1);window.Close();}}
-winrt::Microsoft::UI::Xaml::Media::SystemBackdrop MakeBackdrop(int kind){
+winrt::Microsoft::UI::Xaml::Media::SystemBackdrop MakeBackdrop(int kind,int tier){
+ if(!PerfMaterial(tier))return winrt::Microsoft::UI::Xaml::Media::SystemBackdrop{nullptr};
  if(kind==1)try{return winrt::Microsoft::UI::Xaml::Media::SystemBackdrop{winrt::Microsoft::UI::Xaml::Media::DesktopAcrylicBackdrop()};}catch(...){}
  try{return winrt::Microsoft::UI::Xaml::Media::SystemBackdrop{winrt::Microsoft::UI::Xaml::Media::MicaBackdrop()};}catch(...){return winrt::Microsoft::UI::Xaml::Media::SystemBackdrop{nullptr};}
 }
 void DeskWindow::ApplyPerformance(){
- bool perf=!PerfMaterial(owner.layout.settings.perfTier);
- try{window.SystemBackdrop(perf?winrt::Microsoft::UI::Xaml::Media::SystemBackdrop{nullptr}:MakeBackdrop(owner.layout.settings.backdrop));}catch(...){}
+ try{window.SystemBackdrop(MakeBackdrop(owner.layout.settings.backdrop,owner.layout.settings.perfTier));}catch(...){}
  ApplyBackground();
 }
 void DeskWindow::ApplyBackground(){
@@ -637,7 +637,8 @@ void DeskWindow::Menu(FrameworkElement const& target){auto& z=Model();auto& v=Vi
   sort.Items().Append(desc);sort.Text(i18n::Tr(L"排序"));menu.Items().Append(sort);}
  menu.Items().Append(MenuItem(i18n::TrF(L"图标大小：{0}（点击切换）",{std::wstring(i18n::Tr(v.tileSize==0?L"小":v.tileSize==1?L"中":L"大"))}),[this]{auto& m=View();m.tileSize=(m.tileSize+1)%3;Refresh();owner.Save();}));
  if(v.viewMode!=L"list"&&!mapped){static wchar_t const* grids[]={L"单图",L"3×3 宫格",L"4×4 宫格",L"5×5 宫格"};
-  menu.Items().Append(MenuItem(i18n::TrF(L"叠放缩略图：{0}（点击切换）",{std::wstring(i18n::Tr(grids[ClampStackGrid(v.stackGrid)]))}),[this]{auto& m=View();m.stackGrid=ClampStackGrid((m.stackGrid+1)%4);Refresh();owner.Save();Notify(i18n::TrF(L"叠放缩略图已设为{0}。",{std::wstring(i18n::Tr(grids[m.stackGrid]))}));}));}
+  if(PerfMosaic(owner.layout.settings.perfTier))menu.Items().Append(MenuItem(i18n::TrF(L"叠放缩略图：{0}（点击切换）",{std::wstring(i18n::Tr(grids[ClampStackGrid(v.stackGrid)]))}),[this]{auto& m=View();m.stackGrid=ClampStackGrid((m.stackGrid+1)%4);Refresh();owner.Save();Notify(i18n::TrF(L"叠放缩略图已设为{0}。",{std::wstring(i18n::Tr(grids[m.stackGrid]))}));}));
+  else menu.Items().Append(MenuItem(i18n::Tr(L"叠放缩略图：省电模式下不显示"),[this]{Notify(i18n::Tr(L"省电模式不加载叠放缩略图；在设置的「界面性能」切回精简或完整特效后即可使用。"));}));}
  menu.Items().Append(MenuItem(i18n::TrF(L"文件名：{0}（点击切换）",{std::wstring(v.nameLines==0?i18n::Tr(L"隐藏"):v.nameLines==1?i18n::Tr(L"一行"):i18n::Tr(L"两行"))}),[this]{auto& m=View();m.nameLines=m.nameLines==0?2:m.nameLines-1;Refresh();owner.Save();}));
  {MenuFlyoutSubItem colors;colors.Text(i18n::Tr(L"主题色"));static wchar_t const* names[8]={L"红色",L"橙色",L"黄色",L"绿色",L"青色",L"蓝色",L"紫色",L"粉色"};
   auto swatchIcon=[](unsigned rgb){FontIcon ic;ic.Glyph(L"\u25A0");ic.FontFamily(FontFamily(L"Segoe UI Symbol"));ic.FontSize(16);ic.Foreground(SolidColorBrush(Windows::UI::Color{255,static_cast<uint8_t>((rgb>>16)&0xFF),static_cast<uint8_t>((rgb>>8)&0xFF),static_cast<uint8_t>(rgb&0xFF)}));return ic;};

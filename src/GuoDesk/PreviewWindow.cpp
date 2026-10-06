@@ -143,7 +143,7 @@ void PreviewWindow::OnKey(Input::KeyRoutedEventArgs const& a){
 }
 PreviewWindow::PreviewWindow(Controller& c):owner(c){
  window=Window();window.Title(i18n::Tr(L"GuoDesk 快速预览"));hwnd=shell::Handle(window);
- window.SystemBackdrop(MakeBackdrop(owner.layout.settings.backdrop));
+ window.SystemBackdrop(MakeBackdrop(owner.layout.settings.backdrop,owner.layout.settings.perfTier));
  try{auto presenter=window.AppWindow().Presenter().as<Microsoft::UI::Windowing::OverlappedPresenter>();presenter.SetBorderAndTitleBar(true,false);window.AppWindow().IsShownInSwitchers(false);}catch(...){}
  root=Grid();root.Padding(Thickness{0,0,0,0});
  {

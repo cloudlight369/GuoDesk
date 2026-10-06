@@ -28,7 +28,7 @@ void CaptureWindow::Commit(bool asTodo){
 CaptureWindow::CaptureWindow(Controller& c):owner(c){
  window=Window();window.Title(i18n::Tr(L"GuoDesk 快速捕获"));hwnd=shell::Handle(window);
  try{auto dir=std::filesystem::path(CaptureExePath()).parent_path();window.AppWindow().SetIcon((dir/L"guodesk.ico").wstring());}catch(...){}
- window.SystemBackdrop(MakeBackdrop(owner.layout.settings.backdrop));
+ window.SystemBackdrop(MakeBackdrop(owner.layout.settings.backdrop,owner.layout.settings.perfTier));
  try{auto presenter=window.AppWindow().Presenter().as<Microsoft::UI::Windowing::OverlappedPresenter>();presenter.SetBorderAndTitleBar(true,false);window.AppWindow().IsShownInSwitchers(false);}catch(...){}
  root=Grid();root.Padding(Thickness{0,0,0,0});
  RowDefinition bodyRow;bodyRow.Height(GridLength{1,GridUnitType::Star});root.RowDefinitions().Append(bodyRow);
