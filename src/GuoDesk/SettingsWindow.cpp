@@ -280,7 +280,7 @@ void SettingsWindow::RebuildRules(){
   if(match.empty())match=i18n::Tr(L"未设置匹配条件");
   else if(r.exts.empty()&&r.keywords.empty())match=i18n::Tr(L"缺少扩展名或关键词")+L" · "+match;
   TextBlock matchText;matchText.Text(match);matchText.FontSize(11);matchText.Opacity(0.75);left.Children().Append(matchText);
-  TextBlock dest;dest.Text(r.targetZone.empty()?i18n::Tr(L"全局生效（所有分区）"):(L"→ "+zoneName(r.targetZone)));dest.FontSize(11);dest.Opacity(0.75);left.Children().Append(dest);
+  TextBlock dest;dest.Text(r.targetZone.empty()?i18n::Tr(L"未绑定 · 归档时所有分区都算"):(HasZone(owner.layout.zones,r.targetZone)?L"→ "+zoneName(r.targetZone):i18n::Tr(L"（原绑定分区已删除）")));dest.FontSize(11);dest.Opacity(0.75);left.Children().Append(dest);
   open.Content(left);open.Click([this,key](auto&&,auto&&){EditRule(key);});Grid::SetColumn(open,0);g.Children().Append(open);
   FontIcon trashIcon;trashIcon.FontFamily(FontFamily(L"Segoe Fluent Icons"));trashIcon.Glyph(L"\uE74D");trashIcon.FontSize(14);
   auto del=Button();del.Content(trashIcon);del.Background(nullptr);del.BorderThickness(Thickness{0});del.VerticalAlignment(VerticalAlignment::Center);ToolTipService::SetToolTip(del,box_value(i18n::Tr(L"删除规则")));
@@ -307,13 +307,18 @@ void SettingsWindow::EditRule(std::wstring ruleId){
  auto minBox=gateBox(L"最小大小（KB，0=不限）",GateValue(rules,ruleId,&Rule::minSizeKb));
  auto maxBox=gateBox(L"最大大小（KB，0=不限）",GateValue(rules,ruleId,&Rule::maxSizeKb));
  auto ageBox=gateBox(L"修改时间早于（天，0=不限）",GateValue(rules,ruleId,&Rule::olderThanDays));
- ComboBox zoneBox;zoneBox.HorizontalAlignment(HorizontalAlignment::Stretch);zoneBox.Items().Append(box_value(i18n::Tr(L"（未绑定 · 全局生效）")));
- int defIndex=0,index=1;for(auto const& z:owner.layout.zones){zoneBox.Items().Append(box_value(z.name));if(!isNew)for(auto const& r:rules)if(r.id==ruleId&&r.targetZone==z.id)defIndex=index;++index;}
+ ComboBox zoneBox;zoneBox.HorizontalAlignment(HorizontalAlignment::Stretch);
+ std::vector<std::wstring> zoneIds{L""};
+ zoneBox.Items().Append(box_value(i18n::Tr(L"（未绑定 · 只在归档时全局生效）")));
+ std::wstring boundTo;if(!isNew)for(auto const& r:rules)if(r.id==ruleId)boundTo=r.targetZone;
+ int defIndex=0,index=1;for(auto const& z:owner.layout.zones){zoneBox.Items().Append(box_value(z.name));zoneIds.push_back(z.id);if(!boundTo.empty()&&z.id==boundTo)defIndex=index;++index;}
+ // 绑定悬空时绝不"顺手改成全局"：单独列一项、沿用它原来的 id，用户不碰它就什么都不变
+ if(!boundTo.empty()&&defIndex==0){zoneBox.Items().Append(box_value(i18n::Tr(L"（原绑定分区已删除）")));zoneIds.push_back(boundTo);defIndex=index;}
  zoneBox.SelectedIndex(defIndex);p.Children().Append(label(i18n::Tr(L"绑定分区（整理移入、归档只在此生效）")));p.Children().Append(zoneBox);
  dlg.Content(p);
  try{dlg.XamlRoot(scroll.XamlRoot());}catch(...){return;}
  auto op=dlg.ShowAsync();
- op.Completed([this,ruleId,isNew,nameBox,extBox,keyBox,zoneBox,minBox,maxBox,ageBox](auto&& async,auto&&){
+ op.Completed([this,ruleId,isNew,nameBox,extBox,keyBox,zoneBox,minBox,maxBox,ageBox,zoneIds](auto&& async,auto&&){
   if(async.GetResults()!=ContentDialogResult::Primary)return;
   auto& rs=owner.layout.rules;
   Rule* t=nullptr;for(auto& r:rs)if(r.id==ruleId)t=&r;
@@ -321,7 +326,7 @@ void SettingsWindow::EditRule(std::wstring ruleId){
   t->name=std::wstring(nameBox.Text());if(t->name.empty())t->name=i18n::Tr(L"未命名规则");
   t->exts=SplitList(std::wstring(extBox.Text()));
   t->keywords=SplitList(std::wstring(keyBox.Text()));
-  int sel=zoneBox.SelectedIndex();t->targetZone=(sel>0&&sel<=static_cast<int>(owner.layout.zones.size()))?owner.layout.zones[static_cast<size_t>(sel-1)].id:L"";
+  int sel=zoneBox.SelectedIndex();t->targetZone=(sel>=0&&sel<static_cast<int>(zoneIds.size()))?zoneIds[static_cast<size_t>(sel)]:std::wstring();
   // 门槛填了非数字就保留原值并把输入框改回去：静默清零会让规则突然命中一大堆文件，下次归档就是误移
   auto number=[](TextBox const& box,long long keep){std::wstring s=std::wstring(box.Text());size_t a=s.find_first_not_of(L" \t");if(a==std::wstring::npos){box.Text(L"");return 0LL;}size_t b=s.find_last_not_of(L" \t");s=s.substr(a,b-a+1);if(s.empty()){box.Text(L"");return 0LL;}
    try{size_t pos=0;long long v=std::stoll(s,&pos);if(pos==s.size()&&v>=0)return v;}catch(...){}

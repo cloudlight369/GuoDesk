@@ -135,11 +135,15 @@ std::vector<Rule> RulesForZone(std::vector<Rule> const& rules,std::wstring const
  for(auto const& r:rules)if(r.targetZone.empty()||r.targetZone==zoneId)kept.push_back(r);
  return kept;
 }
-int UnbindRules(std::vector<Rule>& rules,std::wstring const& zoneId){
+int CountRulesBoundTo(std::vector<Rule> const& rules,std::wstring const& zoneId){
  if(zoneId.empty())return 0;
- int cleared=0;
- for(auto& r:rules)if(r.targetZone==zoneId){r.targetZone.clear();++cleared;}
- return cleared;
+ int hits=0;
+ for(auto const& r:rules)if(r.targetZone==zoneId)++hits;
+ return hits;
+}
+bool HasZone(std::vector<Zone> const& zones,std::wstring const& zoneId){
+ if(zoneId.empty())return false;
+ return std::find_if(zones.begin(),zones.end(),[&](auto const& z){return z.id==zoneId;})!=zones.end();
 }
 int ApplyPlan(Layout& l,std::vector<PlanItem> const& plan){int added=0;for(auto const& p:plan){auto it=std::find_if(l.zones.begin(),l.zones.end(),[&](auto const& z){return z.id==p.zone;});if(it==l.zones.end())continue;if(AddEntry(*it,p.path))++added;}return added;}
 std::wstring KnownFolder(std::wstring const& tag){

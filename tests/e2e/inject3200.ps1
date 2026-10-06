@@ -35,8 +35,8 @@ $template = [ordered]@{
     [ordered]@{ id = 'zb'; name = '乙区'; x = 1420; y = 150; width = 400; height = 420; collapsed = $false; mappedFolder = $dirB; viewMode = 'list'; entries = @() }
   )
   rules   = @(
-    [ordered]@{ id = 'r3200b'; name = '乙区文档'; exts = @('pdf'); keywords = @(); zone = 'zb'; minSize = 0; maxSize = 0; olderThan = 0 },
     [ordered]@{ id = 'r3200a'; name = '甲区文档'; exts = @('pdf'); keywords = @(); zone = 'za'; minSize = 0; maxSize = 0; olderThan = 0 },
+    [ordered]@{ id = 'r3200b'; name = '乙区文档'; exts = @('pdf'); keywords = @(); zone = 'zb'; minSize = 0; maxSize = 0; olderThan = 0 },
     [ordered]@{ id = 'r3200g'; name = '全局图片'; exts = @('png'); keywords = @(); zone = ''; minSize = 0; maxSize = 0; olderThan = 0 }
   )
   settings = [ordered]@{ theme = 'system'; compact = $false; language = 'zh'; guideDone = $true; snapshots = $false }
@@ -210,7 +210,7 @@ if ($null -eq $winA -or $null -eq $winB) { $results | Set-Content -Path $report 
 # 甲区预览：只该看见自己的规则 + 全局规则，并且明说有几条被排除
 $null = Open-And-Pick $winA $archiveItem
 $startA = Text-Of (Find-Window $titleA 2500)
-Note 'preview-says-skipped' ($startA -match '绑定在其他分区') ''
+Note 'preview-says-skipped' ($startA -match '不属于本分区') ''
 Note 'preview-lists-own-rule' ($startA -match '甲区文档' -and $startA -match '全局图片') ''
 Note 'preview-hides-other-zone-rule' (-not ($startA -match '乙区文档')) ''
 $go = Button-Like (Find-Window $titleA 2500) '移动 *' 6000
@@ -236,15 +236,30 @@ Note 'other-zone-sees-own-rule' ($startB -match '乙区文档' -and -not ($start
 Press-Esc
 Start-Sleep -Milliseconds 600
 
-# 删掉甲区：它名下的规则必须解绑成全局，乙区的规则不受影响
+# 删掉甲区：它名下的规则只能悬空，绝不能被悄悄放大成全局（v3.20.0 就是这么错的）
 $null = Open-And-Pick $winA '删除分区（保留原文件）*'
 Start-Sleep -Seconds 2
 $after = Layout-Text
-$unbound = [regex]::IsMatch($after, '"id":\s*"r3200a".*?"zone":\s*""', 'Singleline')
-$kept = [regex]::IsMatch($after, '"id":\s*"r3200b".*?"zone":\s*"zb"', 'Singleline')
-Note 'deleted-zone-rules-unbound' ($unbound -and $kept) ('unbound=' + $unbound + ' otherKept=' + $kept)
+$stranded = [regex]::IsMatch($after, '"id":\s*"r3200a".*?"zone":\s*"za"', 'Singleline')
+$zoneGone = -not [regex]::IsMatch($after, '"id":\s*"za"', 'Singleline')
+Note 'stranded-binding-not-widened' ($stranded -and $zoneGone) ('keptBinding=' + $stranded + ' zoneGone=' + $zoneGone)
 Note 'survivor-alive' ($null -ne (Find-Window $titleB 4000)) ''
 Note 'deleted-zone-window-gone' ($null -eq (Find-Window $titleA 1200)) ''
+
+# 悬空规则谁也不作用于：乙区归档时 b.pdf 只能进自己的「乙区文档」，因为 r3200a 排在它前面却不得命中
+$winB2 = Find-Window $titleB 4000
+$null = Open-And-Pick $winB2 $archiveItem
+$goB = Button-Like (Find-Window $titleB 2500) '移动 *' 6000
+Note 'survivor-still-archivable' ($null -ne $goB) ('button=' + $(if ($null -ne $goB) { 'found' } else { 'none' }))
+$null = Invoke-El $goB
+Start-Sleep -Milliseconds 1200
+$deadlineB = (Get-Date).AddSeconds(20)
+while ((Get-Date) -lt $deadlineB) {
+  if ((Test-Path (Join-Path $dirB '乙区文档\b.pdf')) -or (Test-Path (Join-Path $dirB '甲区文档\b.pdf'))) { break }
+  Start-Sleep -Milliseconds 400
+}
+Note 'stranded-rule-skipped-survivor' (-not (Test-Path (Join-Path $dirB '甲区文档'))) ''
+Note 'survivor-used-own-rule' (Test-Path (Join-Path $dirB '乙区文档\b.pdf')) ''
 
 Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue
 Start-Sleep -Milliseconds 600

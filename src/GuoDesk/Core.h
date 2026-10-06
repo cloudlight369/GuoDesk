@@ -127,8 +127,10 @@ struct ArchiveGroup { std::wstring category; std::vector<std::wstring> paths; };
 std::vector<ArchiveGroup> ArchivePlan(std::vector<Rule> const& rules,std::vector<std::wstring> const& files,std::vector<std::wstring>* unmatched,std::wstring const& root={});
 // 规则按分区生效：未绑定分区的规则对哪个分区都算，绑定过的只在它自己的分区里算
 std::vector<Rule> RulesForZone(std::vector<Rule> const& rules,std::wstring const& zoneId);
-// 删分区时把它名下的规则解绑成全局规则，返回解绑条数（不然这些规则永远命中不到）
-int UnbindRules(std::vector<Rule>& rules,std::wstring const& zoneId);
+// 数一数有多少条规则绑在这个分区上：分区被删后它们谁也不作用于，但绝不能被悄悄放大成全局
+int CountRulesBoundTo(std::vector<Rule> const& rules,std::wstring const& zoneId);
+// 分区还在不在（规则绑定是不是已经悬空）
+bool HasZone(std::vector<Zone> const& zones,std::wstring const& zoneId);
 // 自动归档的排程：mode 0=关闭 1=每小时 2=每天，lastRun=0 表示从未跑过（立刻该跑）
 long long NowEpoch();
 long long ArchiveIntervalSeconds(int mode);
