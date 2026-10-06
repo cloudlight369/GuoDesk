@@ -43,8 +43,8 @@ $template = [ordered]@{
     [ordered]@{ id = 'zb'; name = '未映射'; x = 980; y = 640; width = 380; height = 260; collapsed = $false; entries = @() }
   )
   rules   = @(
-    [ordered]@{ id = 'r3160a'; name = '文档'; exts = @('pdf'); keywords = @(); zone = 'za'; minSize = 0; maxSize = 0; olderThan = 0 },
-    [ordered]@{ id = 'r3160b'; name = '图片'; exts = @(); keywords = @('photo'); zone = 'za'; minSize = 0; maxSize = 0; olderThan = 0 }
+    [ordered]@{ id = 'r3160a'; name = '文档'; exts = @('pdf'); keywords = @(); zone = ''; minSize = 0; maxSize = 0; olderThan = 0 },
+    [ordered]@{ id = 'r3160b'; name = '图片'; exts = @(); keywords = @('photo'); zone = ''; minSize = 0; maxSize = 0; olderThan = 0 }
   )
   settings = [ordered]@{ theme = 'system'; compact = $false; language = 'zh'; guideDone = $true; snapshots = $false }
 }

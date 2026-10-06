@@ -312,7 +312,9 @@ void DeskWindow::ArchiveHere(){
  if(here.empty()){Notify(i18n::Tr(L"普通分区没有映射文件夹，无法按规则归档。"));return;}
  auto const files=ListLooseFiles(here,false,1000);
  std::vector<std::wstring> unmatched;
- auto groups=ArchivePlan(owner.layout.rules,files,&unmatched);
+ auto const scoped=RulesForZone(owner.layout.rules,View().id);
+ auto groups=ArchivePlan(scoped,files,&unmatched);
+ long long const otherRules=static_cast<long long>(owner.layout.rules.size())-static_cast<long long>(scoped.size());
  long long hits=0;for(auto const& g:groups)hits+=static_cast<long long>(g.paths.size());
  if(groups.empty()){Notify(files.empty()?i18n::TrF(L"「{0}」里没有可归档的散文件。",{shell::Name(here)}):i18n::TrF(L"{0} 个文件都没匹配上规则，请先在设置里配置规则。",{std::to_wstring(files.size())}));return;}
  ContentDialog dlg;
@@ -321,6 +323,7 @@ void DeskWindow::ArchiveHere(){
  TextBlock head;head.Text(i18n::TrF(L"将把「{0}」里 {1} 个文件移入分类子文件夹：",{shell::Name(here),std::to_wstring(hits)}));head.TextWrapping(TextWrapping::Wrap);box.Children().Append(head);
  for(auto const& g:groups){TextBlock line;line.Text(L"· "+g.category+L" · "+std::to_wstring(g.paths.size()));line.FontSize(12);box.Children().Append(line);}
  if(!unmatched.empty()){TextBlock rest;rest.Text(i18n::TrF(L"另有 {0} 项不匹配规则，保持原位。",{std::to_wstring(unmatched.size())}));rest.FontSize(12);rest.Opacity(0.75);box.Children().Append(rest);}
+ if(otherRules>0){TextBlock scope;scope.Text(i18n::TrF(L"另有 {0} 条规则绑定在其他分区，本次不参与。",{std::to_wstring(otherRules)}));scope.FontSize(12);scope.Opacity(0.75);scope.TextWrapping(TextWrapping::Wrap);box.Children().Append(scope);}
  // 列举有上限，逼近上限时必须说清楚，否则用户以为一次就归档干净了
  if(files.size()>=1000){TextBlock cap;cap.Text(i18n::TrF(L"这里只列出前 {0} 个散文件，其余保持原位，可再归档一次。",{std::to_wstring(files.size())}));cap.FontSize(11);cap.Opacity(0.7);cap.TextWrapping(TextWrapping::Wrap);box.Children().Append(cap);}
  TextBlock note;note.Text(i18n::Tr(L"文件会被移动到本文件夹下的子文件夹，不会删除任何内容。"));note.FontSize(11);note.Opacity(0.7);note.TextWrapping(TextWrapping::Wrap);box.Children().Append(note);
@@ -438,7 +441,7 @@ void DeskWindow::AutoArchiveTick(){
  if(owner.ArchiveRootBusy(here,*this))return;
  v.archiveAt=now;
  // 只扫根目录的散文件：递归会把用户自己分好的子目录（下载\票据\ 之类）也卷进来，没有确认框就不能擅自搬
- RunAutoArchive(here,owner.layout.rules);
+ RunAutoArchive(here,RulesForZone(owner.layout.rules,v.id));
 }
 void DeskWindow::PreviewSelection(){
  auto list=navPaths.empty()?ListedPaths():navPaths;
@@ -658,7 +661,7 @@ void DeskWindow::Menu(FrameworkElement const& target){auto& z=Model();auto& v=Vi
  else{MenuFlyoutSubItem join;join.Text(i18n::Tr(L"把其他分区并入此组…"));for(auto const& o:owner.layout.zones){if(o.group==z.group)continue;join.Items().Append(MenuItem(o.name,[this,tid=o.id]{auto key=id;root.DispatcherQueue().TryEnqueue([this,key,tid]{owner.MergeInto(key,tid);});}));}if(join.Items().Size()>0)menu.Items().Append(join);menu.Items().Append(MenuItem(i18n::TrF(L"把「{0}」移出标签组",{v.name}),[this]{auto key=viewId;root.DispatcherQueue().TryEnqueue([this,key]{owner.Ungroup(key);});}));}
  menu.Items().Append(MenuItem(i18n::Tr(L"新增分区"),[this]{owner.Add();}));
  menu.Items().Append(MenuItem(i18n::Tr(L"立即刷新"),[this]{if(!View().mappedFolder.empty())SyncMapped(View());Refresh();}));
- menu.Items().Append(MenuItem(owner.desktopMode?i18n::Tr(L"切换普通窗口"):i18n::Tr(L"试验桌面嵌入"),[this]{owner.ToggleDesktop();}));menu.Items().Append(MenuItem(i18n::Tr(L"设置"),[this]{owner.ShowSettings();}));menu.Items().Append(MenuItem(i18n::Tr(L"删除分区（保留原文件）"),[this]{if(Model().locked){Notify(i18n::Tr(L"分区已锁定：解锁后才能删除分区。"));return;}auto key=viewId;root.DispatcherQueue().TryEnqueue([this,key]{owner.Remove(key);});}));keepCapsuleOpen(this,menu);menu.ShowAt(target);}
+ menu.Items().Append(MenuItem(owner.desktopMode?i18n::Tr(L"切换普通窗口"):i18n::Tr(L"试验桌面嵌入"),[this]{owner.ToggleDesktop();}));menu.Items().Append(MenuItem(i18n::Tr(L"设置"),[this]{owner.ShowSettings();}));menu.Items().Append(MenuItem(i18n::Tr(L"删除分区（保留原文件）"),[this]{if(Model().locked){Notify(i18n::Tr(L"分区已锁定：解锁后才能删除分区。"));return;}auto key=viewId;root.DispatcherQueue().TryEnqueue([this,key]{auto& c=owner;auto const freed=c.Remove(key);if(freed)c.Toast(i18n::Tr(L"分区已删除"),i18n::TrF(L"原本绑定它的 {0} 条规则改回对所有分区生效。",{std::to_wstring(freed)}));});}));keepCapsuleOpen(this,menu);menu.ShowAt(target);}
 void DeskWindow::EntryMenu(std::wstring const& path,std::wstring const& key,std::wstring const& stackId){
  auto& v=View();
  std::vector<std::wstring> custom;
@@ -917,7 +920,7 @@ void Controller::SyncWindows(){std::vector<std::wstring> keep;for(auto const& z:
 void Controller::MergeInto(std::wstring const& selfId,std::wstring const& otherId){auto a=std::find_if(layout.zones.begin(),layout.zones.end(),[&](auto const& z){return z.id==selfId;});auto t=std::find_if(layout.zones.begin(),layout.zones.end(),[&](auto const& z){return z.id==otherId;});if(a==layout.zones.end()||t==layout.zones.end()||a==t)return;auto mark=UndoMark();std::wstring gid;if(!t->group.empty()&&t->group!=a->group){gid=t->group;a->group=gid;}else{gid=a->group.empty()?NewId():a->group;a->group=gid;t->group=gid;}auto members=GroupMemberIds(layout,gid);auto tabIndex=std::find(members.begin(),members.end(),a->id);if(tabIndex!=members.end())a->groupTab=static_cast<int>(tabIndex-members.begin());for(auto& z:layout.zones)if(z.group==gid)z.groupTab=std::clamp(z.groupTab,0,static_cast<int>(members.size())-1);UndoPush(i18n::TrF(L"并入标签组「{0}」",{a->name}),std::move(mark));SyncWindows();Save();}
 void Controller::Ungroup(std::wstring const& zoneId){auto it=std::find_if(layout.zones.begin(),layout.zones.end(),[&](auto const& z){return z.id==zoneId;});if(it==layout.zones.end()||it->group.empty())return;auto gid=it->group;auto name=it->name;auto mark=UndoMark();it->group.clear();it->groupTab=0;if(GroupMemberIds(layout,gid).size()<=1)for(auto& z:layout.zones)if(z.group==gid){z.group.clear();z.groupTab=0;}UndoPush(i18n::TrF(L"移出标签组「{0}」",{name}),std::move(mark));SyncWindows();Save();}
 void Controller::AddToGroup(std::wstring const& anchorId){auto a=std::find_if(layout.zones.begin(),layout.zones.end(),[&](auto const& z){return z.id==anchorId;});if(a==layout.zones.end())return;PushUndo(i18n::TrF(L"在「{0}」组新增分区",{a->name}));Zone nz;nz.id=NewId();nz.name=i18n::Tr(L"新分区");if(a->group.empty()){a->group=NewId();}nz.group=a->group;nz.x=a->x;nz.y=a->y;nz.width=a->width;nz.height=a->height;nz.mon=a->mon;nz.mx=a->mx;nz.my=a->my;nz.collapsed=a->collapsed;nz.expandDir=a->expandDir;nz.maxHeight=a->maxHeight;layout.zones.push_back(std::move(nz));auto members=GroupMemberIds(layout,a->group);for(auto& z:layout.zones)if(z.group==a->group)z.groupTab=std::clamp(z.groupTab,0,static_cast<int>(members.size())-1);Save();}
-void Controller::Remove(std::wstring const& key){auto it=std::find_if(layout.zones.begin(),layout.zones.end(),[&](auto const& z){return z.id==key;});if(it==layout.zones.end())return;auto gid=it->group;PushUndo(i18n::TrF(L"删除分区「{0}」",{it->name}));layout.zones.erase(it);if(!gid.empty()&&GroupMemberIds(layout,gid).size()==1)for(auto& z:layout.zones)if(z.group==gid){z.group.clear();z.groupTab=0;}SyncWindows();Save();}
+int Controller::Remove(std::wstring const& key){auto it=std::find_if(layout.zones.begin(),layout.zones.end(),[&](auto const& z){return z.id==key;});if(it==layout.zones.end())return 0;auto gid=it->group;PushUndo(i18n::TrF(L"删除分区「{0}」",{it->name}));layout.zones.erase(it);int const freed=UnbindRules(layout.rules,key);if(!gid.empty()&&GroupMemberIds(layout,gid).size()==1)for(auto& z:layout.zones)if(z.group==gid){z.group.clear();z.groupTab=0;}SyncWindows();Save();return freed;}
 void Controller::Refresh(){for(auto& w:windows)w->Refresh();}
 void Controller::Show(){for(auto& w:windows)w->Show();}
 void Controller::HideAll(){for(auto& w:windows)if(IsWindowVisible(w->hwnd))ShowWindow(w->hwnd,SW_HIDE);}

@@ -109,7 +109,7 @@ std::vector<std::wstring> ListLooseFiles(std::wstring const& folder,bool recursi
 std::vector<std::wstring> DesktopFileList(){std::vector<std::wstring> out;PWSTR p{};if(SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Desktop,0,nullptr,&p))){out=ListLooseFiles(p);CoTaskMemFree(p);}if(SUCCEEDED(SHGetKnownFolderPath(FOLDERID_PublicDesktop,0,nullptr,&p))){auto extra=ListLooseFiles(p);for(auto const& f:extra)if(std::find(out.begin(),out.end(),f)==out.end())out.push_back(f);CoTaskMemFree(p);}return out;}
 std::vector<PlanItem> BuildPlan(std::vector<Rule> const& rules,std::vector<Zone> const& zones,std::vector<std::wstring> const& files,std::vector<std::wstring>* unmatched){std::vector<PlanItem> plan;if(unmatched)unmatched->clear();std::vector<Rule> norm;for(auto const& r:rules){if(r.targetZone.empty()||r.exts.empty()&&r.keywords.empty())continue;if(std::find_if(zones.begin(),zones.end(),[&](auto const& z){return z.id==r.targetZone;})==zones.end())continue;Rule n=r;for(auto& e:n.exts)e=Lower(e);for(auto& k:n.keywords)k=Lower(k);norm.push_back(std::move(n));}
 for(auto const& f:files){auto ext=ExtOf(f);auto fname=Lower(std::filesystem::path(f).filename().wstring());long long sizeKb=-1,ageDays=-1;FileDims(f,sizeKb,ageDays);bool hit=false;for(auto const& r:norm)if(RuleMatches(r,ext,fname,sizeKb,ageDays)){plan.push_back({f,r.name,r.targetZone});hit=true;break;}if(!hit&&unmatched)unmatched->push_back(f);}return plan;}
-// 归档计划与整理预览的区别：不绑定分区，而是把命中的文件按规则名分组到同级分类子文件夹，由调用方真实移动
+// 归档计划与整理预览的区别：把命中的文件按规则名分组到同级分类子文件夹，由调用方真实移动；规则集合先过 RulesForZone 收窄到本分区
 std::vector<ArchiveGroup> ArchivePlan(std::vector<Rule> const& rules,std::vector<std::wstring> const& files,std::vector<std::wstring>* unmatched,std::wstring const& root){
  std::vector<ArchiveGroup> groups;
  if(unmatched)unmatched->clear();
@@ -129,6 +129,17 @@ std::vector<ArchiveGroup> ArchivePlan(std::vector<Rule> const& rules,std::vector
   it->paths.push_back(f);
  }
  return groups;
+}
+std::vector<Rule> RulesForZone(std::vector<Rule> const& rules,std::wstring const& zoneId){
+ std::vector<Rule> kept;
+ for(auto const& r:rules)if(r.targetZone.empty()||r.targetZone==zoneId)kept.push_back(r);
+ return kept;
+}
+int UnbindRules(std::vector<Rule>& rules,std::wstring const& zoneId){
+ if(zoneId.empty())return 0;
+ int cleared=0;
+ for(auto& r:rules)if(r.targetZone==zoneId){r.targetZone.clear();++cleared;}
+ return cleared;
 }
 int ApplyPlan(Layout& l,std::vector<PlanItem> const& plan){int added=0;for(auto const& p:plan){auto it=std::find_if(l.zones.begin(),l.zones.end(),[&](auto const& z){return z.id==p.zone;});if(it==l.zones.end())continue;if(AddEntry(*it,p.path))++added;}return added;}
 std::wstring KnownFolder(std::wstring const& tag){

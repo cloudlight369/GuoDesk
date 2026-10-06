@@ -125,6 +125,10 @@ bool RuleMatches(Rule const& rule,std::wstring const& ext,std::wstring const& lo
 std::wstring CategoryFolder(std::wstring const& name,std::wstring const& fallback);
 struct ArchiveGroup { std::wstring category; std::vector<std::wstring> paths; };
 std::vector<ArchiveGroup> ArchivePlan(std::vector<Rule> const& rules,std::vector<std::wstring> const& files,std::vector<std::wstring>* unmatched,std::wstring const& root={});
+// 规则按分区生效：未绑定分区的规则对哪个分区都算，绑定过的只在它自己的分区里算
+std::vector<Rule> RulesForZone(std::vector<Rule> const& rules,std::wstring const& zoneId);
+// 删分区时把它名下的规则解绑成全局规则，返回解绑条数（不然这些规则永远命中不到）
+int UnbindRules(std::vector<Rule>& rules,std::wstring const& zoneId);
 // 自动归档的排程：mode 0=关闭 1=每小时 2=每天，lastRun=0 表示从未跑过（立刻该跑）
 long long NowEpoch();
 long long ArchiveIntervalSeconds(int mode);

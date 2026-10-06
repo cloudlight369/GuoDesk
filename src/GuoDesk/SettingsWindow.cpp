@@ -280,7 +280,7 @@ void SettingsWindow::RebuildRules(){
   if(match.empty())match=i18n::Tr(L"未设置匹配条件");
   else if(r.exts.empty()&&r.keywords.empty())match=i18n::Tr(L"缺少扩展名或关键词")+L" · "+match;
   TextBlock matchText;matchText.Text(match);matchText.FontSize(11);matchText.Opacity(0.75);left.Children().Append(matchText);
-  TextBlock dest;dest.Text(r.targetZone.empty()?i18n::Tr(L"未绑定分区"):(L"→ "+zoneName(r.targetZone)));dest.FontSize(11);dest.Opacity(0.75);left.Children().Append(dest);
+  TextBlock dest;dest.Text(r.targetZone.empty()?i18n::Tr(L"全局生效（所有分区）"):(L"→ "+zoneName(r.targetZone)));dest.FontSize(11);dest.Opacity(0.75);left.Children().Append(dest);
   open.Content(left);open.Click([this,key](auto&&,auto&&){EditRule(key);});Grid::SetColumn(open,0);g.Children().Append(open);
   FontIcon trashIcon;trashIcon.FontFamily(FontFamily(L"Segoe Fluent Icons"));trashIcon.Glyph(L"\uE74D");trashIcon.FontSize(14);
   auto del=Button();del.Content(trashIcon);del.Background(nullptr);del.BorderThickness(Thickness{0});del.VerticalAlignment(VerticalAlignment::Center);ToolTipService::SetToolTip(del,box_value(i18n::Tr(L"删除规则")));
@@ -307,9 +307,9 @@ void SettingsWindow::EditRule(std::wstring ruleId){
  auto minBox=gateBox(L"最小大小（KB，0=不限）",GateValue(rules,ruleId,&Rule::minSizeKb));
  auto maxBox=gateBox(L"最大大小（KB，0=不限）",GateValue(rules,ruleId,&Rule::maxSizeKb));
  auto ageBox=gateBox(L"修改时间早于（天，0=不限）",GateValue(rules,ruleId,&Rule::olderThanDays));
- ComboBox zoneBox;zoneBox.HorizontalAlignment(HorizontalAlignment::Stretch);zoneBox.Items().Append(box_value(i18n::Tr(L"（未绑定）")));
+ ComboBox zoneBox;zoneBox.HorizontalAlignment(HorizontalAlignment::Stretch);zoneBox.Items().Append(box_value(i18n::Tr(L"（未绑定 · 全局生效）")));
  int defIndex=0,index=1;for(auto const& z:owner.layout.zones){zoneBox.Items().Append(box_value(z.name));if(!isNew)for(auto const& r:rules)if(r.id==ruleId&&r.targetZone==z.id)defIndex=index;++index;}
- zoneBox.SelectedIndex(defIndex);p.Children().Append(label(i18n::Tr(L"整理到分区")));p.Children().Append(zoneBox);
+ zoneBox.SelectedIndex(defIndex);p.Children().Append(label(i18n::Tr(L"绑定分区（整理移入、归档只在此生效）")));p.Children().Append(zoneBox);
  dlg.Content(p);
  try{dlg.XamlRoot(scroll.XamlRoot());}catch(...){return;}
  auto op=dlg.ShowAsync();
