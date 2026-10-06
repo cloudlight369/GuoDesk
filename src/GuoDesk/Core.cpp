@@ -30,6 +30,14 @@ bool ArchiveDue(int mode,long long lastRun,long long now){auto const span=Archiv
 int ClampArchiveMode(int v){return (v>=0&&v<=2)?v:0;}
 int ClampStackGrid(int v){return (v>=0&&v<=3)?v:0;}
 int StackCells(int mode){return mode==1?9:mode==2?16:mode==3?25:1;}
+int StackSide(int availPx,int mode){
+ auto const grid=ClampStackGrid(mode);
+ int const want=grid==1?3:grid==2?4:grid==3?5:1;
+ if(want<=1||availPx<=0)return 1;
+ int const fit=(availPx+2)/12;
+ if(fit<2)return 1;
+ return fit<want?fit:want;
+}
 static int HexDigit(wchar_t c){if(c>=L'0'&&c<=L'9')return c-L'0';if(c>=L'a'&&c<=L'f')return c-L'a'+10;if(c>=L'A'&&c<=L'F')return c-L'A'+10;return -1;}
 // 链接里的文件名要能直接当 Windows 文件名用：百分号编码还原、去禁用字符、去查询串、保留设备名加下划线
 std::wstring DownloadName(std::wstring const& url,std::wstring const& contentType){

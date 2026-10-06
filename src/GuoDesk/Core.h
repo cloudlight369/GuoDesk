@@ -133,6 +133,8 @@ int ClampArchiveMode(int value);
 // 叠放缩略图：0=只显示首项，1/2/3=3×3、4×4、5×5 宫格
 int ClampStackGrid(int value);
 int StackCells(int mode);
+// 宫格画得下几列：按磁贴里真正可用的像素高度算，每格至少 12px（含间隙），1 表示退回单图
+int StackSide(int availPx,int mode);
 // URL 拖入下载：只接受 http/https，文件名从路径尾部取（百分号解码+非法字符清洗），取不到就用 fallback
 bool IsHttpUrl(std::wstring const& url);
 std::wstring DownloadName(std::wstring const& url,std::wstring const& contentType={});

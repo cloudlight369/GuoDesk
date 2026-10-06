@@ -26,14 +26,28 @@ for ($i = 1; $i -le 9; $i++) {
   $entries += [ordered]@{ id = ("e{0}" -f $i); path = $f; stack = 's1' }
 }
 
+# 第二枚分区用最小磁贴要 5×5：画不下必须自己降档，而不是把图标糊成一团
+$smallEntries = @()
+for ($i = 1; $i -le 9; $i++) {
+  $smallEntries += [ordered]@{ id = ("f{0}" -f $i); path = (Join-Path $src ("item{0}.txt" -f $i)); stack = 's2' }
+}
+
 $template = [ordered]@{
   version = 1
-  zones   = @([ordered]@{
-    id = 'zg'; name = '宫格叠放'; x = 980; y = 150; width = 420; height = 460; collapsed = $false
-    viewMode = 'grid'; tileSize = 2; stackGrid = 1
-    stacks = @([ordered]@{ id = 's1'; name = '九件套' })
-    entries = $entries
-  })
+  zones   = @(
+    [ordered]@{
+      id = 'zg'; name = '宫格叠放'; x = 980; y = 150; width = 420; height = 460; collapsed = $false
+      viewMode = 'grid'; tileSize = 2; stackGrid = 1
+      stacks = @([ordered]@{ id = 's1'; name = '九件套' })
+      entries = $entries
+    },
+    [ordered]@{
+      id = 'zs'; name = '小格叠放'; x = 1420; y = 150; width = 300; height = 460; collapsed = $false
+      viewMode = 'grid'; tileSize = 0; stackGrid = 3
+      stacks = @([ordered]@{ id = 's2'; name = '小格九件' })
+      entries = $smallEntries
+    }
+  )
   settings = [ordered]@{ theme = 'system'; compact = $false; language = 'zh'; guideDone = $true; snapshots = $false }
 }
 [System.IO.File]::WriteAllText((Join-Path $data 'layout.json'), ($template | ConvertTo-Json -Depth 8), $noBom)
@@ -204,7 +218,9 @@ function Toggle-Grid($win) {
 
 function Grid-Mode() {
   $j = [System.IO.File]::ReadAllText((Join-Path $data 'layout.json'))
-  if ($j -match '"stackGrid":\s*(\d+)') { return [int]$Matches[1] }
+  $m = [regex]::Matches($j, '"stackGrid":\s*(\d+)')
+  # 第 0 个属于 zg（宫格叠放），第 1 个属于 zs（小格叠放，固定 5×5 不动）
+  if ($m.Count -ge 1) { return [int]$m[0].Groups[1].Value }
   return -1
 }
 
@@ -227,6 +243,11 @@ if (-not (Toggle-Grid $zone)) { Note 'fourth-toggle-opened' $false '' }
 Start-Sleep -Milliseconds 900
 $icons3 = Image-Count (Find-Window $titleZone 2500)
 Note 'grid-mode-returns' ((Grid-Mode) -eq 1 -and $icons3 -ge 9) ('mode=' + (Grid-Mode) + ' images=' + $icons3)
+
+# 最小磁贴要 5×5 时画不下：按可用高度自动降档，只画放得下的那几格
+$tiny = Find-Window 'GuoDesk · 小格叠放' 9000
+$iconsSmall = if ($null -ne $tiny) { Image-Count $tiny } else { -1 }
+Note 'small-tile-shrinks-grid' ($iconsSmall -ge 2 -and $iconsSmall -le 4) ('images=' + $iconsSmall)
 
 Note 'zone-alive' ($null -ne (Find-Window $titleZone 2500)) ''
 

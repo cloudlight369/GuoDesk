@@ -85,6 +85,25 @@ fire_and_forget LoadIcon(std::wstring path,Microsoft::UI::Xaml::Controls::Image 
   BITMAP info{};
   GetObjectW(handle,sizeof(info),&info);
   int width=info.bmWidth,height=info.bmHeight;
+  if((width>64||height>64)&&width>0&&height>0){
+   int const longSide=width>height?width:height;
+   int tw=static_cast<int>(width*64.0/longSide+0.5),th=static_cast<int>(height*64.0/longSide+0.5);
+   if(tw<1)tw=1;
+   if(th<1)th=1;
+   BITMAPINFO target{};
+   target.bmiHeader.biSize=sizeof(target.bmiHeader);target.bmiHeader.biWidth=tw;target.bmiHeader.biHeight=-th;target.bmiHeader.biPlanes=1;target.bmiHeader.biBitCount=32;target.bmiHeader.biCompression=BI_RGB;
+   void* bits=nullptr;
+   HBITMAP scaled=CreateDIBSection(nullptr,&target,DIB_RGB_COLORS,&bits,nullptr,0);
+   if(scaled&&bits){
+    HDC src=CreateCompatibleDC(nullptr),dst=CreateCompatibleDC(nullptr);
+    auto oldSrc=static_cast<HBITMAP>(SelectObject(src,handle)),oldDst=static_cast<HBITMAP>(SelectObject(dst,scaled));
+    SetStretchBltMode(dst,HALFTONE);SetBrushOrgEx(dst,0,0,nullptr);
+    bool drew=StretchBlt(dst,0,0,tw,th,src,0,0,width,height,SRCCOPY);
+    SelectObject(src,oldSrc);SelectObject(dst,oldDst);DeleteDC(src);DeleteDC(dst);
+    if(drew){DeleteObject(handle);handle=scaled;width=tw;height=th;}
+    else DeleteObject(scaled);
+   }
+  }
   BITMAPINFOHEADER header{sizeof(header)};
   header.biWidth=width;header.biHeight=-height;header.biPlanes=1;header.biBitCount=32;header.biCompression=BI_RGB;
   std::vector<uint8_t> pixels(static_cast<size_t>(width)*height*4);
@@ -100,7 +119,7 @@ fire_and_forget LoadIcon(std::wstring path,Microsoft::UI::Xaml::Controls::Image 
   uint8_t* target{};
   check_hresult(bytes->Buffer(&target));
   memcpy(target,pixels.data(),pixels.size());
-  if(cache.size()>2048)cache.clear();
+  if(cache.size()>2048){auto stop=cache.begin();for(int k=0;k<512&&stop!=cache.end();++k)++stop;cache.erase(cache.begin(),stop);}
   cache.insert_or_assign(path,bitmap);
   image.Source(bitmap);
  }catch(...){}
