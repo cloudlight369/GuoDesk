@@ -43,6 +43,8 @@ class DeskWindow {
  void RebuildTabs(); void SwitchTab(int index);
  void Navigate(std::wstring const& folder); void RenderCrumbs(); void RebuildPins();
  void SetCapsule(bool on); void ExpandCapsule(); void ShrinkCapsule(); void ApplyPerformance(); void ApplyBackground(); void ApplyChrome();
+ // 这一档在本窗口是否真的生效：桌面嵌入时整窗是不透明卡片，面板与浅色墨一律不铺
+ int ChromeStyle() const;
  void AttachDrag(winrt::Microsoft::UI::Xaml::FrameworkElement const& el,std::wstring const& path);
  std::vector<std::wstring> selected;
  struct NavVis{winrt::Microsoft::UI::Xaml::Controls::Border el{nullptr};bool tinted=true;};

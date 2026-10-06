@@ -21,9 +21,9 @@ $long = '标题底板测试文件.txt'
 [System.IO.File]::WriteAllText((Join-Path $src $long), 'payload', $noBom)
 $esc = ((Join-Path $src $long) -replace '\\', '\\')
 function Zone([string]$id, [string]$name, [int]$x, [string]$mode) {
-  return ('{"id":"' + $id + '","name":"' + $name + '","x":' + $x + ',"y":120,"width":420,"height":360,"collapsed":false,"viewMode":"' + $mode + '","tileSize":2,"nameLines":2,"pins":["' + $esc + '"],"entries":[{"id":"' + $id + 'e1","path":"' + $esc + '"}]}')
+  return ('{"id":"' + $id + '","name":"' + $name + '","x":' + $x + ',"y":120,"width":420,"height":360,"collapsed":false,"viewMode":"' + $mode + '","tileSize":2,"nameLines":2,"group":"g1","groupTab":0,"pins":["' + $esc + '"],"entries":[{"id":"' + $id + 'e1","path":"' + $esc + '"}]}')
 }
-$layout = '{"version":1,"zones":[' + (Zone 'zg' '标题底板' 160 'grid') + '],"settings":{"theme":"system","compact":false,"language":"zh","guideDone":true,"labelStyle":2}}'
+$layout = '{"version":1,"zones":[' + (Zone 'zg' '标题底板' 160 'grid') + ',' + (Zone 'zg2' '同组分区' 620 'grid') + '],"settings":{"theme":"system","compact":false,"language":"zh","guideDone":true,"labelStyle":2}}'
 [System.IO.File]::WriteAllText((Join-Path $data 'layout.json'), $layout, $noBom)
 
 $results = New-Object System.Collections.Generic.List[string]

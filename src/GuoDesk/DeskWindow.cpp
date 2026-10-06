@@ -110,9 +110,10 @@ winrt::Microsoft::UI::Xaml::Media::SystemBackdrop MakeBackdrop(int kind,int tier
  try{return winrt::Microsoft::UI::Xaml::Media::SystemBackdrop{winrt::Microsoft::UI::Xaml::Media::MicaBackdrop()};}catch(...){return winrt::Microsoft::UI::Xaml::Media::SystemBackdrop{nullptr};}
 }
 static SolidColorBrush ChromeSurface(int style){
+ static SolidColorBrush const none(Windows::UI::Color{0,12,12,14});
  static SolidColorBrush const soft(Windows::UI::Color{(uint8_t)LabelAlpha(1),12,12,14});
  static SolidColorBrush const hard(Windows::UI::Color{(uint8_t)LabelAlpha(2),12,12,14});
- return style==2?hard:soft;
+ return style==2?hard:style==1?soft:none;
 }
 static SolidColorBrush ChromeInk(){static SolidColorBrush const ink(Windows::UI::Color{255,248,248,248});return ink;}
 // 底板开着时，落在面板上的文字/图标统一换成浅色墨；关掉时传 nullptr 表示"回到主题默认"
@@ -130,20 +131,25 @@ FrameworkElement LabelChrome(FrameworkElement const& el,int style,HorizontalAlig
  b.Background(ChromeSurface(style));
  b.Child(el);return b;
 }
+// 桌面嵌入模式把整窗刷成了不透明卡片，此时面板和浅色墨只会变成白底白字：这一档在该模式下彻底不生效
+int DeskWindow::ChromeStyle() const{return desktop?0:ClampLabelStyle(owner.layout.settings.labelStyle);}
 void DeskWindow::ApplyChrome(){
- int const style=ClampLabelStyle(owner.layout.settings.labelStyle);
+ int const style=ChromeStyle();
  bool const on=style!=0;
  Brush surface=on?Brush(ChromeSurface(style)):Brush{nullptr};
- Visibility plateVis=(capsuleNow||!topPlate)?Visibility::Collapsed:Visibility::Visible;
- if(topPlate){topPlate.Background(surface);topPlate.Visibility(plateVis);}
- if(bottomPlate){bottomPlate.Background(surface);bottomPlate.Visibility(plateVis);}
- if(title)try{title.Foreground(on?Brush(ChromeInk()):Brush{nullptr});}catch(...){}
+ bool const plateShow=on&&!capsuleNow;
+ if(topPlate){topPlate.Background(surface);topPlate.Visibility(plateShow?Visibility::Visible:Visibility::Collapsed);}
+ if(bottomPlate){bottomPlate.Background(surface);bottomPlate.Visibility(plateShow?Visibility::Visible:Visibility::Collapsed);}
+ // 标题与工具栏图标是构造时建一次、之后一直复用的：取消染色不能写 null（null 是显式本地值，会盖掉样式默认，实测标题会留在白色），要写回一个主题刷子
+ Brush const base=ThemeBrush(L"TextFillColorPrimary",Windows::UI::Color{255,23,23,23});
+ if(title)try{title.Foreground(on?Brush(ChromeInk()):base);}catch(...){}
  if(status)status.Foreground(on?Brush(ChromeInk()):ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,160,160,160}));
- if(actionBar)TintInk(actionBar,on?Brush(ChromeInk()):Brush{nullptr});
+ if(actionBar)TintInk(actionBar,on?Brush(ChromeInk()):base);
  // 页签与面包屑每轮 Refresh 都是重建的：关掉底板时它们自己就是主题色，不必再往回刷
  if(on&&tabsPanel)for(auto const& child:tabsPanel.Children()){
   // 当前页签自带一张卡片，浅色主题下把字刷白等于把名字抹掉——只给没有卡片的页签换浅色墨
-  if(auto b=child.try_as<Button>()){bool card=b.Background()!=nullptr;if(auto c=b.Content();c)try{if(auto t=c.as<TextBlock>())t.Foreground(card?Brush{nullptr}:Brush(ChromeInk()));}catch(...){}continue;}
+  // 页签内容是 TextBlock，但「＋（在标签组中新增分区）」的内容是 FontIcon：两种都得走 TintInk
+  if(auto b=child.try_as<Button>()){if(b.Background()==nullptr){if(auto c=b.Content();c)try{TintInk(winrt::unbox_value<DependencyObject>(c),Brush(ChromeInk()));}catch(...){}}continue;}
   TintInk(child,Brush(ChromeInk()));
  }
  if(on&&crumbBar)TintInk(crumbBar,Brush(ChromeInk()));
@@ -652,7 +658,7 @@ void DeskWindow::Raise(bool on){
  if(!desktop)return;
 }
 void DeskWindow::EmbedRetry(){if(!IsWindow(hwnd)||!desktop||GetParent(hwnd))return;if(shell::Attach(hwnd,owner.host))Place();}
-void DeskWindow::SetDesktop(bool enabled){Capture();bool was=desktop;if(enabled){desktop=shell::Attach(hwnd,owner.host);ApplyPerformance();Notify(desktop?i18n::Tr(L"实验性桌面宿主 · 添加入口不会移动原文件"):i18n::Tr(L"嵌入失败，已保留普通窗口模式"));}else{if(desktop)shell::Detach(hwnd);desktop=false;ApplyPerformance();Notify(i18n::Tr(L"普通窗口模式 · 可在菜单中试验桌面嵌入"));}Place();if(desktop!=was){RECT r{};GetWindowRect(hwnd,&r);int width=r.right-r.left,height=r.bottom-r.top;SetWindowPos(hwnd,nullptr,0,0,width,height+1,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);SetWindowPos(hwnd,nullptr,0,0,width,height,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);}}
+void DeskWindow::SetDesktop(bool enabled){Capture();bool was=desktop;if(enabled){desktop=shell::Attach(hwnd,owner.host);ApplyPerformance();Notify(desktop?i18n::Tr(L"实验性桌面宿主 · 添加入口不会移动原文件"):i18n::Tr(L"嵌入失败，已保留普通窗口模式"));}else{if(desktop)shell::Detach(hwnd);desktop=false;ApplyPerformance();Notify(i18n::Tr(L"普通窗口模式 · 可在菜单中试验桌面嵌入"));}ApplyChrome();Place();if(desktop!=was){RECT r{};GetWindowRect(hwnd,&r);int width=r.right-r.left,height=r.bottom-r.top;SetWindowPos(hwnd,nullptr,0,0,width,height+1,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);SetWindowPos(hwnd,nullptr,0,0,width,height,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);}}
 void DeskWindow::Pick(bool folder){if(!View().mappedFolder.empty()){Notify(i18n::Tr(L"映射分区为只读视图：请在资源管理器中修改文件夹后右键刷新。"));return;}for(auto const& path:shell::Pick(hwnd,folder))AddEntry(View(),path);Refresh();owner.Save();}
 void DeskWindow::RebuildPins(){auto& m=Model();auto& v=View();pinBar.Children().Clear();bool show=!v.pins.empty()&&!m.collapsed;pinBar.Visibility(show?Visibility::Visible:Visibility::Collapsed);if(!show)return;
  for(auto const& p:v.pins){auto const path=p;Button b;b.Width(40);b.Height(40);b.Padding(Thickness{7,7,7,7});b.CornerRadius(CornerRadius{8,8,8,8});b.Background(ThemeBrush(L"CardBackgroundFillColorSecondary",Windows::UI::Color{255,90,90,90}));Image img;img.Width(26);img.Height(26);b.Content(img);shell::LoadIcon(path,img);ToolTipService::SetToolTip(b,box_value(shell::Name(path)));if(GetFileAttributesW(path.c_str())==INVALID_FILE_ATTRIBUTES)b.Opacity(0.35);
@@ -699,7 +705,13 @@ void DeskWindow::Menu(FrameworkElement const& target){auto& z=Model();auto& v=Vi
   // 底板是全局设置，就放在分区菜单里：菜单里说清楚"对所有分区生效"，别让每个分区看起来各有一份
   MenuFlyoutSubItem plate;plate.Text(i18n::Tr(L"文字底板"));
   static wchar_t const* plates[]={L"不垫底",L"半透明黑底",L"高对比深底"};
-  for(int k=0;k<3;++k){MenuFlyoutItem it;it.Text(i18n::Tr(plates[k]));if(ClampLabelStyle(owner.layout.settings.labelStyle)==k)it.Icon(tick());auto pk=k;it.Click([this,pk](auto&&,auto&&){if(ClampLabelStyle(owner.layout.settings.labelStyle)==pk)return;owner.layout.settings.labelStyle=pk;owner.RebuildWidgets();owner.Save();Notify(i18n::TrF(L"文字底板已设为「{0}」，对所有分区生效。",{std::wstring(i18n::Tr(plates[pk]))}));});plate.Items().Append(it);}
+  for(int k=0;k<3;++k){auto item=MenuItem(i18n::Tr(plates[k]),[this,k]{
+  if(ClampLabelStyle(owner.layout.settings.labelStyle)==k)return;
+  owner.layout.settings.labelStyle=k;owner.Save();
+  // 只刷分区窗：RebuildWidgets 会把搜索窗一并 reset 且不再重建，改个底色不该关掉用户开着的窗
+  try{owner.ApplySettings();}catch(...){Notify(i18n::Tr(L"界面更新失败，设置已保存，下次刷新后生效。"));return;}
+  Notify(i18n::TrF(L"文字底板已设为「{0}」，对所有分区生效。",{std::wstring(i18n::Tr(plates[k]))}));
+ });if(ClampLabelStyle(owner.layout.settings.labelStyle)==k)item.Icon(tick());plate.Items().Append(item);}
   menu.Items().Append(plate);
   if(mapped){MenuFlyoutSubItem autoSub;autoSub.Text(i18n::Tr(L"自动归档"));static wchar_t const* modes[]={L"关闭",L"每小时一次",L"每天一次"};
    for(int k=0;k<3;++k){MenuFlyoutItem it;it.Text(i18n::Tr(modes[k]));if(z.autoArchive==k)it.Icon(tick());auto md=k;it.Click([this,md](auto&&,auto&&){auto& m=Model();m.autoArchive=ClampArchiveMode(md);m.archiveAt=0;owner.Save();Notify(md?i18n::TrF(L"自动归档已设为{0}：符合规则的文件会自动归入分类子文件夹。",{std::wstring(i18n::Tr(modes[md]))}):i18n::Tr(L"自动归档已关闭。"));});autoSub.Items().Append(it);}
@@ -756,7 +768,7 @@ void DeskWindow::Refresh(){auto& z=Model();auto& v=View();bool bodyFocus=listHos
  std::map<std::wstring,size_t> firstIdx;for(size_t i=0;i<v.entries.size();++i)if(!v.entries[i].stack.empty())firstIdx.emplace(v.entries[i].stack,i);
  std::set<std::wstring> rendered;
  int gridBudget=200;
- auto renderCollapse=[&](std::wstring const& sid){int tier=v.tileSize-(compact?1:0);tier=std::clamp(tier,0,2);static int const TW[3]={72,88,112},TH[3]={78,94,118};Border tile;tile.Width(TW[tier]);tile.Height(TH[tier]);tile.CornerRadius(CornerRadius{8,8,8,8});tile.Background(ThemeBrush(L"CardBackgroundFillColorSecondary",Windows::UI::Color{255,80,80,80}));tile.AllowDrop(!mapped);StackPanel c;c.VerticalAlignment(VerticalAlignment::Center);c.Spacing(4);FontIcon g;g.FontFamily(FontFamily(L"Segoe Fluent Icons"));g.Glyph(L"\uE70E");g.FontSize(20);TextBlock t;t.Text(i18n::Tr(L"收起叠放"));t.FontSize(ScaledFont(owner.layout.settings.textSize,12));t.TextAlignment(TextAlignment::Center);t.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,180,180,180}));c.Children().Append(g);c.Children().Append(LabelChrome(t,ClampLabelStyle(owner.layout.settings.labelStyle)));tile.Child(c);tile.DoubleTapped([this,sid](auto&&,auto&&){expandedStack.clear();Refresh();});tile.DragOver([mapped](auto&&,DragEventArgs const& a){a.AcceptedOperation(mapped?DataPackageOperation::None:(a.DataView().Contains(StandardDataFormats::StorageItems())?DataPackageOperation::Link:DataPackageOperation::Move));a.Handled(true);});if(!mapped)tile.Drop([this,sid](auto&&,DragEventArgs const& a){a.Handled(true);Drop(a,0,sid);});grid.Items().Append(tile);};
+ auto renderCollapse=[&](std::wstring const& sid){int tier=v.tileSize-(compact?1:0);tier=std::clamp(tier,0,2);static int const TW[3]={72,88,112},TH[3]={78,94,118};Border tile;tile.Width(TW[tier]);tile.Height(TH[tier]);tile.CornerRadius(CornerRadius{8,8,8,8});tile.Background(ThemeBrush(L"CardBackgroundFillColorSecondary",Windows::UI::Color{255,80,80,80}));tile.AllowDrop(!mapped);StackPanel c;c.VerticalAlignment(VerticalAlignment::Center);c.Spacing(4);FontIcon g;g.FontFamily(FontFamily(L"Segoe Fluent Icons"));g.Glyph(L"\uE70E");g.FontSize(20);TextBlock t;t.Text(i18n::Tr(L"收起叠放"));t.FontSize(ScaledFont(owner.layout.settings.textSize,12));t.TextAlignment(TextAlignment::Center);t.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,180,180,180}));c.Children().Append(g);c.Children().Append(LabelChrome(t,ChromeStyle()));tile.Child(c);tile.DoubleTapped([this,sid](auto&&,auto&&){expandedStack.clear();Refresh();});tile.DragOver([mapped](auto&&,DragEventArgs const& a){a.AcceptedOperation(mapped?DataPackageOperation::None:(a.DataView().Contains(StandardDataFormats::StorageItems())?DataPackageOperation::Link:DataPackageOperation::Move));a.Handled(true);});if(!mapped)tile.Drop([this,sid](auto&&,DragEventArgs const& a){a.Handled(true);Drop(a,0,sid);});grid.Items().Append(tile);};
  auto renderPile=[&](std::wstring const& sid,size_t at){
   auto first=std::find_if(v.entries.begin(),v.entries.end(),[&](auto const& x){return x.stack==sid;});auto path=first->path;int count=StackCount(v,sid);bool exists=GetFileAttributesW(path.c_str())!=INVALID_FILE_ATTRIBUTES;
   int tier=v.tileSize-(compact?1:0);tier=std::clamp(tier,0,2);static int const TW[3]={72,88,112},TH[3]={78,94,118},TI[3]={32,40,56};
@@ -765,7 +777,7 @@ void DeskWindow::Refresh(){auto& z=Model();auto& v=View();bool bodyFocus=listHos
   Border front;front.Width(TW[tier]);front.Height(TH[tier]);front.Padding(Thickness{4,4,4,4});front.CornerRadius(CornerRadius{8,8,8,8});front.Background(ThemeBrush(L"CardBackgroundFillColorDefault",Windows::UI::Color{255,60,60,60}));front.HorizontalAlignment(HorizontalAlignment::Left);front.VerticalAlignment(VerticalAlignment::Top);front.AllowDrop(!mapped);ToolTipService::SetToolTip(front,box_value(i18n::TrF(L"叠放 · {0} 项（双击展开）",{std::to_wstring(count)})));
   StackPanel content;content.Spacing(5);
   // 宫格预览：一叠里有多少东西，缩略图上就能看见多少张（3×3/4×4/5×5），只加载前 N 个图标
-  int const chrome=ClampLabelStyle(owner.layout.settings.labelStyle)?1:0;
+  int const chrome=ChromeStyle()?1:0;
   // 叠放正面：名称先按字号要它的高度（含底板 padding），宫格拿剩下的——不能反过来让宫格挤掉用户要的两行
   int const labelH=LabelHeightPx(v.nameLines,owner.layout.settings.textSize,chrome);
   int const room=TH[tier]-8-(labelH?labelH+5:0);
@@ -788,7 +800,7 @@ void DeskWindow::Refresh(){auto& z=Model();auto& v=View();bool bodyFocus=listHos
    }
    content.Children().Append(mosaic);
   }else{Image icon;icon.Width(TI[tier]);icon.Height(TI[tier]);icon.HorizontalAlignment(HorizontalAlignment::Center);content.Children().Append(icon);shell::LoadIcon(path,icon);}
-  TextBlock label;label.Text((exists?L"":L"⚠ ")+shell::Name(path));label.FontSize(ScaledFont(owner.layout.settings.textSize,12));label.TextAlignment(TextAlignment::Center);label.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,180,180,180}));if(v.nameLines==0)label.Visibility(Visibility::Collapsed);else if(v.nameLines==1){label.TextWrapping(TextWrapping::NoWrap);label.TextTrimming(TextTrimming::CharacterEllipsis);label.MaxHeight(labelH);}else{label.TextWrapping(TextWrapping::Wrap);label.MaxHeight(labelH);}content.Children().Append(LabelChrome(label,ClampLabelStyle(owner.layout.settings.labelStyle)));front.Child(content);
+  TextBlock label;label.Text((exists?L"":L"⚠ ")+shell::Name(path));label.FontSize(ScaledFont(owner.layout.settings.textSize,12));label.TextAlignment(TextAlignment::Center);label.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,180,180,180}));if(v.nameLines==0)label.Visibility(Visibility::Collapsed);else if(v.nameLines==1){label.TextWrapping(TextWrapping::NoWrap);label.TextTrimming(TextTrimming::CharacterEllipsis);label.MaxHeight(labelH);}else{label.TextWrapping(TextWrapping::Wrap);label.MaxHeight(labelH);}content.Children().Append(LabelChrome(label,ChromeStyle()));front.Child(content);
   Border badge;badge.Width(20);badge.Height(20);badge.CornerRadius(CornerRadius{10,10,10,10});badge.Background(SolidColorBrush(Windows::UI::Color{255,0,120,212}));badge.HorizontalAlignment(HorizontalAlignment::Right);badge.VerticalAlignment(VerticalAlignment::Top);badge.Margin(Thickness{0,0,3,0});TextBlock cnt;cnt.Text(std::to_wstring(count));cnt.FontSize(11);cnt.Foreground(SolidColorBrush(Windows::UI::Colors::White()));cnt.HorizontalAlignment(HorizontalAlignment::Center);cnt.VerticalAlignment(VerticalAlignment::Center);badge.Child(cnt);
   wrap.Children().Append(back);wrap.Children().Append(front);wrap.Children().Append(badge);
   MenuFlyout pmenu;pmenu.Items().Append(MenuItem(i18n::Tr(L"展开叠放"),[this,sid]{expandedStack=sid;Refresh();}));
@@ -805,15 +817,15 @@ void DeskWindow::Refresh(){auto& z=Model();auto& v=View();bool bodyFocus=listHos
   if(v.viewMode!=L"list"&&!e.stack.empty()&&expandedStack!=e.stack){if(!rendered.count(e.stack)){renderPile(e.stack,i);rendered.insert(e.stack);}continue;}
   if(v.viewMode!=L"list"&&!e.stack.empty()&&expandedStack==e.stack&&firstIdx[e.stack]==i)renderCollapse(e.stack);
   if(v.viewMode==L"list"){
-   Border row;row.Height(30+(ClampLabelStyle(owner.layout.settings.labelStyle)?2:0));row.CornerRadius(CornerRadius{4,4,4,4});row.Padding(Thickness{8,3,8,3});row.Background(ItemFill(path));ToolTipService::SetToolTip(row,box_value(path));row.PointerEntered([weak=make_weak(row),this](auto&&,auto&&){if(auto r=weak.get())r.Background(ThemeBrush(L"CardBackgroundFillColorSecondary",Windows::UI::Color{255,80,80,80}));});row.PointerExited([weak=make_weak(row),path,this](auto&&,auto&&){if(auto r=weak.get())r.Background(ItemFill(path));});row.Tapped([this,path](auto&&,Input::TappedRoutedEventArgs const& t){t.Handled(true);TapSelect(path);});
+   Border row;row.Height(30+(ChromeStyle()?2:0));row.CornerRadius(CornerRadius{4,4,4,4});row.Padding(Thickness{8,3,8,3});row.Background(ItemFill(path));ToolTipService::SetToolTip(row,box_value(path));row.PointerEntered([weak=make_weak(row),this](auto&&,auto&&){if(auto r=weak.get())r.Background(ThemeBrush(L"CardBackgroundFillColorSecondary",Windows::UI::Color{255,80,80,80}));});row.PointerExited([weak=make_weak(row),path,this](auto&&,auto&&){if(auto r=weak.get())r.Background(ItemFill(path));});row.Tapped([this,path](auto&&,Input::TappedRoutedEventArgs const& t){t.Handled(true);TapSelect(path);});
    Grid line;ColumnDefinition ci,cn,cp;ci.Width(GridLength{0,GridUnitType::Auto});cn.Width(GridLength{2,GridUnitType::Star});cp.Width(GridLength{3,GridUnitType::Star});line.ColumnDefinitions().Append(ci);line.ColumnDefinitions().Append(cn);line.ColumnDefinitions().Append(cp);
    Image icon;icon.Width(18);icon.Height(18);line.Children().Append(icon);shell::LoadIcon(path,icon);
-   TextBlock name;name.Text((exists?L"":L"⚠ ")+shell::Name(path));name.FontSize(ScaledFont(owner.layout.settings.textSize,12));name.VerticalAlignment(VerticalAlignment::Center);name.Margin(Thickness{8,0,8,0});name.TextTrimming(TextTrimming::CharacterEllipsis);name.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,180,180,180}));auto lsChrome=LabelChrome(name,ClampLabelStyle(owner.layout.settings.labelStyle),HorizontalAlignment::Left,Thickness{3,0,3,0});Grid::SetColumn(lsChrome,1);line.Children().Append(lsChrome);
+   TextBlock name;name.Text((exists?L"":L"⚠ ")+shell::Name(path));name.FontSize(ScaledFont(owner.layout.settings.textSize,12));name.VerticalAlignment(VerticalAlignment::Center);name.Margin(Thickness{8,0,8,0});name.TextTrimming(TextTrimming::CharacterEllipsis);name.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,180,180,180}));auto lsChrome=LabelChrome(name,ChromeStyle(),HorizontalAlignment::Left,Thickness{3,0,3,0});Grid::SetColumn(lsChrome,1);line.Children().Append(lsChrome);
    TextBlock where;where.Text(path);where.FontSize(11);where.VerticalAlignment(VerticalAlignment::Center);where.TextTrimming(TextTrimming::CharacterEllipsis);where.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,160,160,160}));Grid::SetColumn(where,2);line.Children().Append(where);
    row.Child(line);row.DoubleTapped([this,path](auto&&,auto&&){OpenFocused(path);});if(mapped)row.ContextFlyout(itemMenu(path));else row.ContextRequested([this,path,key,sid=e.stack](auto&&,auto&& a){a.Handled(true);EntryMenu(path,key,sid);});AttachDrag(row,path);listPanel.Children().Append(row);RegisterNav(path,row,true);
   }else{
    int tier=v.tileSize-(compact?1:0);tier=std::clamp(tier,0,2);static int const TW[3]={72,88,112},TH[3]={78,94,118},TI[3]={32,40,56};
-   Border tile;tile.Width(TW[tier]);tile.Height(TH[tier]);tile.Padding(Thickness{4,4,4,4});tile.CornerRadius(CornerRadius{8,8,8,8});tile.Background(ItemFill(path));tile.CanDrag(!mapped);tile.AllowDrop(true);ToolTipService::SetToolTip(tile,box_value(path));tile.PointerEntered([weak=make_weak(tile),this](auto&&,auto&&){if(auto t=weak.get())t.Background(ThemeBrush(L"CardBackgroundFillColorSecondary",Windows::UI::Color{255,80,80,80}));});tile.PointerExited([weak=make_weak(tile),path,this](auto&&,auto&&){if(auto t=weak.get())t.Background(ItemFill(path));});tile.Tapped([this,path](auto&&,Input::TappedRoutedEventArgs const& t){t.Handled(true);TapSelect(path);});StackPanel content;content.Spacing(5);Image icon;icon.Width(TI[tier]);icon.Height(TI[tier]);content.Children().Append(icon);shell::LoadIcon(path,icon);TextBlock label;label.Text((exists?L"":L"⚠ ")+shell::Name(path));label.FontSize(ScaledFont(owner.layout.settings.textSize,12));label.TextAlignment(TextAlignment::Center);label.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,180,180,180}));int const ls=ClampLabelStyle(owner.layout.settings.labelStyle);int const labelH=LabelHeightPx(v.nameLines,owner.layout.settings.textSize,ls?1:0);if(v.nameLines==0)label.Visibility(Visibility::Collapsed);else if(v.nameLines==1){label.TextWrapping(TextWrapping::NoWrap);label.TextTrimming(TextTrimming::CharacterEllipsis);label.MaxHeight(labelH);}else{label.TextWrapping(TextWrapping::Wrap);label.MaxHeight(labelH);}content.Children().Append(LabelChrome(label,ls));tile.Child(content);
+   Border tile;tile.Width(TW[tier]);tile.Height(TH[tier]);tile.Padding(Thickness{4,4,4,4});tile.CornerRadius(CornerRadius{8,8,8,8});tile.Background(ItemFill(path));tile.CanDrag(!mapped);tile.AllowDrop(true);ToolTipService::SetToolTip(tile,box_value(path));tile.PointerEntered([weak=make_weak(tile),this](auto&&,auto&&){if(auto t=weak.get())t.Background(ThemeBrush(L"CardBackgroundFillColorSecondary",Windows::UI::Color{255,80,80,80}));});tile.PointerExited([weak=make_weak(tile),path,this](auto&&,auto&&){if(auto t=weak.get())t.Background(ItemFill(path));});tile.Tapped([this,path](auto&&,Input::TappedRoutedEventArgs const& t){t.Handled(true);TapSelect(path);});StackPanel content;content.Spacing(5);Image icon;icon.Width(TI[tier]);icon.Height(TI[tier]);content.Children().Append(icon);shell::LoadIcon(path,icon);TextBlock label;label.Text((exists?L"":L"⚠ ")+shell::Name(path));label.FontSize(ScaledFont(owner.layout.settings.textSize,12));label.TextAlignment(TextAlignment::Center);label.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,180,180,180}));int const ls=ChromeStyle();int const labelH=LabelHeightPx(v.nameLines,owner.layout.settings.textSize,ls?1:0);if(v.nameLines==0)label.Visibility(Visibility::Collapsed);else if(v.nameLines==1){label.TextWrapping(TextWrapping::NoWrap);label.TextTrimming(TextTrimming::CharacterEllipsis);label.MaxHeight(labelH);}else{label.TextWrapping(TextWrapping::Wrap);label.MaxHeight(labelH);}content.Children().Append(LabelChrome(label,ls));tile.Child(content);
    tile.DoubleTapped([this,path](auto&&,auto&&){OpenFocused(path);});
    if(!mapped)tile.DragStarting([key](auto&&,DragStartingEventArgs const& a){a.Data().SetText(L"guodesk-entry:"+key);a.Data().RequestedOperation(DataPackageOperation::Move);});
    tile.DragOver([this,mapped](auto&&,DragEventArgs const& a){if(mapped)OnZoneDragOver(a);else a.AcceptedOperation(a.DataView().Contains(StandardDataFormats::StorageItems())?DataPackageOperation::Link:DataPackageOperation::Move);a.Handled(true);});
