@@ -151,6 +151,8 @@ int PerfTierFromLegacy(bool performance);
 int ClampLabelStyle(int value);
 // 名称占位高度（像素）：按字号算行高，再把底板 Border 的上下 padding 一起算进去，磁贴和叠放宫格都按这个数留地方
 int LabelHeightPx(int nameLines,int textSizeTier,int chromePadding);
+// 底板浓度（alpha）：0=不垫 1=半透明 2=高对比，条目名的小药丸和顶/底栏的面板共用这一档
+int LabelAlpha(int style);
 // URL 拖入下载：只接受 http/https，文件名从路径尾部取（百分号解码+非法字符清洗），取不到就用 fallback
 bool IsHttpUrl(std::wstring const& url);
 std::wstring DownloadName(std::wstring const& url,std::wstring const& contentType={});

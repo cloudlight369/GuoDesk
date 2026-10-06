@@ -33,7 +33,7 @@ SettingsWindow::SettingsWindow(Controller& c):owner(c){
  panel.Children().Append(Caption(i18n::Tr(L"标签底板")));
  labelStyle=ComboBox();labelStyle.HorizontalAlignment(HorizontalAlignment::Stretch);winrt::Microsoft::UI::Xaml::Automation::AutomationProperties::SetAutomationId(labelStyle,L"labelStyle");winrt::Microsoft::UI::Xaml::Automation::AutomationProperties::SetName(labelStyle,i18n::Tr(L"标签底板"));for(wchar_t const* p:{L"不垫底",L"半透明黑底",L"高对比深底"}){ComboBoxItem it;it.Content(box_value(i18n::Tr(p)));labelStyle.Items().Append(it);}
  labelStyle.SelectionChanged([this](auto&&,auto&&){if(applying)return;OnLabelStyle(labelStyle.SelectedIndex());});panel.Children().Append(labelStyle);
- TextBlock labelHint;labelHint.Text(i18n::Tr(L"壁纸花哨时给文件名垫一层底色（分区磁贴、列表和搜索结果），立即生效。"));labelHint.FontSize(11);labelHint.Opacity(0.6);labelHint.TextWrapping(TextWrapping::Wrap);panel.Children().Append(labelHint);
+ TextBlock labelHint;labelHint.Text(i18n::Tr(L"壁纸花哨时给分区的标题栏、状态行和文件名垫一层深色底（含列表与搜索结果），立即生效。"));labelHint.FontSize(11);labelHint.Opacity(0.6);labelHint.TextWrapping(TextWrapping::Wrap);panel.Children().Append(labelHint);
  panel.Children().Append(Caption(i18n::Tr(L"文字大小")));
  textSize=ComboBox();textSize.HorizontalAlignment(HorizontalAlignment::Stretch);for(wchar_t const* p:{L"小",L"标准",L"大"}){ComboBoxItem it;it.Content(box_value(i18n::Tr(p)));textSize.Items().Append(it);}
  textSize.SelectionChanged([this](auto&&,auto&&){if(applying)return;OnTextSize(textSize.SelectedIndex());});panel.Children().Append(textSize);

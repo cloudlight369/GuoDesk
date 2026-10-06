@@ -299,6 +299,8 @@ void RunTests(std::filesystem::path const& output){std::ofstream report(output);
  expect(LabelHeightPx(2,1,1)==38&&LabelHeightPx(1,1,9)==26,"a backing adds its own padding once, and an absurd padding value is capped");
  expect(LabelHeightPx(2,2,0)==42&&LabelHeightPx(3,0,0)==30,"large text needs a taller block and only two lines are ever shown");
  expect(LabelHeightPx(2,2,1)==44,"large text with a backing budgets all 44px, so the second line is not chopped off");
+ expect(LabelAlpha(0)==0&&LabelAlpha(1)==150&&LabelAlpha(2)==235,"the three backing tiers have one shared density, pills and title bar alike");
+ expect(LabelAlpha(-3)==0&&LabelAlpha(77)==0,"a tier outside the scale means no backing, the same way the setting clamps everywhere else");
  l.settings.syncInsecure=true;auto r381=Deserialize(Serialize(l));expect(r381.settings.syncInsecure,"sync insecure flag roundtrip");
  expect(!Deserialize("{\"version\":1,\"zones\":[],\"settings\":{\"syncAuto\":true}}").settings.syncInsecure,"sync insecure defaults off when absent");
  expect(IsDoubleCtrlHotkey(L"DoubleCtrl")&&!IsDoubleCtrlHotkey(L"Ctrl+Alt+G")&&!IsDoubleCtrlHotkey(L""),"double ctrl marker");

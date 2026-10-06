@@ -18,6 +18,8 @@ class DeskWindow {
  winrt::Microsoft::UI::Xaml::Controls::ScrollViewer listHost{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::StackPanel listPanel{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::StackPanel pinBar{nullptr};
+ winrt::Microsoft::UI::Xaml::Controls::StackPanel actionBar{nullptr};
+ winrt::Microsoft::UI::Xaml::Controls::Border topPlate{nullptr}; winrt::Microsoft::UI::Xaml::Controls::Border bottomPlate{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::Button chevron{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::Button lockBtn{nullptr};
  RECT lockRect{}; bool lockRevert=false;
@@ -40,7 +42,7 @@ class DeskWindow {
  void EntryMenu(std::wstring const& path,std::wstring const& key,std::wstring const& stackId);
  void RebuildTabs(); void SwitchTab(int index);
  void Navigate(std::wstring const& folder); void RenderCrumbs(); void RebuildPins();
- void SetCapsule(bool on); void ExpandCapsule(); void ShrinkCapsule(); void ApplyPerformance(); void ApplyBackground();
+ void SetCapsule(bool on); void ExpandCapsule(); void ShrinkCapsule(); void ApplyPerformance(); void ApplyBackground(); void ApplyChrome();
  void AttachDrag(winrt::Microsoft::UI::Xaml::FrameworkElement const& el,std::wstring const& path);
  std::vector<std::wstring> selected;
  struct NavVis{winrt::Microsoft::UI::Xaml::Controls::Border el{nullptr};bool tinted=true;};

@@ -50,6 +50,7 @@ int LabelHeightPx(int nameLines,int textSizeTier,int chromePadding){
  int const lh=static_cast<int>(ScaledFont(textSizeTier,12.0)*1.45)+1;
  return (nameLines>1?2:1)*lh+pad;
 }
+int LabelAlpha(int style){int const s=ClampLabelStyle(style);return s==0?0:s==1?150:235;}
 static int HexDigit(wchar_t c){if(c>=L'0'&&c<=L'9')return c-L'0';if(c>=L'a'&&c<=L'f')return c-L'a'+10;if(c>=L'A'&&c<=L'F')return c-L'A'+10;return -1;}
 // 链接里的文件名要能直接当 Windows 文件名用：百分号编码还原、去禁用字符、去查询串、保留设备名加下划线
 std::wstring DownloadName(std::wstring const& url,std::wstring const& contentType){
