@@ -27,7 +27,7 @@ class SettingsWindow {
  winrt::Microsoft::UI::Xaml::Controls::ComboBox hotkeyReveal{nullptr},hotkeyRaise{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::TextBlock hotkeyUndoHint{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::ToggleSwitch tabHover{nullptr};
- winrt::Microsoft::UI::Xaml::Controls::ToggleSwitch memTrim{nullptr};
+ winrt::Microsoft::UI::Xaml::Controls::ComboBox labelStyle{nullptr}; winrt::Microsoft::UI::Xaml::Controls::ToggleSwitch memTrim{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::TextBox weatherCity{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::ComboBox weatherResults{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::Button weatherSave{nullptr};
@@ -43,7 +43,7 @@ class SettingsWindow {
  winrt::Microsoft::UI::Xaml::Controls::TextBlock syncHint{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::ScrollViewer scroll{nullptr};
  winrt::Microsoft::UI::Xaml::Controls::StackPanel rulesPanel{nullptr};
- void OnTheme(int index); void OnCompact(bool on); void OnPerfTier(int index); void OnAutostart(bool on); void OnLanguage(int index); void OnEverything(bool on);
+ void OnTheme(int index); void OnCompact(bool on); void OnLabelStyle(int index); void OnPerfTier(int index); void OnAutostart(bool on); void OnLanguage(int index); void OnEverything(bool on);
  void OnTextSize(int index); void OnClockStyle(int index); void OnWeatherSkin(int index); void OnBackdrop(int index);
  void OnHotkey(int index); void OnSnapshots(bool on);
  void OnHotkeySearch(int index); void OnHotkeyCapture(int index); void OnHotkeyUndo(int index); void OnHotkeyReveal(int index); void OnHotkeyRaise(int index); void OnTabHover(bool on); void OnMemTrim(bool on); void OnGeoSearch(); void OnGeoSave(); void OnGeoAuto();

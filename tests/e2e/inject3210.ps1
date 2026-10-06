@@ -259,6 +259,20 @@ Press-Esc
 $readBack = Perf-Selected (Find-Window $titleSettings 2500)
 Note 'tier-reads-back-in-ui' ($readBack -eq '完整特效') ('selected=' + $readBack)
 
+# v3.22.0 的标签底板走同一个设置页，顺手验它的下拉与落盘
+$setWin2 = Find-Window $titleSettings 2500
+$lsCombo = $null
+foreach ($c in $setWin2.FindAll($TS::Descendants, (Kind-Cond $CT::ComboBox))) { if ($c.Current.AutomationId -eq 'labelStyle') { $lsCombo = $c; break } }
+Note 'label-combo-exists' ($null -ne $lsCombo) ''
+if ($null -ne $lsCombo) {
+  try { $lsCombo.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern).Expand() } catch { }
+  Start-Sleep -Milliseconds 600
+  $hi = Menu-Item '高对比深底' 4000
+  $null = Invoke-El $hi
+  Start-Sleep -Milliseconds 1200
+  Note 'label-style-persisted' ((Layout-Text) -match '"labelStyle":\s*2') ''
+}
+
 Press-Esc
 Note 'zone-alive' ($null -ne (Find-Window $titleZone 2500)) ''
 
