@@ -141,6 +141,8 @@ int ClampArchiveMode(int value);
 // 叠放缩略图：0=只显示首项，1/2/3=3×3、4×4、5×5 宫格
 int ClampStackGrid(int value);
 int StackCells(int mode);
+// 弹出浮层的列数：按叠放件数取刚好够的正方形（2..5），跟磁贴画不画得下无关
+int StackPeekSide(int count);
 // 宫格画得下几列：按磁贴里真正可用的像素高度算，每格至少 12px（含间隙），1 表示退回单图
 int StackSide(int availPx,int mode);
 // 性能三档：0=完整特效 1=精简（不播入场动画）2=省电（再关掉背景材质与叠放宫格）

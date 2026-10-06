@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "Core.h"
 #include "Shell.h"
 #include "SettingsWindow.h"
@@ -46,6 +46,7 @@ class DeskWindow {
  // 这一档在本窗口是否真的生效：桌面嵌入时整窗是不透明卡片，面板与浅色墨一律不铺
  int ChromeStyle() const;
  void AttachDrag(winrt::Microsoft::UI::Xaml::FrameworkElement const& el,std::wstring const& path);
+ void DragOutIfMoved();
  std::vector<std::wstring> selected;
  struct NavVis{winrt::Microsoft::UI::Xaml::Controls::Border el{nullptr};bool tinted=true;};
  std::vector<std::wstring> navPaths; std::vector<NavVis> navVis; int focusIdx=-1;
@@ -91,6 +92,8 @@ public:
  void Refresh(); void Place(); void Show(); void SetDesktop(bool enabled); void Raise(bool on); void EmbedRetry(); void Capture();
  // 把某个文件在当前分区里"指出来"：需要时先展开/取消胶囊/切到它所在的那一页，再聚焦并滚动到可见
  bool RevealEntry(std::wstring const& path);
+ // 把一叠成员摊在窗口外的浮层里：单击打开、右键管理、直接拖出去，全程不改分区高度
+ void ShowStackPeek(std::wstring const& sid); void ExpandStack(std::wstring const& sid){expandedStack=sid;Refresh();}
  void ApplySettings();
  void Notify(std::wstring const& text);
  void Pick(bool folder=false);
@@ -124,6 +127,8 @@ public:
  void ShowMusic(); void CloseMusic(); void ShowSearch(); void CloseSearch(); void ShowWeather(); void CloseWeather();
  void ShowCapture(); void CloseCapture(); void ShowAppGrid(); void CloseAppGrid(); bool CommitCapture(std::wstring const& text,bool asTodo); void RebuildWidgets();
  void ShowPreview(std::vector<std::wstring> const& paths,size_t start); void ClosePreview();
+ // 叠放浮层：全区共用一块面板，再点另一叠就换目标；「在分区里展开」要回到发起它的那个分区
+ void ShowPeek(std::wstring zone,std::wstring stack,std::wstring const& title,std::vector<std::wstring> const& items,RECT const& anchor); void ClosePeek(); void ExpandStackInZone(std::wstring const& zoneKey,std::wstring const& sid);
  void SyncUploadAuto();
  void MoveEntry(std::wstring const& entry,std::wstring const& target,size_t index);
  void SyncWindows(); void MergeInto(std::wstring const& self,std::wstring const& other); void Ungroup(std::wstring const& zoneId); void AddToGroup(std::wstring const& anchorId);
@@ -131,6 +136,6 @@ public:
  std::unique_ptr<class NoteWindow> note; std::unique_ptr<class TodoWindow> todo;
  std::unique_ptr<class ClockWindow> clockW; std::unique_ptr<class GuideWindow> guide;
  std::unique_ptr<class MusicWindow> music; std::unique_ptr<class SearchWindow> search; std::unique_ptr<class WeatherWindow> weather;
- std::unique_ptr<class CaptureWindow> capture; std::unique_ptr<class AppGridWindow> appGrid; std::unique_ptr<class PreviewWindow> preview;
+ std::unique_ptr<class CaptureWindow> capture; std::unique_ptr<class AppGridWindow> appGrid; std::unique_ptr<class PreviewWindow> preview; std::unique_ptr<class StackPeekWindow> peek;
 };
 }

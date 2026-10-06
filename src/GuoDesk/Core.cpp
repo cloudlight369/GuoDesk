@@ -30,6 +30,8 @@ bool ArchiveDue(int mode,long long lastRun,long long now){auto const span=Archiv
 int ClampArchiveMode(int v){return (v>=0&&v<=2)?v:0;}
 int ClampStackGrid(int v){return (v>=0&&v<=3)?v:0;}
 int StackCells(int mode){return mode==1?9:mode==2?16:mode==3?25:1;}
+// 浮层按件数取刚好够得着的正方形：2~4 件两列，5~9 三列，10~16 四列，再往上五列封顶（25 格以外不再摊开）
+int StackPeekSide(int count){ return count<=4?2:count<=9?3:count<=16?4:5; }
 int StackSide(int availPx,int mode){
  auto const grid=ClampStackGrid(mode);
  int const want=grid==1?3:grid==2?4:grid==3?5:1;

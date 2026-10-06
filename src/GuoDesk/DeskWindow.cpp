@@ -1,4 +1,4 @@
-#include "pch.h"
+﻿#include "pch.h"
 #include <shlwapi.h>
 #include <psapi.h>
 #include <thread>
@@ -16,6 +16,7 @@
 #include "WeatherWindow.h"
 #include "CaptureWindow.h"
 #include "PreviewWindow.h"
+#include "StackPeekWindow.h"
 #include "AppGridWindow.h"
 #include "Shell.h"
 #include "I18n.h"
@@ -220,12 +221,17 @@ void DeskWindow::RenderCrumbs(){if(!crumbBar)return;auto& z=Model();auto& v=View
 void DeskWindow::SetCapsule(bool on){auto& z=Model();z.capsule=on;capsuleNow=on;if(on){z.collapsed=false;if(hoverTimer)hoverTimer.Start();}else{if(hoverTimer)hoverTimer.Stop();pill.Visibility(Visibility::Collapsed);}Refresh();Place();}
 void DeskWindow::ExpandCapsule(){if(!capsuleNow||dragging)return;capsuleNow=false;Refresh();Place();}
 void DeskWindow::ShrinkCapsule(){if(capsuleNow||dragging)return;Capture();capsuleNow=true;Refresh();Place();}
+// 拖出手势只在移动超过 6px 后才成立：浮层里的格子收不到 root 的 PointerMoved，所以两边共用这一段
+void DeskWindow::DragOutIfMoved(){
+ if(!dragArmed)return;POINT cp{};GetCursorPos(&cp);long dx=cp.x-dragSX,dy=cp.y-dragSY;if(dx*dx+dy*dy<=36)return;
+ dragArmed=false;std::wstring h=dragPath;root.DispatcherQueue().TryEnqueue([this,h]{std::vector<std::wstring> out;auto k=PathKey(h);if(std::find(selected.begin(),selected.end(),k)!=selected.end()&&selected.size()>1){for(auto const& s:selected)for(auto const& e:View().entries)if(PathKey(e.path)==s&&GetFileAttributesW(e.path.c_str())!=INVALID_FILE_ATTRIBUTES){out.push_back(e.path);break;}}else if(GetFileAttributesW(h.c_str())!=INVALID_FILE_ATTRIBUTES)out.push_back(h);if(!out.empty())shell::DragOut(hwnd,out);});
+}
 void DeskWindow::AttachDrag(FrameworkElement const& el,std::wstring const& path){
  el.PointerPressed([this,path](auto&&,Input::PointerRoutedEventArgs const&){FocusBody();int idx=-1;for(size_t i=0;i<navPaths.size();++i)if(PathKey(navPaths[i])==PathKey(path)){idx=static_cast<int>(i);break;}if(idx>=0)SetFocus(idx);POINT sp{};GetCursorPos(&sp);dragSX=sp.x;dragSY=sp.y;dragPath=path;dragArmed=true;});
  el.PointerReleased([this](auto&&,Input::PointerRoutedEventArgs const&){dragArmed=false;});
  el.PointerCaptureLost([this](auto&&,auto&&){dragArmed=false;});
  if(!rootDragHooked){rootDragHooked=true;
-  root.PointerMoved([this](auto&&,Input::PointerRoutedEventArgs const&){if(!dragArmed)return;POINT cp{};GetCursorPos(&cp);long dx=cp.x-dragSX,dy=cp.y-dragSY;if(dx*dx+dy*dy>36){dragArmed=false;std::wstring h=dragPath;root.DispatcherQueue().TryEnqueue([this,h]{std::vector<std::wstring> out;auto k=PathKey(h);if(std::find(selected.begin(),selected.end(),k)!=selected.end()&&selected.size()>1){for(auto const& s:selected)for(auto const& e:View().entries)if(PathKey(e.path)==s&&GetFileAttributesW(e.path.c_str())!=INVALID_FILE_ATTRIBUTES){out.push_back(e.path);break;}}else if(GetFileAttributesW(h.c_str())!=INVALID_FILE_ATTRIBUTES)out.push_back(h);if(!out.empty())shell::DragOut(hwnd,out);});}});
+  root.PointerMoved([this](auto&&,Input::PointerRoutedEventArgs const&){DragOutIfMoved();});
  }
 }
 bool DeskWindow::IsSel(std::wstring const& path){return std::find(selected.begin(),selected.end(),PathKey(path))!=selected.end();}
@@ -633,6 +639,21 @@ bool DeskWindow::RevealEntry(std::wstring const& path){
  try{SetForegroundWindow(hwnd);}catch(...){}
  return true;
 }
+// 弹出这一叠：WinUI 的浮层不属于窗口矩形，所以能把成员摊在分区外面，而分区高度一点不动
+// 弹出这一叠：在分区外面开一块自己的小窗来摊成员。它有自己的 HWND，所以既不会被分区矩形裁掉，
+// 也不必把分区撑高——这正好是浮层（Flyout）在 WinUI3 里做不到的事，本项目也没有可承载任意内容的 Flyout。
+void DeskWindow::ShowStackPeek(std::wstring const& sid){
+ if(sid.empty()||!Exists())return;
+ auto& v=View();
+ std::vector<std::wstring> paths;
+ for(auto const& e:v.entries)if(e.stack==sid&&paths.size()<25)paths.push_back(e.path);
+ std::wstring sname;for(auto const& s:v.stacks)if(s.id==sid)sname=s.name;
+ auto const shown=sname.empty()?i18n::Tr(L"叠放"):sname;
+ if(paths.size()<2){Notify(i18n::TrF(L"「{0}」里只剩一项，不必摊开。",{shown}));return;}
+ RECT r{};if(!GetWindowRect(hwnd,&r))return;
+ owner.ShowPeek(viewId,sid,i18n::TrF(L"{0} · {1} 项",{shown,std::to_wstring(paths.size())}),paths,r);
+ Notify(i18n::TrF(L"已摊开「{0}」的 {1} 项。",{shown,std::to_wstring(paths.size())}));
+}
 void DeskWindow::MoveFocus(int delta){
  int const n=static_cast<int>(navPaths.size());if(n==0){focusIdx=-1;return;}
  SetFocus(NavStep(focusIdx,n,delta));
@@ -833,8 +854,11 @@ void DeskWindow::Refresh(){auto& z=Model();auto& v=View();bool bodyFocus=listHos
   }else{Image icon;icon.Width(TI[tier]);icon.Height(TI[tier]);icon.HorizontalAlignment(HorizontalAlignment::Center);content.Children().Append(icon);shell::LoadIcon(path,icon);}
   TextBlock label;label.Text((exists?L"":L"⚠ ")+shell::Name(path));label.FontSize(ScaledFont(owner.layout.settings.textSize,12));label.TextAlignment(TextAlignment::Center);label.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,180,180,180}));if(v.nameLines==0)label.Visibility(Visibility::Collapsed);else if(v.nameLines==1){label.TextWrapping(TextWrapping::NoWrap);label.TextTrimming(TextTrimming::CharacterEllipsis);label.MaxHeight(labelH);}else{label.TextWrapping(TextWrapping::Wrap);label.MaxHeight(labelH);}content.Children().Append(LabelChrome(label,ChromeStyle()));front.Child(content);
   Border badge;badge.Width(20);badge.Height(20);badge.CornerRadius(CornerRadius{10,10,10,10});badge.Background(SolidColorBrush(Windows::UI::Color{255,0,120,212}));badge.HorizontalAlignment(HorizontalAlignment::Right);badge.VerticalAlignment(VerticalAlignment::Top);badge.Margin(Thickness{0,0,3,0});TextBlock cnt;cnt.Text(std::to_wstring(count));cnt.FontSize(11);cnt.Foreground(SolidColorBrush(Windows::UI::Colors::White()));cnt.HorizontalAlignment(HorizontalAlignment::Center);cnt.VerticalAlignment(VerticalAlignment::Center);badge.Child(cnt);
+  badge.Tapped([this,sid](auto&&,auto&&){ShowStackPeek(sid);});
+  badge.PointerPressed([this](auto&&,Input::PointerRoutedEventArgs const&){FocusBody();});
   wrap.Children().Append(back);wrap.Children().Append(front);wrap.Children().Append(badge);
-  MenuFlyout pmenu;pmenu.Items().Append(MenuItem(i18n::Tr(L"展开叠放"),[this,sid]{expandedStack=sid;Refresh();}));
+  MenuFlyout pmenu;pmenu.Items().Append(MenuItem(i18n::TrF(L"弹出这一叠（{0} 项）",{std::to_wstring(count)}),[this,sid]{ShowStackPeek(sid);}));
+  pmenu.Items().Append(MenuItem(i18n::Tr(L"展开叠放"),[this,sid]{expandedStack=sid;Refresh();}));
   pmenu.Items().Append(MenuItem(i18n::Tr(L"重命名叠放…"),[this,sid]{TextBox box;for(auto const& s:View().stacks)if(s.id==sid)box.Text(s.name);ContentDialog dlg;dlg.Title(box_value(i18n::Tr(L"重命名叠放")));dlg.PrimaryButtonText(i18n::Tr(L"保存"));dlg.CloseButtonText(i18n::Tr(L"取消"));dlg.DefaultButton(ContentDialogButton::Primary);StackPanel p;p.Spacing(8);p.MaxWidth(300);p.Children().Append(box);dlg.Content(p);try{dlg.XamlRoot(root.XamlRoot());}catch(...){return;}auto op=dlg.ShowAsync();op.Completed([this,sid,box](auto&&async,auto&&){if(async.GetResults()!=ContentDialogResult::Primary)return;auto t=std::wstring(box.Text());size_t a=t.find_first_not_of(L" \t");if(a==std::wstring::npos)return;t=t.substr(a,t.find_last_not_of(L" \t")-a+1);for(auto& s:View().stacks)if(s.id==sid)s.name=t;Refresh();owner.Save();});}));
   pmenu.Items().Append(MenuItem(i18n::Tr(L"解散叠放"),[this,sid]{std::wstring sname;for(auto const& s:View().stacks)if(s.id==sid)sname=s.name;owner.PushUndo(i18n::TrF(L"解散叠放「{0}」",{sname}));DissolveStack(View(),sid);Refresh();owner.Save();}));
   keepCapsuleOpen(this,pmenu);front.ContextFlyout(pmenu);
@@ -1019,7 +1043,7 @@ void Controller::HealTopology(){
  layout.topologyLast=sig;Save();
 }
 void Controller::SyncUploadAuto(){auto url=layout.settings.syncUrl;auto user=layout.settings.syncUser;auto pass=webdav::UnprotectSecret(layout.settings.syncPass);if(url.empty()||pass.empty())return;std::string data;try{data=Serialize(layout);}catch(...){return;}HWND mw=messageWindow;std::thread([mw,data=std::move(data),target=webdav::JoinUrl(url,L"guodesk-layout.json"),user,pass,insecure=layout.settings.syncInsecure](){if(webdav::UploadText(target,user,pass,data,insecure))return;PostMessageW(mw,WM_APP+3,0,0);}).detach();}
-void Controller::ImportLayout(Layout&& next,wchar_t const* notice){tidy.reset();note.reset();todo.reset();clockW.reset();music.reset();weather.reset();appGrid.reset();try{store.Save(next);}catch(...){for(auto& w:windows)w->Notify(i18n::Tr(L"保存失败：请检查本地数据目录权限和剩余空间。 "));return;}layout=std::move(next);i18n::SetLanguage(layout.settings.language);mappedStamp.clear();for(auto& z:layout.zones)if(!z.mappedFolder.empty())SyncMapped(z);for(auto& z:layout.zones){RECT r{z.x,z.y,z.x+z.width,z.y+z.height};Reanchor(r,z.mon,z.mx,z.my);z.x=r.left;z.y=r.top;}{auto& wg=layout.widgets;RECT rn{wg.noteX,wg.noteY,wg.noteX+wg.noteW,wg.noteY+wg.noteH};Reanchor(rn,wg.noteMon,wg.noteMX,wg.noteMY);wg.noteX=rn.left;wg.noteY=rn.top;RECT rt{wg.todoX,wg.todoY,wg.todoX+wg.todoW,wg.todoY+wg.todoH};Reanchor(rt,wg.todoMon,wg.todoMX,wg.todoMY);wg.todoX=rt.left;wg.todoY=rt.top;RECT rc{wg.clockX,wg.clockY,wg.clockX+wg.clockW,wg.clockY+wg.clockH};Reanchor(rc,wg.clockMon,wg.clockMX,wg.clockMY);wg.clockX=rc.left;wg.clockY=rc.top;RECT rm{wg.musicX,wg.musicY,wg.musicX+wg.musicW,wg.musicY+wg.musicH};Reanchor(rm,wg.musicMon,wg.musicMX,wg.musicMY);wg.musicX=rm.left;wg.musicY=rm.top;RECT rw{wg.weatherX,wg.weatherY,wg.weatherX+wg.weatherW,wg.weatherY+wg.weatherH};Reanchor(rw,wg.weatherMon,wg.weatherMX,wg.weatherMY);wg.weatherX=rw.left;wg.weatherY=rw.top;RECT rs{wg.searchX,wg.searchY,wg.searchX+560,wg.searchY+440};Reanchor(rs,wg.searchMon,wg.searchMX,wg.searchMY);wg.searchX=rs.left;wg.searchY=rs.top;RECT rag{wg.appGridX,wg.appGridY,wg.appGridX+wg.appGridW,wg.appGridY+wg.appGridH};Reanchor(rag,wg.appGridMon,wg.appGridMX,wg.appGridMY);wg.appGridX=rag.left;wg.appGridY=rag.top;}SyncWindows();for(auto const& z:layout.zones)if(!z.mappedFolder.empty()){auto stamp=StampOf(z.mappedFolder);if(!stamp.empty())mappedStamp[PathKey(z.mappedFolder)]=stamp;}if(desktopMode)for(auto& w:windows)w->SetDesktop(true);if(layout.widgets.noteVisible)note=std::make_unique<NoteWindow>(*this);if(layout.widgets.todoVisible)todo=std::make_unique<TodoWindow>(*this);if(layout.widgets.clockVisible)clockW=std::make_unique<ClockWindow>(*this);if(layout.widgets.musicVisible)music=std::make_unique<MusicWindow>(*this);if(layout.widgets.weatherVisible)weather=std::make_unique<WeatherWindow>(*this);if(layout.widgets.appGridVisible)appGrid=std::make_unique<AppGridWindow>(*this);ApplySettings();for(auto& w:windows)w->Place();if(!windows.empty())windows.front()->Notify(i18n::Tr(notice));}
+void Controller::ImportLayout(Layout&& next,wchar_t const* notice){peek.reset();tidy.reset();note.reset();todo.reset();clockW.reset();music.reset();weather.reset();appGrid.reset();try{store.Save(next);}catch(...){for(auto& w:windows)w->Notify(i18n::Tr(L"保存失败：请检查本地数据目录权限和剩余空间。 "));return;}layout=std::move(next);i18n::SetLanguage(layout.settings.language);mappedStamp.clear();for(auto& z:layout.zones)if(!z.mappedFolder.empty())SyncMapped(z);for(auto& z:layout.zones){RECT r{z.x,z.y,z.x+z.width,z.y+z.height};Reanchor(r,z.mon,z.mx,z.my);z.x=r.left;z.y=r.top;}{auto& wg=layout.widgets;RECT rn{wg.noteX,wg.noteY,wg.noteX+wg.noteW,wg.noteY+wg.noteH};Reanchor(rn,wg.noteMon,wg.noteMX,wg.noteMY);wg.noteX=rn.left;wg.noteY=rn.top;RECT rt{wg.todoX,wg.todoY,wg.todoX+wg.todoW,wg.todoY+wg.todoH};Reanchor(rt,wg.todoMon,wg.todoMX,wg.todoMY);wg.todoX=rt.left;wg.todoY=rt.top;RECT rc{wg.clockX,wg.clockY,wg.clockX+wg.clockW,wg.clockY+wg.clockH};Reanchor(rc,wg.clockMon,wg.clockMX,wg.clockMY);wg.clockX=rc.left;wg.clockY=rc.top;RECT rm{wg.musicX,wg.musicY,wg.musicX+wg.musicW,wg.musicY+wg.musicH};Reanchor(rm,wg.musicMon,wg.musicMX,wg.musicMY);wg.musicX=rm.left;wg.musicY=rm.top;RECT rw{wg.weatherX,wg.weatherY,wg.weatherX+wg.weatherW,wg.weatherY+wg.weatherH};Reanchor(rw,wg.weatherMon,wg.weatherMX,wg.weatherMY);wg.weatherX=rw.left;wg.weatherY=rw.top;RECT rs{wg.searchX,wg.searchY,wg.searchX+560,wg.searchY+440};Reanchor(rs,wg.searchMon,wg.searchMX,wg.searchMY);wg.searchX=rs.left;wg.searchY=rs.top;RECT rag{wg.appGridX,wg.appGridY,wg.appGridX+wg.appGridW,wg.appGridY+wg.appGridH};Reanchor(rag,wg.appGridMon,wg.appGridMX,wg.appGridMY);wg.appGridX=rag.left;wg.appGridY=rag.top;}SyncWindows();for(auto const& z:layout.zones)if(!z.mappedFolder.empty()){auto stamp=StampOf(z.mappedFolder);if(!stamp.empty())mappedStamp[PathKey(z.mappedFolder)]=stamp;}if(desktopMode)for(auto& w:windows)w->SetDesktop(true);if(layout.widgets.noteVisible)note=std::make_unique<NoteWindow>(*this);if(layout.widgets.todoVisible)todo=std::make_unique<TodoWindow>(*this);if(layout.widgets.clockVisible)clockW=std::make_unique<ClockWindow>(*this);if(layout.widgets.musicVisible)music=std::make_unique<MusicWindow>(*this);if(layout.widgets.weatherVisible)weather=std::make_unique<WeatherWindow>(*this);if(layout.widgets.appGridVisible)appGrid=std::make_unique<AppGridWindow>(*this);ApplySettings();for(auto& w:windows)w->Place();if(!windows.empty())windows.front()->Notify(i18n::Tr(notice));}
 void Controller::Add(){PushUndo(i18n::Tr(L"新增分区"));Zone zone;zone.id=NewId();zone.name=i18n::Tr(L"新分区");zone.x+=static_cast<int>(layout.zones.size())*30;zone.y+=static_cast<int>(layout.zones.size())*30;auto key=zone.id;layout.zones.push_back(std::move(zone));windows.push_back(std::make_unique<DeskWindow>(*this,key));if(desktopMode)windows.back()->SetDesktop(true);Save();}
 void Controller::QuickZone(std::wstring const& tag){RECT work{};SystemParametersInfoW(SPI_GETWORKAREA,0,&work,0);auto mark=UndoMark();if(AddQuickZone(layout,tag,work)){UndoPush(i18n::TrF(L"快速分区「{0}」",{KnownFolderName(tag)}),std::move(mark));SyncWindows();Save();}else if(!windows.empty())windows.front()->Notify(i18n::Tr(L"该文件夹已有对应分区。"));}
 void Controller::UseTemplate(ZoneTemplate const& tpl){RECT work{};SystemParametersInfoW(SPI_GETWORKAREA,0,&work,0);auto mark=UndoMark();if(ApplyTemplate(layout,tpl,work)){UndoPush(i18n::TrF(L"应用模板「{0}」",{i18n::Tr(tpl.name)}),std::move(mark));SyncWindows();Save();}else if(!windows.empty())windows.front()->Notify(i18n::TrF(L"「{0}」的文件夹已全部有分区，无需重复添加。",{i18n::Tr(tpl.name)}));}
@@ -1030,7 +1054,7 @@ void Controller::AddToGroup(std::wstring const& anchorId){auto a=std::find_if(la
 int Controller::Remove(std::wstring const& key){auto it=std::find_if(layout.zones.begin(),layout.zones.end(),[&](auto const& z){return z.id==key;});if(it==layout.zones.end())return 0;auto gid=it->group;PushUndo(i18n::TrF(L"删除分区「{0}」",{it->name}));layout.zones.erase(it);int const stranded=CountRulesBoundTo(layout.rules,key);if(!gid.empty()&&GroupMemberIds(layout,gid).size()==1)for(auto& z:layout.zones)if(z.group==gid){z.group.clear();z.groupTab=0;}SyncWindows();Save();return stranded;}
 void Controller::Refresh(){for(auto& w:windows)w->Refresh();}
 void Controller::Show(){for(auto& w:windows)w->Show();}
-void Controller::HideAll(){for(auto& w:windows)if(IsWindowVisible(w->hwnd))ShowWindow(w->hwnd,SW_HIDE);}
+void Controller::HideAll(){for(auto& w:windows)if(IsWindowVisible(w->hwnd))ShowWindow(w->hwnd,SW_HIDE);if(peek)peek.reset();}
 void Controller::ToggleAll(){bool any=false;for(auto& w:windows)if(IsWindowVisible(w->hwnd)){any=true;break;}if(any)HideAll();else Show();}
 void Controller::InstallCtrlHook(){if(ctrlHook||!messageWindow)return;g_ctrlTarget=messageWindow;g_lastCtrlDown=0;g_inCtrl=false;g_ctrlUpSeen=false;g_otherKey=false;ctrlHook=SetWindowsHookExW(WH_KEYBOARD_LL,CtrlHookProc,GetModuleHandleW(nullptr),0);}
 void Controller::RemoveCtrlHook(){if(ctrlHook){UnhookWindowsHookEx(ctrlHook);ctrlHook=nullptr;}g_ctrlTarget=nullptr;}
@@ -1067,6 +1091,15 @@ void Controller::ShowCapture(){if(!capture)capture=std::make_unique<CaptureWindo
 void Controller::CloseCapture(){capture.reset();}
 void Controller::ShowPreview(std::vector<std::wstring> const& paths,size_t start){if(!preview)preview=std::make_unique<PreviewWindow>(*this);preview->Open(paths,start);}
 void Controller::ClosePreview(){preview.reset();}
+void Controller::ShowPeek(std::wstring zone,std::wstring stack,std::wstring const& title,std::vector<std::wstring> const& items,RECT const& anchor){
+ if(!peek)peek=std::make_unique<StackPeekWindow>(*this);
+ peek->Open(std::move(zone),std::move(stack),title,items,anchor);
+}
+void Controller::ClosePeek(){peek.reset();}
+void Controller::ExpandStackInZone(std::wstring const& zoneKey,std::wstring const& sid){
+ // 面板认的是"发起它的那一页"，所以按 viewId 找；分区被删掉就什么也不做，面板自己会关
+ for(auto& w:windows)if(w->viewId==zoneKey||w->id==zoneKey){w->ExpandStack(sid);return;}
+}
 void Controller::RebuildWidgets(){
  note.reset();todo.reset();clockW.reset();music.reset();weather.reset();appGrid.reset();search.reset();
  for(auto& w:windows)w->ApplySettings();

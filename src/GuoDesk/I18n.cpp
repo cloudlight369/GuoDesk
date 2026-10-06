@@ -1,4 +1,4 @@
-#include "pch.h"
+﻿#include "pch.h"
 #include "I18n.h"
 namespace guodesk::i18n {
 namespace {
@@ -13,6 +13,14 @@ KV const table[]{
  {L"重命名叠放…",L"Rename stack…"},
  {L"解散叠放",L"Dissolve stack"},
  {L"展开叠放",L"Expand stack"},
+ {L"弹出这一叠（{0} 项）",L"Peek this stack ({0} items)"},
+ {L"GuoDesk 叠放浮层",L"GuoDesk Stack Panel"},
+ {L"在分区里展开",L"Expand in zone"},
+ {L"单击打开 · 右键系统菜单 · 按住拖出去",L"Click to open, right-click for the system menu, drag out to move"},
+ {L"「{0}」里只剩一项，不必摊开。",L"Only one item is left in {0}, nothing to spread out."},
+ {L"已摊开「{0}」的 {1} 项。",L"Showed {1} items from {0}."},
+ {L"{0} · {1} 项",L"{0} · {1} items"},
+
  {L"展开方向",L"Expand direction"},
  {L"自动展开",L"Auto"},
  {L"向下展开",L"Downward"},

@@ -119,6 +119,8 @@ void RunTests(std::filesystem::path const& output){std::ofstream report(output);
  auto pgLegacy=Deserialize("{\"version\":1,\"zones\":[{\"id\":\"a\",\"name\":\"n\",\"x\":0,\"y\":0,\"width\":280,\"height\":160,\"collapsed\":false,\"entries\":[]}]}");
  auto pgBogus=Deserialize("{\"version\":1,\"zones\":[{\"id\":\"a\",\"name\":\"n\",\"x\":0,\"y\":0,\"width\":280,\"height\":160,\"collapsed\":false,\"entries\":[],\"stackGrid\":77}]}");
  expect(pgLegacy.zones[0].stackGrid==0&&pgBogus.zones[0].stackGrid==0,"pile grid defaults and clamps on load");
+ expect(StackPeekSide(2)==2&&StackPeekSide(4)==2&&StackPeekSide(5)==3&&StackPeekSide(9)==3&&StackPeekSide(10)==4&&StackPeekSide(17)==5&&StackPeekSide(400)==5,"the stack panel takes the smallest square that holds the pile");
+ expect(StackPeekSide(0)==2&&StackPeekSide(1)==2,"a one-item pile still opens as a two-column panel");
  expect(StackSide(69,1)==3&&StackSide(69,3)==5&&StackSide(29,3)==2&&StackSide(21,3)==1&&StackSide(0,3)==1&&StackSide(-40,2)==1&&StackSide(1000,0)==1&&StackSide(1000,9)==1&&StackSide(100,1)==3,"the pile grid shrinks to what the tile can actually show");
  std::filesystem::remove_all(ddir);
  std::filesystem::remove_all(adir);
