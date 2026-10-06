@@ -171,7 +171,7 @@ function Pick-Label([string]$item) {
   Start-Sleep -Milliseconds 1400
   return $ok
 }
-$server = Start-Process -FilePath 'node' -ArgumentList @((Join-Path $root 'srv3240.js'), ('' + $port)) -PassThru -WindowStyle Hidden
+$server = Start-Process -FilePath 'node' -ArgumentList @((Join-Path $PSScriptRoot 'srv3240.js'), ('' + $port)) -PassThru -WindowStyle Hidden
 Start-Sleep -Seconds 2
 
 function Set-Value($el, [string]$text) {
