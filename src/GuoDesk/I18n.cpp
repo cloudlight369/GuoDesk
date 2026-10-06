@@ -19,6 +19,9 @@ KV const table[]{
  {L"单击打开 · 右键系统菜单 · 按住拖出去",L"Click to open, right-click for the system menu, drag out to move"},
  {L"「{0}」里只剩一项，不必摊开。",L"Only one item is left in {0}, nothing to spread out."},
  {L"已摊开「{0}」的 {1} 项。",L"Showed {1} items from {0}."},
+ {L"{0} · 前 {1} 项（共 {2} 项）",L"{0} · first {1} of {2}"},
+ {L"打不开「{0}」，它可能已经被移走或改名。",L"Cannot open {0} - it may have been moved or renamed."},
+ {L"那一页已经不在了，展开没有生效；再点一次角标就能看到现在的内容。",L"That page is gone, so nothing was expanded. Tap the badge again to see what is there now."},
  {L"{0} · {1} 项",L"{0} · {1} items"},
 
  {L"展开方向",L"Expand direction"},

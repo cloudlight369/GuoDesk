@@ -639,7 +639,6 @@ bool DeskWindow::RevealEntry(std::wstring const& path){
  try{SetForegroundWindow(hwnd);}catch(...){}
  return true;
 }
-// 弹出这一叠：WinUI 的浮层不属于窗口矩形，所以能把成员摊在分区外面，而分区高度一点不动
 // 弹出这一叠：在分区外面开一块自己的小窗来摊成员。它有自己的 HWND，所以既不会被分区矩形裁掉，
 // 也不必把分区撑高——这正好是浮层（Flyout）在 WinUI3 里做不到的事，本项目也没有可承载任意内容的 Flyout。
 void DeskWindow::ShowStackPeek(std::wstring const& sid){
@@ -651,7 +650,10 @@ void DeskWindow::ShowStackPeek(std::wstring const& sid){
  auto const shown=sname.empty()?i18n::Tr(L"叠放"):sname;
  if(paths.size()<2){Notify(i18n::TrF(L"「{0}」里只剩一项，不必摊开。",{shown}));return;}
  RECT r{};if(!GetWindowRect(hwnd,&r))return;
- owner.ShowPeek(viewId,sid,i18n::TrF(L"{0} · {1} 项",{shown,std::to_wstring(paths.size())}),paths,r);
+ int const total=static_cast<int>([&]{int n=0;for(auto const& e:v.entries)if(e.stack==sid)++n;return n;}());
+ // 面板最多摊 25 格：角标和菜单说的是整叠，标题就得讲清楚"前 25 项"，别让人以为丢了文件
+ auto const label=total>static_cast<int>(paths.size())?i18n::TrF(L"{0} · 前 {1} 项（共 {2} 项）",{shown,std::to_wstring(paths.size()),std::to_wstring(total)}):i18n::TrF(L"{0} · {1} 项",{shown,std::to_wstring(paths.size())});
+ owner.ShowPeek(viewId,sid,label,paths,r,GetDpiForWindow(hwnd));
  Notify(i18n::TrF(L"已摊开「{0}」的 {1} 项。",{shown,std::to_wstring(paths.size())}));
 }
 void DeskWindow::MoveFocus(int delta){
@@ -854,7 +856,7 @@ void DeskWindow::Refresh(){auto& z=Model();auto& v=View();bool bodyFocus=listHos
   }else{Image icon;icon.Width(TI[tier]);icon.Height(TI[tier]);icon.HorizontalAlignment(HorizontalAlignment::Center);content.Children().Append(icon);shell::LoadIcon(path,icon);}
   TextBlock label;label.Text((exists?L"":L"⚠ ")+shell::Name(path));label.FontSize(ScaledFont(owner.layout.settings.textSize,12));label.TextAlignment(TextAlignment::Center);label.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,180,180,180}));if(v.nameLines==0)label.Visibility(Visibility::Collapsed);else if(v.nameLines==1){label.TextWrapping(TextWrapping::NoWrap);label.TextTrimming(TextTrimming::CharacterEllipsis);label.MaxHeight(labelH);}else{label.TextWrapping(TextWrapping::Wrap);label.MaxHeight(labelH);}content.Children().Append(LabelChrome(label,ChromeStyle()));front.Child(content);
   Border badge;badge.Width(20);badge.Height(20);badge.CornerRadius(CornerRadius{10,10,10,10});badge.Background(SolidColorBrush(Windows::UI::Color{255,0,120,212}));badge.HorizontalAlignment(HorizontalAlignment::Right);badge.VerticalAlignment(VerticalAlignment::Top);badge.Margin(Thickness{0,0,3,0});TextBlock cnt;cnt.Text(std::to_wstring(count));cnt.FontSize(11);cnt.Foreground(SolidColorBrush(Windows::UI::Colors::White()));cnt.HorizontalAlignment(HorizontalAlignment::Center);cnt.VerticalAlignment(VerticalAlignment::Center);badge.Child(cnt);
-  badge.Tapped([this,sid](auto&&,auto&&){ShowStackPeek(sid);});
+  badge.Tapped([this,sid](auto&&,Input::TappedRoutedEventArgs const& a){a.Handled(true);ShowStackPeek(sid);});// 不 Handled 就会冒到 root.Tapped，把用户辛苦多选出来的东西清空
   badge.PointerPressed([this](auto&&,Input::PointerRoutedEventArgs const&){FocusBody();});
   wrap.Children().Append(back);wrap.Children().Append(front);wrap.Children().Append(badge);
   MenuFlyout pmenu;pmenu.Items().Append(MenuItem(i18n::TrF(L"弹出这一叠（{0} 项）",{std::to_wstring(count)}),[this,sid]{ShowStackPeek(sid);}));
@@ -1091,15 +1093,15 @@ void Controller::ShowCapture(){if(!capture)capture=std::make_unique<CaptureWindo
 void Controller::CloseCapture(){capture.reset();}
 void Controller::ShowPreview(std::vector<std::wstring> const& paths,size_t start){if(!preview)preview=std::make_unique<PreviewWindow>(*this);preview->Open(paths,start);}
 void Controller::ClosePreview(){preview.reset();}
-void Controller::ShowPeek(std::wstring zone,std::wstring stack,std::wstring const& title,std::vector<std::wstring> const& items,RECT const& anchor){
+void Controller::ShowPeek(std::wstring zone,std::wstring stack,std::wstring const& title,std::vector<std::wstring> const& items,RECT const& anchor,int anchorDpi){
  if(!peek)peek=std::make_unique<StackPeekWindow>(*this);
- peek->Open(std::move(zone),std::move(stack),title,items,anchor);
+ peek->Open(std::move(zone),std::move(stack),title,items,anchor,anchorDpi);
 }
 void Controller::ClosePeek(){peek.reset();}
-void Controller::ExpandStackInZone(std::wstring const& zoneKey,std::wstring const& sid){
- // 面板认的是"发起它的那一页"，所以按 viewId 找；分区被删掉就什么也不做，面板自己会关
- for(auto& w:windows)if(w->viewId==zoneKey||w->id==zoneKey){w->ExpandStack(sid);return;}
-}
+bool Controller::ExpandStackInZone(std::wstring const& zoneKey,std::wstring const& sid){
+ // 只认 viewId：面板是从"当时显示的那一页"摊开的，切了页还去改锚定分区的状态，就是把展开写进看不见的页
+ for(auto& w:windows)if(w->viewId==zoneKey&&w->Exists()){w->ExpandStack(sid);return true;}
+ return false;}
 void Controller::RebuildWidgets(){
  note.reset();todo.reset();clockW.reset();music.reset();weather.reset();appGrid.reset();search.reset();
  for(auto& w:windows)w->ApplySettings();

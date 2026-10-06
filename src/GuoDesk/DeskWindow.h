@@ -128,7 +128,7 @@ public:
  void ShowCapture(); void CloseCapture(); void ShowAppGrid(); void CloseAppGrid(); bool CommitCapture(std::wstring const& text,bool asTodo); void RebuildWidgets();
  void ShowPreview(std::vector<std::wstring> const& paths,size_t start); void ClosePreview();
  // 叠放浮层：全区共用一块面板，再点另一叠就换目标；「在分区里展开」要回到发起它的那个分区
- void ShowPeek(std::wstring zone,std::wstring stack,std::wstring const& title,std::vector<std::wstring> const& items,RECT const& anchor); void ClosePeek(); void ExpandStackInZone(std::wstring const& zoneKey,std::wstring const& sid);
+ void ShowPeek(std::wstring zone,std::wstring stack,std::wstring const& title,std::vector<std::wstring> const& items,RECT const& anchor,int anchorDpi); void ClosePeek(); bool ExpandStackInZone(std::wstring const& zoneKey,std::wstring const& sid);
  void SyncUploadAuto();
  void MoveEntry(std::wstring const& entry,std::wstring const& target,size_t index);
  void SyncWindows(); void MergeInto(std::wstring const& self,std::wstring const& other); void Ungroup(std::wstring const& zoneId); void AddToGroup(std::wstring const& anchorId);
