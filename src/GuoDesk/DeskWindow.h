@@ -58,7 +58,7 @@ class DeskWindow {
  bool IsSel(std::wstring const& path); void ToggleSel(std::wstring const& path);
  void TapSelect(std::wstring const& path); int NavIndex(std::wstring const& path);
  std::vector<std::wstring> ListedPaths(); std::vector<std::wstring> OpPaths(); std::wstring TargetFolder();
- void CopyClip(bool cut); void PasteClip(); void CreateFolderHere(); void ArchiveHere(); void RunArchive(std::shared_ptr<std::vector<ArchiveGroup>> groups,std::wstring here); void RenameOne(); void DeleteSelected(bool permanent);
+ void CopyClip(bool cut); void PasteClip(); void CreateFolderHere(); void ArchiveHere(); void RunArchive(std::shared_ptr<std::vector<ArchiveGroup>> groups,std::wstring here); void RunAutoArchive(std::wstring here,std::vector<Rule> rules); void FinishArchive(std::shared_ptr<shell::TransferResult> res,std::shared_ptr<long long> cats,std::shared_ptr<long long> blocked,long long total); void RenameOne(); void DeleteSelected(bool permanent);
  void PreviewSelection(); void PreviewPath(std::wstring const& path);
  int selAnchor=-1;
  winrt::Microsoft::UI::Xaml::Media::Brush ItemFill(std::wstring const& path);
@@ -76,6 +76,7 @@ class DeskWindow {
 public:
  std::wstring id; std::wstring viewId; bool menuOpen=false; unsigned long long bornTick=GetTickCount64(); std::shared_ptr<bool> alive{std::make_shared<bool>(true)};
  Zone& View();
+ bool Busy()const noexcept{return opRunning||opDialog;}
  // Controller 的 2 秒心跳调用：到点就对映射文件夹做一次静默归档
  void AutoArchiveTick();
  winrt::Microsoft::UI::Xaml::Window window{nullptr}; HWND hwnd{};
@@ -104,6 +105,7 @@ public:
  void PushUndo(std::wstring const& label); std::string UndoMark(); void UndoPush(std::wstring const& label,std::string mark); void Undo(); void Toast(std::wstring const& title,std::wstring const& text);
  void QuickZone(std::wstring const& tag); void UseTemplate(ZoneTemplate const& tpl);
  void ShowSettings(); void CloseSettings(); void ApplySettings();
+ bool ArchiveRootBusy(std::wstring const& root,DeskWindow const& self)const;
  void ShowTidy(); void CloseTidy();
  void ShowNote(); void CloseNote(); void ShowTodo(); void CloseTodo();
  void ShowClock(); void CloseClock(); void ShowGuide(); void CloseGuide(); void CheckReminders();

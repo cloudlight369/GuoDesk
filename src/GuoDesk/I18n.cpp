@@ -504,6 +504,7 @@ KV const table[]{
  {L"每天一次",L"Every Day"},
  {L"自动归档已设为{0}：符合规则的文件会自动归入分类子文件夹。",L"Auto archive is now {0}: matching files are filed into category subfolders on their own."},
  {L"自动归档已关闭。",L"Auto archive is off."},
+ {L"正在自动归档…",L"Auto-archiving…"},
  {L"按规则归档",L"Archive by rules"},
  {L"普通分区没有映射文件夹，无法按规则归档。",L"A plain zone has no mapped folder, so there is nothing to archive."},
  {L"「{0}」里没有可归档的散文件。",L"{0} holds no loose files to archive."},

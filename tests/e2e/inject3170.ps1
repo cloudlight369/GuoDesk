@@ -161,8 +161,9 @@ $moved = $moved -and (Wait-Leaf $arc '图片\shot.png' $true 20000)
 Note 'auto-filed-loose-files' $moved (('doc=' + (Get-ChildItem (Join-Path $arc '文档') -File -ErrorAction SilentlyContinue).Count) + ' img=' + (Get-ChildItem (Join-Path $arc '图片') -File -ErrorAction SilentlyContinue).Count)
 Note 'auto-removed-from-root' ((Test-Path -PathType Leaf (Join-Path $arc 'a1.pdf')) -eq $false) ''
 
-# D2 递归：子目录里的文件也被收进分类，原来的空壳目录留着不动
-Note 'auto-files-nested' (Wait-Leaf $arc '图片\late.png' $true 20000) ('nestedGone=' + (-not (Test-Path -PathType Leaf (Join-Path $arc 'misc\late.png'))))
+# D2 递归只在手动确认归档里做：自动路径不得把用户自己分好的子目录卷走
+$nested = (Test-Path -PathType Leaf (Join-Path $arc 'misc\late.png')) -and -not (Test-Path -PathType Leaf (Join-Path $arc '图片\late.png'))
+Note 'auto-leaves-user-subfolders' $nested ('miscStill=' + (Test-Path -PathType Leaf (Join-Path $arc 'misc\late.png')) + ' moved=' + (Test-Path -PathType Leaf (Join-Path $arc '图片\late.png')))
 
 # D3 已经在分类文件夹里的文件不被二次搬运，也不会生成副本
 $old = ''

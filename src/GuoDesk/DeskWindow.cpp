@@ -336,9 +336,34 @@ void DeskWindow::ArchiveHere(){
    if(!*guard)return;
    opDialog=false;
    if(async.GetResults()!=ContentDialogResult::Primary)return;
+   // 手动跑过一次，自动档期就从这次算起，免得紧接着把同一个文件夹再扫一遍
+   if(View().autoArchive)View().archiveAt=NowEpoch();
    RunArchive(plan,here);
   });
  }catch(...){opDialog=false;Notify(i18n::Tr(L"归档对话框没能打开，请重试。"));}
+}
+// 一组一组地搬：分类目录建不出来就只失败这一组，同名目标一律跳过而不是改名复制出第二份
+static void FileArchiveGroups(std::vector<ArchiveGroup> const& groups,std::wstring const& here,shell::CancelFlag const& cancel,shell::ProgressFn const& prog,shell::TransferResult& res,long long& cats,long long& blocked){
+ long long base=0,totalAll=0;for(auto const& g:groups)totalAll+=static_cast<long long>(g.paths.size());
+ for(auto const& g:groups){
+  if(cancel->load())break;
+  auto const count=static_cast<long long>(g.paths.size());
+  std::error_code ec;auto dir=std::filesystem::path(here)/g.category;
+  // 根目录里躺着一个正好和分类同名的文件：整组跳过，既不动它，也不会把文件写进"文件"里
+  std::error_code ke;
+  if(std::filesystem::exists(dir,ke)&&!std::filesystem::is_directory(dir,ke)){blocked+=count;base+=count;prog(base,totalAll,g.category);continue;}
+  std::filesystem::create_directories(dir,ec);
+  if(ec){res.failed+=count;base+=count;prog(base,totalAll,g.category);continue;}
+  // 分类里已经有同名文件就跳过：TransferFiles 遇到重名会改名成副本，而归档要的是归位，不是多出一份
+  std::vector<std::wstring> items;
+  for(auto const& s:g.paths){std::error_code ne;if(std::filesystem::exists(dir/std::filesystem::path(s).filename(),ne)){++res.skipped;continue;}items.push_back(s);}
+  if(items.empty()){base+=count;prog(base,totalAll,std::wstring());continue;}
+  auto part=shell::TransferFiles(items,dir.wstring(),true,cancel,[&](long long d,long long,std::wstring const& name){prog(base+d,totalAll,name);});
+  res.made.insert(res.made.end(),part.made.begin(),part.made.end());
+  res.skipped+=part.skipped;res.failed+=part.failed;res.cancelled=res.cancelled||part.cancelled;
+  if(!part.made.empty())++cats;
+  base+=count;prog(base,totalAll,std::wstring());
+ }
 }
 void DeskWindow::RunArchive(std::shared_ptr<std::vector<ArchiveGroup>> plan,std::wstring here){
  long long total=0;for(auto const& g:*plan)total+=static_cast<long long>(g.paths.size());
@@ -346,65 +371,74 @@ void DeskWindow::RunArchive(std::shared_ptr<std::vector<ArchiveGroup>> plan,std:
  auto cats=std::make_shared<long long>(0);
  auto blocked=std::make_shared<long long>(0);
  BeginOp(i18n::TrF(L"正在归档 {0} 项…",{std::to_wstring(total)}),
-  [plan,here,res,cats,blocked](shell::CancelFlag const& cancel,shell::ProgressFn const& prog){
-   long long base=0,totalAll=0;for(auto const& g:*plan)totalAll+=static_cast<long long>(g.paths.size());
-   for(auto const& g:*plan){
-    if(cancel->load())break;
-    auto const count=static_cast<long long>(g.paths.size());
-    std::error_code ec;auto dir=std::filesystem::path(here)/g.category;
-    // 根目录里躺着一个正好和分类同名的文件：整组跳过，既不动它，也不会把文件写进"文件"里
-    std::error_code ke;
-    if(std::filesystem::exists(dir,ke)&&!std::filesystem::is_directory(dir,ke)){*blocked+=count;base+=count;prog(base,totalAll,g.category);continue;}
-    std::filesystem::create_directories(dir,ec);
-    // 建不出子文件夹就是整组做不了，记账后继续下一组，别让一个分类卡住整批归档
-    if(ec){res->failed+=count;base+=count;prog(base,totalAll,g.category);continue;}
-    // 分类里已经有同名文件就跳过：TransferFiles 遇到重名会改名成副本，而归档要的是归位，不是多出一份
-    std::vector<std::wstring> items;
-    for(auto const& s:g.paths){std::error_code ne;if(std::filesystem::exists(dir/std::filesystem::path(s).filename(),ne)){++res->skipped;continue;}items.push_back(s);}
-    if(items.empty()){base+=count;prog(base,totalAll,std::wstring());continue;}
-    auto part=shell::TransferFiles(items,dir.wstring(),true,cancel,[&](long long d,long long,std::wstring const& name){prog(base+d,totalAll,name);});
-    res->made.insert(res->made.end(),part.made.begin(),part.made.end());
-    res->skipped+=part.skipped;res->failed+=part.failed;res->cancelled=res->cancelled||part.cancelled;
-    if(!part.made.empty())++(*cats);
-    base+=count;prog(base,totalAll,std::wstring());
-   }
+  [plan,here,res,cats,blocked](shell::CancelFlag const& cancel,shell::ProgressFn const& prog){FileArchiveGroups(*plan,here,cancel,prog,*res,*cats,*blocked);},
+  [this,guard=alive,res,cats,blocked,total]{if(*guard)FinishArchive(res,cats,blocked,total);});
+}
+void DeskWindow::RunAutoArchive(std::wstring here,std::vector<Rule> rules){
+ auto res=std::make_shared<shell::TransferResult>();
+ auto cats=std::make_shared<long long>(0);
+ auto blocked=std::make_shared<long long>(0);
+ auto total=std::make_shared<long long>(0);
+ BeginOp(i18n::Tr(L"正在自动归档…"),
+  [here,rules,res,cats,blocked,total](shell::CancelFlag const& cancel,shell::ProgressFn const& prog){
+   // 列举和度量都在工作线程：映射目录可能是网络盘，UI 线程卡住会连热键和"取消"按钮一起没响应
+   auto const files=ListLooseFiles(here,false,1000);
+   std::vector<std::wstring> unmatched;
+   auto groups=ArchivePlan(rules,files,&unmatched,here);
+   long long n=0;for(auto const& g:groups)n+=static_cast<long long>(g.paths.size());
+   *total=n;prog(0,n,std::wstring());
+   if(groups.empty()||cancel->load())return;
+   long long catsLocal=0,blockedLocal=0;
+   FileArchiveGroups(groups,here,cancel,prog,*res,catsLocal,blockedLocal);
+   *cats=catsLocal;*blocked=blockedLocal;
   },
-  [this,guard=alive,res,cats,blocked,total,plan]{
+  [this,guard=alive,res,cats,blocked,total]{
    if(!*guard)return;
-   auto& v=View();
-   SyncMapped(v);
-   selected.clear();for(auto const& p:res->made)if(selected.size()<50)selected.push_back(PathKey(p));
-   focusIdx=-1;Refresh();owner.Save();
-   long long const ok=static_cast<long long>(res->made.size());
-   auto const state=OpOutcome(ok,res->failed,res->cancelled);
-   std::wstring text;
-   if(state==3)text=i18n::Tr(L"归档未完成：文件可能被占用或文件夹不可写。");
-   else if(state==4)text=i18n::Tr(L"已取消归档，未移动任何文件。");
-   else if(!ok)text=i18n::Tr(L"没有文件被移动（分类文件夹里已有同名文件）。");
-   else text=i18n::TrF(L"已把 {0} 个文件归档到 {1} 个分类文件夹。",{std::to_wstring(ok),std::to_wstring(*cats)});
-   if(ok&&res->failed)text+=L" "+i18n::TrF(L"{0} 项归档失败。",{std::to_wstring(res->failed)});
-   if(ok&&res->skipped)text+=L" "+i18n::TrF(L"跳过 {0} 项（分类文件夹里已有同名文件）。",{std::to_wstring(res->skipped)});
-   if(*blocked)text+=L" "+i18n::TrF(L"{0} 项没动：根目录里有一个和分类同名的文件。",{std::to_wstring(*blocked)});
-   if(res->cancelled&&ok)text+=L" "+i18n::TrF(L"已取消剩余 {0} 项。",{std::to_wstring(std::max<long long>(0,total-ok-res->skipped-res->failed-*blocked))});
-   Notify(text);
+   // 一个都没得搬时只是记下这次扫过，别为了"无事可做"弹一条提示打扰人
+   if(*total==0&&res->made.empty()&&res->failed==0&&res->skipped==0&&!*blocked){owner.Save();return;}
+   FinishArchive(res,cats,blocked,*total);
   });
 }
+void DeskWindow::FinishArchive(std::shared_ptr<shell::TransferResult> res,std::shared_ptr<long long> cats,std::shared_ptr<long long> blocked,long long total){
+ auto& v=View();
+ SyncMapped(v);
+ selected.clear();for(auto const& p:res->made)if(selected.size()<50)selected.push_back(PathKey(p));
+ focusIdx=-1;Refresh();owner.Save();
+ long long const ok=static_cast<long long>(res->made.size());
+ auto const state=OpOutcome(ok,res->failed,res->cancelled);
+ std::wstring text;
+ if(state==3)text=i18n::Tr(L"归档未完成：文件可能被占用或文件夹不可写。");
+ else if(state==4)text=i18n::Tr(L"已取消归档，未移动任何文件。");
+ else if(!ok)text=i18n::Tr(L"没有文件被移动（分类文件夹里已有同名文件）。");
+ else text=i18n::TrF(L"已把 {0} 个文件归档到 {1} 个分类文件夹。",{std::to_wstring(ok),std::to_wstring(*cats)});
+ if(ok&&res->failed)text+=L" "+i18n::TrF(L"{0} 项归档失败。",{std::to_wstring(res->failed)});
+ if(ok&&res->skipped)text+=L" "+i18n::TrF(L"跳过 {0} 项（分类文件夹里已有同名文件）。",{std::to_wstring(res->skipped)});
+ if(*blocked)text+=L" "+i18n::TrF(L"{0} 项没动：根目录里有一个和分类同名的文件。",{std::to_wstring(*blocked)});
+ if(res->cancelled&&ok)text+=L" "+i18n::TrF(L"已取消剩余 {0} 项。",{std::to_wstring(std::max<long long>(0,total-ok-res->skipped-res->failed-*blocked))});
+ Notify(text);
+}
+bool Controller::ArchiveRootBusy(std::wstring const& root,DeskWindow const& self)const{
+ // 同一个文件夹可能被两个窗口映射（同一分区的两个视图）：自动归档必须排队，不能两个 worker 并发搬同一批源文件
+ auto const key=PathKey(root);
+ for(auto const& w:windows){if(!w||w.get()==&self)continue;if(!IsWindow(w->hwnd)||!w->Busy())continue;if(PathKey(w->View().mappedFolder)==key)return true;}
+ return false;
+}
 void DeskWindow::AutoArchiveTick(){
- auto& z=Model();
- if(!z.autoArchive||opRunning||opDialog||menuOpen)return;
- auto const here=View().mappedFolder;
+ // 档期、上次时间和目标目录都取 View()：标签组里 Model() 是锚定分区，拿它会变成"按 A 的节奏搬 B 的文件夹"
+ auto& v=View();
+ if(!v.autoArchive||opRunning||opDialog||menuOpen)return;
+ auto const here=v.mappedFolder;
  if(here.empty())return;
  auto const now=NowEpoch();
- if(!ArchiveDue(z.autoArchive,z.archiveAt,now))return;
+ // 系统时钟早于 epoch 起点时 NowEpoch 给 0，那时永远"没到点"也比每 2 秒全目录重扫一遍好
+ if(now<=0)return;
+ if(!ArchiveDue(v.autoArchive,v.archiveAt,now))return;
  // 窗口刚建好的 20 秒内不动手：那时用户正在桌面上找东西，文件突然被抽走会很吓人
  if(GetTickCount64()-bornTick<20000)return;
- z.archiveAt=now;
- auto const files=ListLooseFiles(here,true,2000);
- std::vector<std::wstring> unmatched;
- auto groups=ArchivePlan(owner.layout.rules,files,&unmatched,here);
- if(groups.empty()){owner.Save();return;}
- RunArchive(std::make_shared<std::vector<ArchiveGroup>>(std::move(groups)),here);
- owner.Save();
+ if(owner.ArchiveRootBusy(here,*this))return;
+ v.archiveAt=now;
+ // 只扫根目录的散文件：递归会把用户自己分好的子目录（下载\票据\ 之类）也卷进来，没有确认框就不能擅自搬
+ RunAutoArchive(here,owner.layout.rules);
 }
 void DeskWindow::PreviewSelection(){
  auto list=navPaths.empty()?ListedPaths():navPaths;
