@@ -157,6 +157,8 @@ int LabelHeightPx(int nameLines,int textSizeTier,int chromePadding);
 int LabelAlpha(int style);
 // URL 拖入下载：只接受 http/https，文件名从路径尾部取（百分号解码+非法字符清洗），取不到就用 fallback
 bool IsHttpUrl(std::wstring const& url);
+// 托盘气泡的定长缓冲：超长直接触发 wcscpy_s 的无效参数处理器，整个进程会被终止，所以入口一律裁切
+std::wstring ClipBalloon(std::wstring const& text,size_t capacity);
 std::wstring DownloadName(std::wstring const& url,std::wstring const& contentType={});
 std::wstring ExtFromContentType(std::wstring const& contentType);
 std::vector<std::wstring> ListLooseFiles(std::wstring const& folder,bool recursive=false,size_t limit=2000);

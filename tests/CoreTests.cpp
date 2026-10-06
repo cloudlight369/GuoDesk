@@ -103,6 +103,8 @@ void RunTests(std::filesystem::path const& output){std::ofstream report(output);
  expect(DownloadName(L"https://ex.com/blob/9f2c",L"application/zip")==L"9f2c.zip","a missing extension is taken from the content type");
  expect(ExtFromContentType(L"Image/PNG; charset=x")==L"png"&&ExtFromContentType(L"application/x-unknown").empty(),"content types map only to known extensions");
  expect(IsHttpUrl(L"https://ex.com/a")&&IsHttpUrl(L"http://ex.com/a")&&!IsHttpUrl(L"file://C:/x")&&!IsHttpUrl(L"javascript:alert(1)")&&!IsHttpUrl(L"ftp://ex.com/a"),"only http and https links are downloadable");
+ expect(IsHttpUrl(L"HTTPS://ex.com/a")&&IsHttpUrl(L"hTtP://ex.com/a")&&!IsHttpUrl(L"HTTPS")&&!IsHttpUrl(L"http:ex.com"),"the scheme is case insensitive but still needs ://");
+ expect(ClipBalloon(L"abc",10)==L"abc"&&ClipBalloon(L"abcdefghij",5)==std::wstring(L"abcd\x2026")&&ClipBalloon(std::wstring(300,L'x'),255).size()==255,"balloon text is clipped to the fixed tray buffer");
  auto ddir=std::filesystem::temp_directory_path()/NewId();std::filesystem::create_directories(ddir);
  auto dcancel=std::make_shared<std::atomic<bool>>(false);
  auto noop=[](long long,long long,std::wstring const&){};

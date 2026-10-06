@@ -79,7 +79,12 @@ std::wstring ExtFromContentType(std::wstring const& type){
  head=Lower(head);for(auto const& p:map)if(head==p.first)return p.second;
  return std::wstring();
 }
-bool IsHttpUrl(std::wstring const& url){return url.starts_with(L"http://")||url.starts_with(L"https://");}
+// 方案里的 scheme 不分大小写，人手打的 HTTPS:// 也算链接；只比头 8 个字符，短的自然不匹配
+bool IsHttpUrl(std::wstring const& url){auto const head=Lower(url.substr(0,8));return head.starts_with(L"http://")||head.starts_with(L"https://");}
+std::wstring ClipBalloon(std::wstring const& text,size_t capacity){
+ if(text.size()<=capacity)return text;
+ return capacity==0?std::wstring():text.substr(0,capacity-1)+L"…";
+}
 // 规则命中判定：ext 与 lowerName 以及规则里的 exts/keywords 都必须已经小写归一；sizeKb/ageDays 为负=度量不到
 bool RuleMatches(Rule const& rule,std::wstring const& ext,std::wstring const& lowerName,long long sizeKb,long long ageDays){
  if(rule.exts.empty()&&rule.keywords.empty())return false;

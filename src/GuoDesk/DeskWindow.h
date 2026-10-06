@@ -111,9 +111,10 @@ public:
  explicit Controller(std::filesystem::path root={}); ~Controller();
  void Start(); void Save(); void ImportLayout(Layout&& next,wchar_t const* notice=L"导入完成，界面已按新配置重建。"); void HealTopology(); void Add(); int Remove(std::wstring const& id); void Refresh(); void Show(); void HideAll(); void ToggleAll(); bool ApplyHotkey(); void Quit(); void ToggleDesktop();
  void PushUndo(std::wstring const& label); std::string UndoMark(); void UndoPush(std::wstring const& label,std::string mark); void Undo(); void Toast(std::wstring const& title,std::wstring const& text);
- // 下载完成后留一个"点气泡就带我去看它"的钩子：只记最后一条
- void RevealLater(std::wstring path){pendingReveal=std::move(path);} bool RevealPending();
- std::wstring pendingReveal;
+ // 下载完成后留一个"点气泡就带我去看它"的钩子：只记最后一条，而且有过期时间——
+ // 气泡十几秒就自己没了，之后点托盘图标不该把几小时前那条下载再翻出来撑开分区
+ void RevealLater(std::wstring path){pendingReveal=std::move(path);pendingRevealAt=GetTickCount64();} bool RevealPending();
+ std::wstring pendingReveal; unsigned long long pendingRevealAt=0;
  void QuickZone(std::wstring const& tag); void UseTemplate(ZoneTemplate const& tpl);
  void ShowSettings(); void CloseSettings(); void ApplySettings();
  bool ArchiveRootBusy(std::wstring const& root,DeskWindow const& self)const;
