@@ -11,27 +11,36 @@ $root = 'D:\workspace\GuoDesk\artifacts'
 $run = Join-Path $root 'e2e3160'
 $data = Join-Path $run 'data'
 $arc = Join-Path $run 'gd3160_arc'
+$arc2 = Join-Path $run 'gd3160_clash'
 $plain = Join-Path $run 'gd3160_plain'
 $exe = Join-Path $root 'Release\GuoDesk.exe'
 $report = Join-Path $root 'e2e3160.txt'
 $titleArc = 'GuoDesk · 归档测试'
+$titleClash = 'GuoDesk · 归档冲突'
 $titlePlain = 'GuoDesk · 未映射'
 $archiveItem = '按规则归档此文件夹…'
 
 if (Test-Path $run) { Remove-Item -Recurse -Force $run }
-New-Item -ItemType Directory -Force -Path $data, $arc, $plain | Out-Null
+New-Item -ItemType Directory -Force -Path $data, $arc, $plain, (Join-Path $arc2 '文档') | Out-Null
 
 $noBom = New-Object System.Text.UTF8Encoding($false)
 foreach ($n in 'doc1.pdf', 'doc2.pdf', 'photo.png', 'keep.txt') {
   [System.IO.File]::WriteAllText((Join-Path $arc $n), "payload for $n", $noBom)
 }
 [System.IO.File]::WriteAllText((Join-Path $plain 'loose.txt'), 'nothing mapped', $noBom)
+# 冲突分区：分类里已有同名文件（不得改成 "doc1 (2).pdf" 副本），根目录里还有个和分类同名的散文件（整组必须跳过）
+foreach ($n in 'doc1.pdf', 'doc2.pdf', 'photo.png') {
+  [System.IO.File]::WriteAllText((Join-Path $arc2 $n), "clash payload for $n", $noBom)
+}
+[System.IO.File]::WriteAllText((Join-Path $arc2 '图片'), 'a file named like a category', $noBom)
+[System.IO.File]::WriteAllText((Join-Path $arc2 '文档\doc1.pdf'), 'pre-existing original', $noBom)
 
 $template = [ordered]@{
   version = 1
   zones   = @(
     [ordered]@{ id = 'za'; name = '归档测试'; x = 980; y = 150; width = 400; height = 460; collapsed = $false; mappedFolder = $arc; viewMode = 'list'; entries = @() },
-    [ordered]@{ id = 'zb'; name = '未映射'; x = 1420; y = 150; width = 380; height = 300; collapsed = $false; entries = @() }
+    [ordered]@{ id = 'zc'; name = '归档冲突'; x = 1420; y = 150; width = 400; height = 400; collapsed = $false; mappedFolder = $arc2; viewMode = 'list'; entries = @() },
+    [ordered]@{ id = 'zb'; name = '未映射'; x = 980; y = 640; width = 380; height = 260; collapsed = $false; entries = @() }
   )
   rules   = @(
     [ordered]@{ id = 'r3160a'; name = '文档'; exts = @('pdf'); keywords = @(); zone = 'za'; minSize = 0; maxSize = 0; olderThan = 0 },
@@ -354,6 +363,33 @@ if ($openedSettings) {
       $json = [System.IO.File]::ReadAllText((Join-Path $data 'layout.json'))
       Note 'gate-persisted' ($json -match '"minSize":\s*1024' -and $json -match '"olderThan":\s*30') ('min=' + $(if ($json -match '"minSize":(\d+)') { $Matches[1] } else { 'x' }))
     }
+  }
+}
+
+# C 冲突归档：分类里已有同名文件不能改成副本；根目录里和分类同名的文件要让整组跳过
+$zoneC = Find-Window $titleClash 4000
+Note 'clash-zone-found' ($null -ne $zoneC) ''
+if ($null -ne $zoneC) {
+  $openedC = Open-And-Pick $zoneC $archiveItem
+  $primaryC = Button-Like $zoneC '移动 *' 6000
+  Note 'clash-preview' ($openedC -and $null -ne $primaryC) ('button=' + $(if ($null -ne $primaryC) { $primaryC.Current.Name } else { 'none' }))
+  if ($null -ne $primaryC) {
+    [void](Invoke-El $primaryC)
+    $gotC = ''
+    $spin = (Get-Date).AddSeconds(16)
+    while ((Get-Date) -lt $spin) {
+      $t = Text-Of (Find-Window $titleClash 1500)
+      if ($t -match '(正在归档 \d+ 项|已把[^|]*归档到[^|]*|归档未完成[^|]*|没有文件被移动[^|]*)[^|]{0,140}') { $gotC = $Matches[0]; if ($gotC -notmatch '正在归档') { break } }
+      Start-Sleep -Milliseconds 120
+    }
+    $doc1Kept = (Test-Path -PathType Leaf (Join-Path $arc2 'doc1.pdf'))
+    $original = ''
+    try { $original = [System.IO.File]::ReadAllText((Join-Path $arc2 '文档\doc1.pdf')) } catch { }
+    $dup = @(Get-ChildItem (Join-Path $arc2 '文档') -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -like 'doc1 (2)*' })
+    Note 'clash-no-duplicate' ($doc1Kept -and $original -eq 'pre-existing original' -and $dup.Count -eq 0) ('rootKept=' + $doc1Kept + ' dup=' + $dup.Count)
+    Note 'clash-category-file-blocked' ((Test-Path -PathType Leaf (Join-Path $arc2 '图片')) -and (Test-Path -PathType Leaf (Join-Path $arc2 'photo.png'))) ('stillFile=' + (Test-Path -PathType Leaf (Join-Path $arc2 '图片')))
+    Note 'clash-others-moved' ((Test-Path -PathType Leaf (Join-Path $arc2 '文档\doc2.pdf')) -and -not (Test-Path -PathType Leaf (Join-Path $arc2 'doc2.pdf'))) ''
+    Note 'clash-toast-honest' ($gotC -match '已把 1 个文件归档到 1 个分类文件夹' -and $gotC -match '跳过 1 项' -and $gotC -match '项没动') ('saw=' + $gotC)
   }
 }
 

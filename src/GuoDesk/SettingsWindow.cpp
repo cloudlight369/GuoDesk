@@ -322,10 +322,13 @@ void SettingsWindow::EditRule(std::wstring ruleId){
   t->exts=SplitList(std::wstring(extBox.Text()));
   t->keywords=SplitList(std::wstring(keyBox.Text()));
   int sel=zoneBox.SelectedIndex();t->targetZone=(sel>0&&sel<=static_cast<int>(owner.layout.zones.size()))?owner.layout.zones[static_cast<size_t>(sel-1)].id:L"";
-  auto number=[](TextBox const& box){try{std::wstring s=std::wstring(box.Text());if(s.empty())return 0LL;return static_cast<long long>(std::stoll(s));}catch(...){return 0LL;}};
-  long long minSize=ClampSizeKb(number(minBox)),maxSize=ClampSizeKb(number(maxBox));
+  // 门槛填了非数字就保留原值并把输入框改回去：静默清零会让规则突然命中一大堆文件，下次归档就是误移
+  auto number=[](TextBox const& box,long long keep){std::wstring s=std::wstring(box.Text());size_t a=s.find_first_not_of(L" \t");if(a==std::wstring::npos){box.Text(L"");return 0LL;}size_t b=s.find_last_not_of(L" \t");s=s.substr(a,b-a+1);if(s.empty()){box.Text(L"");return 0LL;}
+   try{size_t pos=0;long long v=std::stoll(s,&pos);if(pos==s.size()&&v>=0)return v;}catch(...){}
+   box.Text(keep>0?std::to_wstring(keep):std::wstring());return keep;};
+  long long minSize=ClampSizeKb(number(minBox,t->minSizeKb)),maxSize=ClampSizeKb(number(maxBox,t->maxSizeKb));
   if(minSize>0&&maxSize>0&&maxSize<minSize)std::swap(minSize,maxSize);
-  t->minSizeKb=minSize;t->maxSizeKb=maxSize;t->olderThanDays=ClampAgeDays(static_cast<int>(number(ageBox)));
+  t->minSizeKb=minSize;t->maxSizeKb=maxSize;t->olderThanDays=ClampAgeDays(static_cast<int>(number(ageBox,t->olderThanDays)));
   owner.Save();RebuildRules();
  });
 }
