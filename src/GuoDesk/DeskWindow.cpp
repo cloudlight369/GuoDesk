@@ -744,17 +744,40 @@ void DeskWindow::Refresh(){auto& z=Model();auto& v=View();bool bodyFocus=listHos
  else Notify(v.entries.empty()?i18n::Tr(L"拖入文件、文件夹或应用快捷方式 · 原文件保持原位"):selected.empty()?i18n::Tr(L"双击打开 · 右键管理 · 拖拽排序 · 单击后方向键选择"):i18n::TrF(L"已选 {0} 项 · 拖出包含全部选中",{std::to_wstring(selected.size())}));
  RebuildPins();if(bodyFocus)FocusBody();}
 // Shift 状态要在 co_await 之前读：await 会让出 UI 线程，用户可能在续跑前就松开了键
-fire_and_forget DeskWindow::Drop(DragEventArgs a,size_t position,std::wstring stackId){auto deferral=a.GetDeferral();auto weak=winrt::make_weak(root);auto key=viewId;auto* controller=&owner;auto dest=TargetFolder();bool mapped=!dest.empty();int const op=DropOperation(mapped,(GetAsyncKeyState(VK_SHIFT)&0x8000)!=0);bool move=(op==2);try{auto data=a.DataView();auto zoneOf=[&](std::wstring const& kid)->Zone*{auto it=std::find_if(controller->layout.zones.begin(),controller->layout.zones.end(),[&](auto const& z){return z.id==kid;});return it==controller->layout.zones.end()?nullptr:&*it;};if(data.Contains(StandardDataFormats::StorageItems())){auto items=co_await data.GetStorageItemsAsync();if(mapped){std::vector<std::wstring> paths;for(auto const& item:items)if(!item.Path().empty())paths.push_back(std::wstring(item.Path()));if(!paths.empty())if(auto live=weak.get())live.DispatcherQueue().TryEnqueue([this,guard=alive,paths=std::move(paths),dest,move]{if(!*guard)return;DropIntoFolder(paths,dest,move);});else if(items.Size())Notify(i18n::Tr(L"拖入的项目不在磁盘上，无法放入映射文件夹。"));}else if(auto zt=zoneOf(key))for(auto const& item:items)if(!item.Path().empty()){auto pk=PathKey(std::wstring(item.Path()));if(AddEntry(*zt,std::wstring(item.Path()))&&!stackId.empty())for(auto& e:zt->entries)if(PathKey(e.path)==pk)e.stack=stackId;}}else if(data.Contains(StandardDataFormats::Text())){std::wstring text(co_await data.GetTextAsync());if(text.starts_with(L"guodesk-entry:")){auto eid=text.substr(14);controller->MoveEntry(eid,key,position);if(!stackId.empty())if(auto zt=zoneOf(key))AssignStack(*zt,eid,stackId);}else if(text.starts_with(L"guodesk-stack:")){auto rest=text.substr(14);auto bar=rest.find(L'|');if(bar!=std::wstring::npos)MoveStack(controller->layout,rest.substr(bar+1),rest.substr(0,bar),key);}}if(auto live=weak.get())live.DispatcherQueue().TryEnqueue([controller]{controller->Refresh();controller->Save();});}catch(...){if(auto live=weak.get())MessageBoxW(nullptr,i18n::Tr(L"无法添加拖入项目。").c_str(),L"GuoDesk",MB_OK);}deferral.Complete();}
+fire_and_forget DeskWindow::Drop(DragEventArgs a,size_t position,std::wstring stackId){auto deferral=a.GetDeferral();auto weak=winrt::make_weak(root);auto key=viewId;auto* controller=&owner;auto dest=TargetFolder();bool mapped=!dest.empty();int const op=DropOperation(mapped,(GetAsyncKeyState(VK_SHIFT)&0x8000)!=0);bool move=(op==2);try{auto data=a.DataView();auto zoneOf=[&](std::wstring const& kid)->Zone*{auto it=std::find_if(controller->layout.zones.begin(),controller->layout.zones.end(),[&](auto const& z){return z.id==kid;});return it==controller->layout.zones.end()?nullptr:&*it;};if(data.Contains(StandardDataFormats::StorageItems())){auto items=co_await data.GetStorageItemsAsync();if(mapped){std::vector<std::wstring> paths;for(auto const& item:items)if(!item.Path().empty())paths.push_back(std::wstring(item.Path()));if(!paths.empty())if(auto live=weak.get())live.DispatcherQueue().TryEnqueue([this,guard=alive,paths=std::move(paths),dest,move]{if(!*guard)return;DropIntoFolder(paths,dest,move);});else if(items.Size())Notify(i18n::Tr(L"拖入的项目不在磁盘上，无法放入映射文件夹。"));}else if(auto zt=zoneOf(key))for(auto const& item:items)if(!item.Path().empty()){auto pk=PathKey(std::wstring(item.Path()));if(AddEntry(*zt,std::wstring(item.Path()))&&!stackId.empty())for(auto& e:zt->entries)if(PathKey(e.path)==pk)e.stack=stackId;}}else if(data.Contains(StandardDataFormats::Uri())){auto u=co_await data.GetUriAsync();std::wstring link=u?std::wstring(u.AbsoluteUri()):std::wstring();if(!link.empty())if(auto live=weak.get())live.DispatcherQueue().TryEnqueue([this,guard=alive,link]{if(*guard)StartDownload(link);});}
+else if(data.Contains(StandardDataFormats::Text())){std::wstring text(co_await data.GetTextAsync());if(text.starts_with(L"guodesk-entry:")){auto eid=text.substr(14);controller->MoveEntry(eid,key,position);if(!stackId.empty())if(auto zt=zoneOf(key))AssignStack(*zt,eid,stackId);}else if(text.starts_with(L"guodesk-stack:")){auto rest=text.substr(14);auto bar=rest.find(L'|');if(bar!=std::wstring::npos)MoveStack(controller->layout,rest.substr(bar+1),rest.substr(0,bar),key);}}if(auto live=weak.get())live.DispatcherQueue().TryEnqueue([controller]{controller->Refresh();controller->Save();});}catch(...){if(auto live=weak.get())MessageBoxW(nullptr,i18n::Tr(L"无法添加拖入项目。").c_str(),L"GuoDesk",MB_OK);}deferral.Complete();}
 void DeskWindow::OnZoneDragOver(DragEventArgs const& a){
- // 映射分区只接受文件负载（真实落盘），普通分区保持"拖入=按引用加入口"的语义
+ // 映射分区接受文件负载（真实落盘）与网页链接（下载到该文件夹），普通分区保持"拖入=按引用加入口"的语义
  auto data=a.DataView();bool storage=data.Contains(StandardDataFormats::StorageItems());
+ bool link=!storage&&data.Contains(StandardDataFormats::Uri());
  if(!View().mappedFolder.empty()){
   int const op=DropOperation(true,(GetAsyncKeyState(VK_SHIFT)&0x8000)!=0);
-  a.AcceptedOperation(!storage?DataPackageOperation::None:(op==2?DataPackageOperation::Move:DataPackageOperation::Copy));
- }else a.AcceptedOperation(storage?DataPackageOperation::Link:DataPackageOperation::Move);
+  a.AcceptedOperation(!storage&&!link?DataPackageOperation::None:(op==2&&!link?DataPackageOperation::Move:DataPackageOperation::Copy));
+ }else a.AcceptedOperation(storage?DataPackageOperation::Link:(link?DataPackageOperation::Copy:DataPackageOperation::Move));
  a.Handled(true);
 }
 void DeskWindow::OnZoneDrop(DragEventArgs const& a){a.Handled(true);Drop(a,View().entries.size());}
+void DeskWindow::StartDownload(std::wstring url){
+ if(opRunning){Notify(i18n::Tr(L"上一个文件操作还在进行，请稍候或点击“取消”。"));return;}
+ if(!IsHttpUrl(url)){Notify(i18n::Tr(L"只能下载 http 或 https 链接。"));return;}
+ auto dir=TargetFolder();
+ bool mapped=!dir.empty();
+ if(!mapped)dir=KnownFolder(L"downloads");
+ if(dir.empty()){Notify(i18n::Tr(L"没有可以存放下载的文件夹。"));return;}
+ long long const limit=2LL*1024*1024*1024;
+ auto res=std::make_shared<shell::DownloadResult>();
+ BeginOp(i18n::Tr(L"正在下载文件…"),
+  [url,dir,res,limit](shell::CancelFlag const& cancel,shell::ProgressFn const& prog){*res=shell::DownloadFile(url,dir,cancel,prog,limit);},
+  [this,guard=alive,res,mapped]{
+   if(!*guard)return;
+   if(res->cancelled){Notify(i18n::Tr(L"已取消下载，未保留不完整的文件。"));return;}
+   if(res->tooLarge){Notify(i18n::Tr(L"下载已中止：文件超过 2 GB 上限。"));return;}
+   if(res->path.empty()){Notify(res->status?i18n::TrF(L"下载失败（HTTP {0}）。",{std::to_wstring(res->status)}):i18n::Tr(L"下载失败：链接无法访问。"));return;}
+   if(mapped){SyncMapped(View());Refresh();}else{AddEntry(View(),res->path);Refresh();}
+   owner.Save();
+   Notify(i18n::TrF(L"已下载「{0}」（{1}）。",{shell::Name(res->path),PreviewSizeText(res->bytes)}));
+  });
+}
 void DeskWindow::DropIntoFolder(std::vector<std::wstring> const& paths,std::wstring const& dest,bool move){
  if(paths.empty()||dest.empty())return;
  if(opRunning){Notify(i18n::Tr(L"上一个文件操作还在进行，请稍候或点击“取消”。"));return;}

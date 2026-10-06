@@ -28,6 +28,35 @@ long long ArchiveIntervalSeconds(int mode){return mode==1?3600LL:mode==2?86400LL
 long long NowEpoch(){FILETIME f{};GetSystemTimeAsFileTime(&f);long long t=(static_cast<long long>(f.dwHighDateTime)<<32)|f.dwLowDateTime;return t>116444736000000000LL?(t-116444736000000000LL)/10000000LL:0LL;}
 bool ArchiveDue(int mode,long long lastRun,long long now){auto const span=ArchiveIntervalSeconds(mode);if(span<=0||now<=0)return false;if(lastRun<=0||lastRun>now)return true;return now-lastRun>=span;}
 int ClampArchiveMode(int v){return (v>=0&&v<=2)?v:0;}
+static int HexDigit(wchar_t c){if(c>=L'0'&&c<=L'9')return c-L'0';if(c>=L'a'&&c<=L'f')return c-L'a'+10;if(c>=L'A'&&c<=L'F')return c-L'A'+10;return -1;}
+// 链接里的文件名要能直接当 Windows 文件名用：百分号编码还原、去禁用字符、去查询串、保留设备名加下划线
+std::wstring DownloadName(std::wstring const& url,std::wstring const& contentType){
+ auto const q=url.find_first_of(L"?#");std::wstring tail=q==std::wstring::npos?url:url.substr(0,q);
+ size_t slash=tail.find_last_of(L"/\\");std::wstring name=slash==std::wstring::npos?std::wstring():tail.substr(slash+1);
+ std::wstring out;for(size_t i=0;i<name.size();++i){wchar_t c=name[i];if(c==L'%'&&i+2<name.size()){int hi=HexDigit(name[i+1]),lo=HexDigit(name[i+2]);if(hi>=0&&lo>=0){out.push_back(static_cast<wchar_t>((hi<<4)|lo));i+=2;continue;}}out.push_back(c);}
+ std::wstring clean;for(auto c:out)if(c>=32&&wcschr(L"\\/:*?\"<>|",c)==nullptr)clean.push_back(c);
+ while(!clean.empty()&&(clean.front()==L' '||clean.front()==L'.'))clean.erase(clean.begin());
+ while(!clean.empty()&&(clean.back()==L' '||clean.back()==L'.'||clean.back()==L'/'))clean.pop_back();
+ if(clean.size()>80)clean.resize(80);
+ while(!clean.empty()&&(clean.back()==L' '||clean.back()==L'.'))clean.pop_back();
+ if(clean.empty())clean=L"download";
+ auto const dot=clean.find_last_of(L'.');std::wstring stem=dot==std::wstring::npos||dot==0?clean:clean.substr(0,dot);
+ auto const ext=dot==std::wstring::npos||dot==0?std::wstring():clean.substr(dot);
+ if(stem.find_last_of(L".")!=std::wstring::npos||IsReservedDeviceName(stem))stem+=L"_";
+ if(ext.empty()){auto const guess=ExtFromContentType(contentType);if(!guess.empty())return stem+L"."+guess;}
+ return stem+ext;
+}
+std::wstring ExtFromContentType(std::wstring const& type){
+ static const std::pair<wchar_t const*,wchar_t const*> map[]={
+  {L"image/png",L"png"},{L"image/jpeg",L"jpg"},{L"image/gif",L"gif"},{L"image/webp",L"webp"},{L"image/svg+xml",L"svg"},
+  {L"application/pdf",L"pdf"},{L"application/zip",L"zip"},{L"application/x-7z-compressed",L"7z"},{L"application/json",L"json"},
+  {L"application/octet-stream",L"bin"},{L"text/plain",L"txt"},{L"text/markdown",L"md"},{L"text/csv",L"csv"},{L"text/html",L"html"},
+  {L"video/mp4",L"mp4"},{L"audio/mpeg",L"mp3"}};
+ auto head=type;auto semi=head.find(L';');if(semi!=std::wstring::npos)head=head.substr(0,semi);
+ head=Lower(head);for(auto const& p:map)if(head==p.first)return p.second;
+ return std::wstring();
+}
+bool IsHttpUrl(std::wstring const& url){return url.starts_with(L"http://")||url.starts_with(L"https://");}
 // 规则命中判定：ext 与 lowerName 以及规则里的 exts/keywords 都必须已经小写归一；sizeKb/ageDays 为负=度量不到
 bool RuleMatches(Rule const& rule,std::wstring const& ext,std::wstring const& lowerName,long long sizeKb,long long ageDays){
  if(rule.exts.empty()&&rule.keywords.empty())return false;

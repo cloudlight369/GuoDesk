@@ -130,6 +130,10 @@ long long NowEpoch();
 long long ArchiveIntervalSeconds(int mode);
 bool ArchiveDue(int mode,long long lastRun,long long now);
 int ClampArchiveMode(int value);
+// URL 拖入下载：只接受 http/https，文件名从路径尾部取（百分号解码+非法字符清洗），取不到就用 fallback
+bool IsHttpUrl(std::wstring const& url);
+std::wstring DownloadName(std::wstring const& url,std::wstring const& contentType={});
+std::wstring ExtFromContentType(std::wstring const& contentType);
 std::vector<std::wstring> ListLooseFiles(std::wstring const& folder,bool recursive=false,size_t limit=2000);
 std::vector<std::wstring> DesktopFileList();
 std::vector<PlanItem> BuildPlan(std::vector<Rule> const& rules,std::vector<Zone> const& zones,std::vector<std::wstring> const& files,std::vector<std::wstring>* unmatched);

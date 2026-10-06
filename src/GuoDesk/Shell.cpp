@@ -5,6 +5,8 @@
 #include <shlwapi.h>
 #include <ole2.h>
 #include <oleidl.h>
+#include <winhttp.h>
+#include "WebDav.h"
 using namespace winrt;
 namespace guodesk::shell {
 HWND Handle(Microsoft::UI::Xaml::Window const& w){HWND h{};check_hresult(w.as<IWindowNative>()->get_WindowHandle(&h));return h;}
@@ -260,6 +262,67 @@ void ClipboardCopy(std::vector<std::wstring> const& paths,bool cut){
   else GlobalFree(effect);
  }
  CloseClipboard();
+}
+// 链接下载：边收边写临时文件，成功后再改名，取消或超限时把半成品删掉，绝不留一个看起来正常的残缺文件
+DownloadResult DownloadFile(std::wstring const& url,std::wstring const& destDir,CancelFlag const& cancel,ProgressFn const& progress,long long limitBytes){
+ DownloadResult r;
+ webdav::UrlParts up;
+ if(url.empty()||destDir.empty()||!IsHttpUrl(url)||!webdav::ParseUrl(url,up))return r;
+ HINTERNET session=WinHttpOpen(L"GuoDesk/1.0",WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,WINHTTP_NO_PROXY_NAME,WINHTTP_NO_PROXY_BYPASS,0);
+ if(!session)return r;
+ HINTERNET connect=WinHttpConnect(session,up.host.c_str(),(INTERNET_PORT)up.port,0);
+ HINTERNET request=connect?WinHttpOpenRequest(connect,L"GET",up.path.c_str(),nullptr,WINHTTP_NO_REFERER,WINHTTP_DEFAULT_ACCEPT_TYPES,up.scheme==L"https"?WINHTTP_FLAG_SECURE:0):nullptr;
+ do{
+  if(!request)break;
+  DWORD t=30000;for(auto opt:{WINHTTP_OPTION_CONNECT_TIMEOUT,WINHTTP_OPTION_SEND_TIMEOUT,WINHTTP_OPTION_RECEIVE_TIMEOUT})WinHttpSetOption(request,opt,&t,sizeof(t));
+  if(!WinHttpSendRequest(request,WINHTTP_NO_ADDITIONAL_HEADERS,0,WINHTTP_NO_REQUEST_DATA,0,0,0)||!WinHttpReceiveResponse(request,nullptr))break;
+  DWORD status=0,size=sizeof(status);
+  if(!WinHttpQueryHeaders(request,WINHTTP_QUERY_STATUS_CODE|WINHTTP_QUERY_FLAG_NUMBER,WINHTTP_HEADER_NAME_BY_INDEX,&status,&size,WINHTTP_NO_HEADER_INDEX))break;
+  r.status=status;
+  if(status<200||status>=300)break;
+  wchar_t meta[256]{};size=sizeof(meta)-2;std::wstring type;
+  if(WinHttpQueryHeaders(request,WINHTTP_QUERY_CONTENT_TYPE,WINHTTP_HEADER_NAME_BY_INDEX,meta,&size,WINHTTP_NO_HEADER_INDEX))type=meta;
+  size=0;std::wstring finalUrl;
+  {wchar_t buf[2048]{};size=sizeof(buf)-2;if(WinHttpQueryOption(request,WINHTTP_OPTION_URL,buf,&size))finalUrl=buf;}
+  DWORD len=0;
+  if(WinHttpQueryHeaders(request,WINHTTP_QUERY_CONTENT_LENGTH,WINHTTP_HEADER_NAME_BY_INDEX,&len,WINHTTP_NO_HEADER_INDEX,WINHTTP_NO_HEADER_INDEX))r.total=len;
+  auto const name=DownloadName(finalUrl.empty()?url:finalUrl,type);
+  auto const dot=name.find_last_of(L'.');
+  auto stem=(dot==std::wstring::npos||dot==0)?name:name.substr(0,dot);
+  auto ext=(dot==std::wstring::npos||dot==0)?std::wstring():name.substr(dot);
+  std::filesystem::path dir(destDir);
+  auto const finalName=UniqueName(ExistingNames(destDir),stem,ext);
+  auto target=dir/finalName;
+  auto temp=std::filesystem::path(target.wstring()+L".guodesk-part");
+  HANDLE file=CreateFileW(temp.c_str(),GENERIC_WRITE,0,nullptr,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
+  if(file==INVALID_HANDLE_VALUE){r.status=0;break;}
+  bool failed=false;
+  char buf[65536];
+  while(true){
+   if(cancel&&cancel->load()){r.cancelled=true;break;}
+   DWORD avail=0;
+   if(!WinHttpQueryDataAvailable(request,&avail))break;
+   if(avail==0)break;
+   while(avail>0){
+    DWORD got=0;
+    if(!WinHttpReadData(request,buf,avail>sizeof(buf)?(DWORD)sizeof(buf):avail,&got)||got==0){failed=true;break;}
+    DWORD wrote=0;
+    if(!WriteFile(file,buf,got,&wrote,nullptr)||wrote!=got){failed=true;break;}
+    r.bytes+=got;avail-=got;
+    if(limitBytes>0&&r.bytes>limitBytes){r.tooLarge=true;break;}
+   }
+   if(failed||r.tooLarge)break;
+   if(progress)progress(r.bytes,r.total,std::wstring());
+  }
+  CloseHandle(file);
+  if(r.cancelled||failed||r.tooLarge){DeleteFileW(temp.c_str());break;}
+  if(!MoveFileExW(temp.c_str(),target.c_str(),MOVEFILE_WRITE_THROUGH)){DeleteFileW(temp.c_str());failed=true;break;}
+  r.path=target.wstring();
+ }while(false);
+ if(request)WinHttpCloseHandle(request);
+ if(connect)WinHttpCloseHandle(connect);
+ WinHttpCloseHandle(session);
+ return r;
 }
 TransferResult TransferFiles(std::vector<std::wstring> const& sources,std::wstring const& destDir,bool move,CancelFlag const& cancel,ProgressFn const& progress){
  TransferResult r;
