@@ -630,6 +630,8 @@ void DeskWindow::Menu(FrameworkElement const& target){auto& z=Model();auto& v=Vi
   ToggleMenuFlyoutItem desc;desc.Text(i18n::Tr(L"降序"));desc.IsChecked(v.sortDescending);desc.Click([this](auto&&,auto&&){auto& m=View();m.sortDescending=!m.sortDescending;if(!m.sortKey.empty())SortEntries(m,SortKeyFromString(m.sortKey),m.sortDescending);Refresh();owner.Save();});
   sort.Items().Append(desc);sort.Text(i18n::Tr(L"排序"));menu.Items().Append(sort);}
  menu.Items().Append(MenuItem(i18n::TrF(L"图标大小：{0}（点击切换）",{std::wstring(i18n::Tr(v.tileSize==0?L"小":v.tileSize==1?L"中":L"大"))}),[this]{auto& m=View();m.tileSize=(m.tileSize+1)%3;Refresh();owner.Save();}));
+ {static wchar_t const* grids[]={L"单图",L"3×3 宫格",L"4×4 宫格",L"5×5 宫格"};
+  menu.Items().Append(MenuItem(i18n::TrF(L"叠放缩略图：{0}（点击切换）",{std::wstring(i18n::Tr(grids[ClampStackGrid(v.stackGrid)]))}),[this]{auto& m=View();m.stackGrid=ClampStackGrid((m.stackGrid+1)%4);Refresh();owner.Save();Notify(i18n::TrF(L"叠放缩略图已设为{0}。",{std::wstring(i18n::Tr(grids[m.stackGrid]))}));}));}
  menu.Items().Append(MenuItem(i18n::TrF(L"文件名：{0}（点击切换）",{std::wstring(v.nameLines==0?i18n::Tr(L"隐藏"):v.nameLines==1?i18n::Tr(L"一行"):i18n::Tr(L"两行"))}),[this]{auto& m=View();m.nameLines=m.nameLines==0?2:m.nameLines-1;Refresh();owner.Save();}));
  {MenuFlyoutSubItem colors;colors.Text(i18n::Tr(L"主题色"));static wchar_t const* names[8]={L"红色",L"橙色",L"黄色",L"绿色",L"青色",L"蓝色",L"紫色",L"粉色"};
   auto swatchIcon=[](unsigned rgb){FontIcon ic;ic.Glyph(L"\u25A0");ic.FontFamily(FontFamily(L"Segoe UI Symbol"));ic.FontSize(16);ic.Foreground(SolidColorBrush(Windows::UI::Color{255,static_cast<uint8_t>((rgb>>16)&0xFF),static_cast<uint8_t>((rgb>>8)&0xFF),static_cast<uint8_t>(rgb&0xFF)}));return ic;};
@@ -705,7 +707,25 @@ void DeskWindow::Refresh(){auto& z=Model();auto& v=View();bool bodyFocus=listHos
   Grid wrap;wrap.Width(TW[tier]+8);wrap.Height(TH[tier]+8);
   Border back;back.Width(TW[tier]);back.Height(TH[tier]);back.CornerRadius(CornerRadius{8,8,8,8});back.Background(ThemeBrush(L"CardBackgroundFillColorSecondary",Windows::UI::Color{255,80,80,80}));back.Opacity(0.6);back.HorizontalAlignment(HorizontalAlignment::Right);back.VerticalAlignment(VerticalAlignment::Bottom);
   Border front;front.Width(TW[tier]);front.Height(TH[tier]);front.Padding(Thickness{4,4,4,4});front.CornerRadius(CornerRadius{8,8,8,8});front.Background(ThemeBrush(L"CardBackgroundFillColorDefault",Windows::UI::Color{255,60,60,60}));front.HorizontalAlignment(HorizontalAlignment::Left);front.VerticalAlignment(VerticalAlignment::Top);front.AllowDrop(!mapped);ToolTipService::SetToolTip(front,box_value(i18n::TrF(L"叠放 · {0} 项（双击展开）",{std::to_wstring(count)})));
-  StackPanel content;content.Spacing(5);Image icon;icon.Width(TI[tier]);icon.Height(TI[tier]);content.Children().Append(icon);shell::LoadIcon(path,icon);TextBlock label;label.Text((exists?L"":L"⚠ ")+shell::Name(path));label.FontSize(ScaledFont(owner.layout.settings.textSize,12));label.TextAlignment(TextAlignment::Center);label.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,180,180,180}));if(v.nameLines==0)label.Visibility(Visibility::Collapsed);else if(v.nameLines==1){label.TextWrapping(TextWrapping::NoWrap);label.TextTrimming(TextTrimming::CharacterEllipsis);label.MaxHeight(18);}else{label.TextWrapping(TextWrapping::Wrap);label.MaxHeight(36);}content.Children().Append(label);front.Child(content);
+  StackPanel content;content.Spacing(5);
+  // 宫格预览：一叠里有多少东西，缩略图上就能看见多少张（3×3/4×4/5×5），只加载前 N 个图标
+  int const cells=StackCells(v.stackGrid);
+  if(cells>1&&count>1){
+   int const side=cells==9?3:cells==16?4:5;
+   Grid mosaic;mosaic.Width(TI[tier]+10);mosaic.Height(TI[tier]+10);mosaic.HorizontalAlignment(HorizontalAlignment::Center);
+   for(int k=0;k<side;++k){RowDefinition rd;rd.Height(GridLength{1,GridUnitType::Star});mosaic.RowDefinitions().Append(rd);ColumnDefinition cd;cd.Width(GridLength{1,GridUnitType::Star});mosaic.ColumnDefinitions().Append(cd);}
+   int shown=0;
+   for(auto const& x:v.entries){
+    if(x.stack!=sid||shown>=cells)continue;
+    Border cell;cell.Margin(Thickness{1,1,1,1});cell.CornerRadius(CornerRadius{3,3,3,3});cell.Background(ThemeBrush(L"SubtleFillColorSecondary",Windows::UI::Color{255,70,70,70}));
+    Image mini;mini.Width(TI[tier]/side*2);mini.Height(TI[tier]/side*2);mini.HorizontalAlignment(HorizontalAlignment::Center);mini.VerticalAlignment(VerticalAlignment::Center);
+    cell.Child(mini);shell::LoadIcon(x.path,mini);
+    Grid::SetRow(cell,shown/side);Grid::SetColumn(cell,shown%side);
+    mosaic.Children().Append(cell);++shown;
+   }
+   content.Children().Append(mosaic);
+  }else{Image icon;icon.Width(TI[tier]);icon.Height(TI[tier]);icon.HorizontalAlignment(HorizontalAlignment::Center);content.Children().Append(icon);shell::LoadIcon(path,icon);}
+  TextBlock label;label.Text((exists?L"":L"⚠ ")+shell::Name(path));label.FontSize(ScaledFont(owner.layout.settings.textSize,12));label.TextAlignment(TextAlignment::Center);label.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,180,180,180}));if(v.nameLines==0)label.Visibility(Visibility::Collapsed);else if(v.nameLines==1){label.TextWrapping(TextWrapping::NoWrap);label.TextTrimming(TextTrimming::CharacterEllipsis);label.MaxHeight(18);}else{label.TextWrapping(TextWrapping::Wrap);label.MaxHeight(36);}content.Children().Append(label);front.Child(content);
   Border badge;badge.Width(20);badge.Height(20);badge.CornerRadius(CornerRadius{10,10,10,10});badge.Background(SolidColorBrush(Windows::UI::Color{255,0,120,212}));badge.HorizontalAlignment(HorizontalAlignment::Right);badge.VerticalAlignment(VerticalAlignment::Top);badge.Margin(Thickness{0,0,3,0});TextBlock cnt;cnt.Text(std::to_wstring(count));cnt.FontSize(11);cnt.Foreground(SolidColorBrush(Windows::UI::Colors::White()));cnt.HorizontalAlignment(HorizontalAlignment::Center);cnt.VerticalAlignment(VerticalAlignment::Center);badge.Child(cnt);
   wrap.Children().Append(back);wrap.Children().Append(front);wrap.Children().Append(badge);
   MenuFlyout pmenu;pmenu.Items().Append(MenuItem(i18n::Tr(L"展开叠放"),[this,sid]{expandedStack=sid;Refresh();}));

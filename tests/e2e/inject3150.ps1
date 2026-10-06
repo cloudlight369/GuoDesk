@@ -323,3 +323,6 @@ Start-Sleep -Milliseconds 500
 Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue
 Start-Sleep -Milliseconds 600
 $results | Set-Content -Path $report -Encoding UTF8
+
+$fails = @($results | Where-Object { $_ -like "FAIL*" })
+Write-Output ("SUMMARY passed={0} failed={1}" -f ($results.Count - $fails.Count), $fails.Count)
