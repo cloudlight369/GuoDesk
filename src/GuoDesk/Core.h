@@ -3,7 +3,7 @@
 namespace guodesk {
 struct Entry { std::wstring id, path; std::wstring stack; };
 struct Stack { std::wstring id, name; };
-struct Zone { std::wstring id, name=L"常用"; int x=120,y=120,width=440,height=360; bool collapsed=false; std::vector<Entry> entries; std::wstring mappedFolder; std::wstring viewMode=L"grid"; int nameLines=2; std::wstring sortKey; bool sortDescending=false; int tileSize=1; std::wstring mon; int mx=0,my=0; std::vector<Stack> stacks; std::wstring group; int groupTab=0; bool capsule=false; bool browseInPlace=true; std::wstring browseFolder; int color=0; std::wstring background; int dim=1; std::vector<std::wstring> pins; int opacity=100; int expandDir=0; int maxHeight=0; bool locked=false; };
+struct Zone { std::wstring id, name=L"常用"; int x=120,y=120,width=440,height=360; bool collapsed=false; std::vector<Entry> entries; std::wstring mappedFolder; std::wstring viewMode=L"grid"; int nameLines=2; std::wstring sortKey; bool sortDescending=false; int tileSize=1; std::wstring mon; int mx=0,my=0; std::vector<Stack> stacks; std::wstring group; int groupTab=0; bool capsule=false; bool browseInPlace=true; std::wstring browseFolder; int color=0; std::wstring background; int dim=1; std::vector<std::wstring> pins; int opacity=100; int expandDir=0; int maxHeight=0; bool locked=false; int autoArchive=0; long long archiveAt=0; };
 struct Settings { std::wstring theme; bool compact=false; std::wstring language; std::wstring hotkey=L"Ctrl+Alt+G"; bool snapshots=true; bool guideDone=false; std::wstring hotkeySearch; std::wstring hotkeyCapture; std::wstring hotkeyUndo=L"Ctrl+Alt+U"; bool performance=false; std::wstring syncUrl,syncUser,syncPass; bool syncAuto=false; bool syncInsecure=false; int textSize=1; std::wstring clockStyle; bool everything=true; bool tabHover=true; bool memTrim=true; std::wstring revealHotkey,hotkeyRaise; int backdrop=0; std::vector<std::wstring> searchHistory,searchFavorites; };
 struct Rule { std::wstring id, name; std::vector<std::wstring> exts, keywords; std::wstring targetZone; long long minSizeKb=0, maxSizeKb=0; int olderThanDays=0; };
 struct TodoItem { std::wstring id, text; bool done=false; long long due=0; bool reminded=false; int flag=0; int repeat=0; };
@@ -124,7 +124,12 @@ int ClampAgeDays(int value);
 bool RuleMatches(Rule const& rule,std::wstring const& ext,std::wstring const& lowerName,long long sizeKb,long long ageDays);
 std::wstring CategoryFolder(std::wstring const& name,std::wstring const& fallback);
 struct ArchiveGroup { std::wstring category; std::vector<std::wstring> paths; };
-std::vector<ArchiveGroup> ArchivePlan(std::vector<Rule> const& rules,std::vector<std::wstring> const& files,std::vector<std::wstring>* unmatched);
+std::vector<ArchiveGroup> ArchivePlan(std::vector<Rule> const& rules,std::vector<std::wstring> const& files,std::vector<std::wstring>* unmatched,std::wstring const& root={});
+// 自动归档的排程：mode 0=关闭 1=每小时 2=每天，lastRun=0 表示从未跑过（立刻该跑）
+long long NowEpoch();
+long long ArchiveIntervalSeconds(int mode);
+bool ArchiveDue(int mode,long long lastRun,long long now);
+int ClampArchiveMode(int value);
 std::vector<std::wstring> ListLooseFiles(std::wstring const& folder,bool recursive=false,size_t limit=2000);
 std::vector<std::wstring> DesktopFileList();
 std::vector<PlanItem> BuildPlan(std::vector<Rule> const& rules,std::vector<Zone> const& zones,std::vector<std::wstring> const& files,std::vector<std::wstring>* unmatched);

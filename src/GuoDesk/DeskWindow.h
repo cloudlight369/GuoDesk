@@ -74,8 +74,10 @@ class DeskWindow {
  void OpTick(); void CancelOp();
  bool rootDragHooked=false; bool dragArmed=false; long dragSX=0; long dragSY=0; std::wstring dragPath;
 public:
- std::wstring id; std::wstring viewId; bool menuOpen=false; std::shared_ptr<bool> alive{std::make_shared<bool>(true)};
+ std::wstring id; std::wstring viewId; bool menuOpen=false; unsigned long long bornTick=GetTickCount64(); std::shared_ptr<bool> alive{std::make_shared<bool>(true)};
  Zone& View();
+ // Controller 的 2 秒心跳调用：到点就对映射文件夹做一次静默归档
+ void AutoArchiveTick();
  winrt::Microsoft::UI::Xaml::Window window{nullptr}; HWND hwnd{};
  DeskWindow(Controller&,std::wstring);
  ~DeskWindow();

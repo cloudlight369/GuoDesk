@@ -389,6 +389,23 @@ void DeskWindow::RunArchive(std::shared_ptr<std::vector<ArchiveGroup>> plan,std:
    Notify(text);
   });
 }
+void DeskWindow::AutoArchiveTick(){
+ auto& z=Model();
+ if(!z.autoArchive||opRunning||opDialog||menuOpen)return;
+ auto const here=View().mappedFolder;
+ if(here.empty())return;
+ auto const now=NowEpoch();
+ if(!ArchiveDue(z.autoArchive,z.archiveAt,now))return;
+ // 窗口刚建好的 20 秒内不动手：那时用户正在桌面上找东西，文件突然被抽走会很吓人
+ if(GetTickCount64()-bornTick<20000)return;
+ z.archiveAt=now;
+ auto const files=ListLooseFiles(here,true,2000);
+ std::vector<std::wstring> unmatched;
+ auto groups=ArchivePlan(owner.layout.rules,files,&unmatched,here);
+ if(groups.empty()){owner.Save();return;}
+ RunArchive(std::make_shared<std::vector<ArchiveGroup>>(std::move(groups)),here);
+ owner.Save();
+}
 void DeskWindow::PreviewSelection(){
  auto list=navPaths.empty()?ListedPaths():navPaths;
  if(list.empty()){Notify(i18n::Tr(L"没有可预览的条目。"));return;}
@@ -593,6 +610,9 @@ void DeskWindow::Menu(FrameworkElement const& target){auto& z=Model();auto& v=Vi
   MenuFlyoutSubItem dir;dir.Text(i18n::Tr(L"展开方向"));
   for(int k=0;k<4;++k){MenuFlyoutItem it;it.Text(i18n::Tr(ExpandDirName(k)));if(z.expandDir==k)it.Icon(tick());auto dd=k;it.Click([this,dd](auto&&,auto&&){auto& m=Model();m.expandDir=ClampExpandDir(dd);Refresh();owner.Save();Notify(i18n::TrF(L"展开方向已设为「{0}」。",{std::wstring(i18n::Tr(ExpandDirName(dd)))}));});dir.Items().Append(it);}
   menu.Items().Append(dir);
+  if(mapped){MenuFlyoutSubItem autoSub;autoSub.Text(i18n::Tr(L"自动归档"));static wchar_t const* modes[]={L"关闭",L"每小时一次",L"每天一次"};
+   for(int k=0;k<3;++k){MenuFlyoutItem it;it.Text(i18n::Tr(modes[k]));if(z.autoArchive==k)it.Icon(tick());auto md=k;it.Click([this,md](auto&&,auto&&){auto& m=Model();m.autoArchive=ClampArchiveMode(md);m.archiveAt=0;owner.Save();Notify(md?i18n::TrF(L"自动归档已设为{0}：符合规则的文件会自动归入分类子文件夹。",{std::wstring(i18n::Tr(modes[md]))}):i18n::Tr(L"自动归档已关闭。"));});autoSub.Items().Append(it);}
+   menu.Items().Append(autoSub);}
   MenuFlyoutSubItem mh;mh.Text(i18n::Tr(L"展开高度上限"));
   auto addH=[&](wchar_t const* label,int pct){MenuFlyoutItem it;it.Text(i18n::Tr(label));if(z.maxHeight==pct)it.Icon(tick());it.Click([this,pct](auto&&,auto&&){auto& m=Model();int was=m.maxHeight,now=ClampMaxHeight(pct);if(was==now)return;m.maxHeight=now;RECT wk=WorkRect();int work=wk.bottom-wk.top;Reanchor(ZoneExpandedHeight(m.height,was,work),ZoneExpandedHeight(m.height,now,work));Place();Refresh();owner.Save();std::wstring shown=pct==0?std::wstring(i18n::Tr(L"不限")):std::to_wstring(pct)+L"%";Notify(i18n::TrF(L"展开高度上限已设为 {0}。",{shown}));});mh.Items().Append(it);};
   addH(L"不限",0);addH(L"25%",25);addH(L"50%",50);addH(L"75%",75);addH(L"100%",100);menu.Items().Append(mh);
@@ -890,7 +910,7 @@ static void TrimMemoryIfIdle(){
 LRESULT CALLBACK Controller::MessageProc(HWND h,UINT msg,WPARAM w,LPARAM l){auto* self=reinterpret_cast<Controller*>(GetWindowLongPtrW(h,GWLP_USERDATA));if(msg==WM_NCCREATE){self=static_cast<Controller*>(reinterpret_cast<CREATESTRUCTW*>(l)->lpCreateParams);SetWindowLongPtrW(h,GWLP_USERDATA,reinterpret_cast<LONG_PTR>(self));}if(!self)return DefWindowProcW(h,msg,w,l);try{if(msg==self->taskbarCreated&&self->taskbarCreated){self->AddTray();if(self->desktopMode){if(self->raising)self->EndRaise();self->host=shell::DesktopHost();for(auto& item:self->windows)if(IsWindow(item->hwnd))item->SetDesktop(true);}}if(msg==WM_TIMER&&w==1){if(self->desktopMode){auto host=shell::DesktopHost();if(host&&host!=self->host){self->host=host;if(!self->raising)for(auto& item:self->windows)if(IsWindow(item->hwnd))item->SetDesktop(true);}}if(!self->raising)for(auto& item:self->windows)if(IsWindow(item->hwnd))item->EmbedRetry();
  if(self->raising&&!(g_raiseKey.vk&&(GetAsyncKeyState(g_raiseKey.vk)&0x8000)&&RevealModsDown(g_raiseKey.mods)))self->EndRaise();
  if(self->revealShowing&&!(g_revealKey.vk&&(GetAsyncKeyState(g_revealKey.vk)&0x8000)&&RevealModsDown(g_revealKey.mods)))self->RevealEnd();
- for(auto& z:self->layout.zones){if(z.mappedFolder.empty())continue;auto stamp=StampOf(z.mappedFolder);if(stamp.empty())continue;auto key=PathKey(z.mappedFolder);auto it=self->mappedStamp.find(key);if(it==self->mappedStamp.end()){self->mappedStamp[key]=stamp;continue;}if(it->second!=stamp){it->second=stamp;SyncMapped(z);for(auto& item:self->windows)if(item->id==z.id||item->viewId==z.id)item->Refresh();}}self->CheckReminders();static int healTick=0;if((++healTick%5)==0){self->ApplyHotkey();self->HealTopology();}if(self->layout.settings.memTrim)TrimMemoryIfIdle();}if(msg==WM_TIMER&&w==2){KillTimer(h,2);self->SyncUploadAuto();return 0;}if(msg==WM_APP+3){for(auto& item:self->windows)item->Notify(i18n::Tr(L"自动同步上传失败：请检查网络或 WebDAV 设置。"));return 0;}if(msg==WM_APP+2){self->Show();if(!self->windows.empty())SetForegroundWindow(self->windows.front()->hwnd);return 0;}if(msg==WM_HOTKEY&&w==1){self->ToggleAll();return 0;}if(msg==WM_HOTKEY&&w==2){self->ShowSearch();return 0;}if(msg==WM_HOTKEY&&w==3){self->ShowCapture();return 0;}if(msg==WM_HOTKEY&&w==4){self->Undo();return 0;}if(msg==WM_APP+4){self->ToggleAll();return 0;}if(msg==WM_APP+5){self->RevealBegin();return 0;}if(msg==WM_APP+6){self->RevealEnd();return 0;}if(msg==WM_APP+7){self->StartRaise();return 0;}if(msg==WM_APP+8){self->EndRaise();return 0;}if(msg==WM_APP+1){if(l==WM_LBUTTONUP)self->Show();if(l==WM_RBUTTONUP){HMENU menu=CreatePopupMenu();AppendMenuW(menu,MF_STRING,1,i18n::Tr(L"新增分区").c_str());
+ for(auto& z:self->layout.zones){if(z.mappedFolder.empty())continue;auto stamp=StampOf(z.mappedFolder);if(stamp.empty())continue;auto key=PathKey(z.mappedFolder);auto it=self->mappedStamp.find(key);if(it==self->mappedStamp.end()){self->mappedStamp[key]=stamp;continue;}if(it->second!=stamp){it->second=stamp;SyncMapped(z);for(auto& item:self->windows)if(item->id==z.id||item->viewId==z.id)item->Refresh();}}self->CheckReminders();for(auto& item:self->windows)if(IsWindow(item->hwnd))item->AutoArchiveTick();static int healTick=0;if((++healTick%5)==0){self->ApplyHotkey();self->HealTopology();}if(self->layout.settings.memTrim)TrimMemoryIfIdle();}if(msg==WM_TIMER&&w==2){KillTimer(h,2);self->SyncUploadAuto();return 0;}if(msg==WM_APP+3){for(auto& item:self->windows)item->Notify(i18n::Tr(L"自动同步上传失败：请检查网络或 WebDAV 设置。"));return 0;}if(msg==WM_APP+2){self->Show();if(!self->windows.empty())SetForegroundWindow(self->windows.front()->hwnd);return 0;}if(msg==WM_HOTKEY&&w==1){self->ToggleAll();return 0;}if(msg==WM_HOTKEY&&w==2){self->ShowSearch();return 0;}if(msg==WM_HOTKEY&&w==3){self->ShowCapture();return 0;}if(msg==WM_HOTKEY&&w==4){self->Undo();return 0;}if(msg==WM_APP+4){self->ToggleAll();return 0;}if(msg==WM_APP+5){self->RevealBegin();return 0;}if(msg==WM_APP+6){self->RevealEnd();return 0;}if(msg==WM_APP+7){self->StartRaise();return 0;}if(msg==WM_APP+8){self->EndRaise();return 0;}if(msg==WM_APP+1){if(l==WM_LBUTTONUP)self->Show();if(l==WM_RBUTTONUP){HMENU menu=CreatePopupMenu();AppendMenuW(menu,MF_STRING,1,i18n::Tr(L"新增分区").c_str());
  {static wchar_t const* tags[]={L"downloads",L"documents",L"pictures",L"music",L"videos"};HMENU quick=CreatePopupMenu();for(int i=0;i<5;++i)AppendMenuW(quick,MF_STRING,21+i,KnownFolderName(tags[i]).c_str());AppendMenuW(menu,MF_POPUP,(UINT_PTR)quick,i18n::Tr(L"快速分区").c_str());
   auto tpls=BuiltInTemplates();HMENU tmenu=CreatePopupMenu();for(int i=0;i<static_cast<int>(tpls.size());++i)AppendMenuW(tmenu,MF_STRING,31+i,i18n::Tr(tpls[i].name).c_str());AppendMenuW(menu,MF_POPUP,(UINT_PTR)tmenu,i18n::Tr(L"分区模板").c_str());}
 AppendMenuW(menu,MF_STRING,2,i18n::Tr(L"显示全部").c_str());AppendMenuW(menu,MF_STRING,9,i18n::Tr(L"全部隐藏").c_str());AppendMenuW(menu,MF_STRING,3,self->desktopMode?i18n::Tr(L"切换普通窗口").c_str():i18n::Tr(L"试验桌面嵌入").c_str());AppendMenuW(menu,MF_STRING,6,i18n::Tr(L"整理桌面…").c_str());AppendMenuW(menu,MF_STRING|(self->layout.widgets.noteVisible?MF_CHECKED:0),7,i18n::Tr(L"便签").c_str());AppendMenuW(menu,MF_STRING|(self->layout.widgets.todoVisible?MF_CHECKED:0),8,i18n::Tr(L"待办").c_str());AppendMenuW(menu,MF_STRING|(self->layout.widgets.clockVisible?MF_CHECKED:0),10,i18n::Tr(L"时钟").c_str());AppendMenuW(menu,MF_STRING|(self->layout.widgets.musicVisible?MF_CHECKED:0),11,i18n::Tr(L"音乐").c_str());AppendMenuW(menu,MF_STRING,12,i18n::Tr(L"搜索").c_str());AppendMenuW(menu,MF_STRING|(self->layout.widgets.weatherVisible?MF_CHECKED:0),13,i18n::Tr(L"天气").c_str());AppendMenuW(menu,MF_STRING|(self->layout.widgets.appGridVisible?MF_CHECKED:0),16,i18n::Tr(L"应用网格").c_str());AppendMenuW(menu,MF_STRING,14,i18n::Tr(L"快速捕获…").c_str());
