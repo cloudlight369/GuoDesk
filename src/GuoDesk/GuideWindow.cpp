@@ -1,4 +1,5 @@
-#include "pch.h"
+﻿#include "pch.h"
+#include <algorithm>
 #include "GuideWindow.h"
 #include "DeskWindow.h"
 #include "Shell.h"
@@ -35,8 +36,10 @@ GuideWindow::GuideWindow(Controller& c):owner(c){
   {L"就地浏览",L"双击映射分区里的文件夹即可就地浏览，顶部面包屑一键返回。"},
   {L"快速捕获",L"随时从托盘或热键唤起捕获框：Enter 记入便签，Ctrl+Enter 存为待办。"},
   {L"个性化",L"设置里可选三档文字大小与数字/模拟两种时钟样式，改动立即生效。"},
+  {L"从链接下载",L"分区右键 →「从链接下载…」，粘贴 http/https 链接就能下到该分区的映射文件夹，完成后自动选中那个文件。"},
+  {L"点角标摊开这一叠",L"叠放磁贴右下角的数字可以点：在分区外面摊开这一叠，单击打开、Ctrl 单击多选、按住直接拖出去，分区高度一点不动。"},
  };
- for(int i=0;i<9;++i){
+ for(int i=0;i<static_cast<int>(sizeof(steps)/sizeof(steps[0]));++i){
   auto row=Grid();row.Margin(Thickness{0,0,0,18});
   ColumnDefinition badgeCol;badgeCol.Width(GridLength{0,GridUnitType::Auto});row.ColumnDefinitions().Append(badgeCol);
   ColumnDefinition textCol;textCol.Width(GridLength{1,GridUnitType::Star});row.ColumnDefinitions().Append(textCol);
@@ -53,12 +56,23 @@ GuideWindow::GuideWindow(Controller& c):owner(c){
  auto start=Button();start.Content(box_value(i18n::Tr(L"开始使用")));try{start.Style(Application::Current().Resources().Lookup(box_value(L"AccentButtonStyle")).as<Style>());}catch(...){}
  start.HorizontalAlignment(HorizontalAlignment::Left);start.Margin(Thickness{0,8,0,0});
  start.Click([this](auto&&,auto&&){owner.layout.settings.guideDone=true;owner.Save();window.DispatcherQueue().TryEnqueue([this]{owner.CloseGuide();});});
- page.Children().Append(start);
  scroll.Content(page);scroll.VerticalScrollBarVisibility(ScrollBarVisibility::Auto);
- window.Content(scroll);
+ // 「开始使用」钉在底部：条目一多就会被滚走，主操作不该要靠滚动才找得到
+ Border bar;bar.Padding(Thickness{32,0,32,18});bar.Child(start);
+ Grid host;
+ {RowDefinition r0;r0.Height(GridLength{1,GridUnitType::Star});host.RowDefinitions().Append(r0);RowDefinition r1;r1.Height(GridLength{0,GridUnitType::Auto});host.RowDefinitions().Append(r1);
+  Grid::SetRow(scroll,0);Grid::SetRow(bar,1);host.Children().Append(scroll);host.Children().Append(bar);}
+ window.Content(host);
  window.Closed([this](auto&&,auto&&){if(closing)return;closing=true;window.DispatcherQueue().TryEnqueue([this]{owner.CloseGuide();});});
  window.Activate();
- SetWindowPos(hwnd,nullptr,0,0,560,640,SWP_NOMOVE|SWP_NOZORDER);
+ // 高度跟着条目数长，但不超过工作区的八成，也不许小于能看清首屏的尺寸
+ int const dpi=GetDpiForWindow(hwnd)?GetDpiForWindow(hwnd):96;
+ MONITORINFOEXW mi{sizeof(mi)};
+ if(!GetMonitorInfoW(MonitorFromWindow(hwnd,MONITOR_DEFAULTTONEAREST),&mi))mi.rcWork=RECT{0,0,1280,1024};
+ int const rows=static_cast<int>(sizeof(steps)/sizeof(steps[0]));
+ int const ww=MulDiv(560,dpi,96),h=GuideWindowHeight(rows,dpi,mi.rcWork.bottom-mi.rcWork.top);
+ // 位置跟着一起定：只改尺寸会原地往下长，工作区矮的时候「开始使用」正好长到屏幕外面
+ SetWindowPos(hwnd,nullptr,mi.rcWork.left+((mi.rcWork.right-mi.rcWork.left)-ww)/2,mi.rcWork.top+((mi.rcWork.bottom-mi.rcWork.top)-h)/2,ww,h,SWP_NOZORDER);
 }
 void GuideWindow::Show(){window.Activate();}
 GuideWindow::~GuideWindow(){closing=true;try{window.Closed(nullptr);}catch(...){}if(IsWindow(hwnd))window.Close();}

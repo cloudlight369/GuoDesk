@@ -32,6 +32,13 @@ int ClampStackGrid(int v){return (v>=0&&v<=3)?v:0;}
 int StackCells(int mode){return mode==1?9:mode==2?16:mode==3?25:1;}
 // 浮层按件数取刚好够得着的正方形：2~4 件两列，5~9 三列，10~16 四列，再往上五列封顶（25 格以外不再摊开）
 int StackPeekSide(int count){ return count<=4?2:count<=9?3:count<=16?4:5; }
+// 引导窗口按条目数长高，但工作区只有那么点：封顶 85%，小屏时连"首屏 420 DIP"也让给屏幕，别让主按钮掉到外面
+int GuideWindowHeight(int rows,int dpi,int workHeight){
+ if(dpi<96)dpi=96;
+ if(workHeight<240)workHeight=240;// 工作区读数异常时也要留一块能点到的窗口，负高度会让 SetWindowPos 摆出个看不见的窗
+ int const want=MulDiv(232+rows*78,dpi,96),cap=MulDiv(workHeight,85,100);
+ return std::max(std::min(MulDiv(420,dpi,96),cap),std::min(want,cap));
+}
 int StackSide(int availPx,int mode){
  auto const grid=ClampStackGrid(mode);
  int const want=grid==1?3:grid==2?4:grid==3?5:1;

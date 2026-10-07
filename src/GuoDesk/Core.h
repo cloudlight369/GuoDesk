@@ -143,6 +143,8 @@ int ClampStackGrid(int value);
 int StackCells(int mode);
 // 弹出浮层的列数：按叠放件数取刚好够的正方形（2..5），跟磁贴画不画得下无关
 int StackPeekSide(int count);
+// 引导窗口的高度（物理像素）：按条目数长，但封顶在工作区高的 85%，小屏时宁可短也不把主按钮顶出屏幕
+int GuideWindowHeight(int rows,int dpi,int workHeight);
 // 宫格画得下几列：按磁贴里真正可用的像素高度算，每格至少 12px（含间隙），1 表示退回单图
 int StackSide(int availPx,int mode);
 // 性能三档：0=完整特效 1=精简（不播入场动画）2=省电（再关掉背景材质与叠放宫格）

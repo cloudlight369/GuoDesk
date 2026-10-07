@@ -4,6 +4,8 @@
 #include "SettingsWindow.h"
 namespace guodesk {
 class Controller;
+// 鼠标点过一下就把"双击 Ctrl 显示/隐藏"的判定作废：不然开着这个热键的人 Ctrl 多选会把所有窗口当场藏掉
+void NotePointerActivity();
 struct already_running {};
 class DeskWindow {
  Controller& owner; bool desktop=false,closing=false,dragging=false,capsuleNow=false,raised=false;

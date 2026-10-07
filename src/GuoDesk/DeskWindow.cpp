@@ -223,8 +223,12 @@ void DeskWindow::ExpandCapsule(){if(!capsuleNow||dragging)return;capsuleNow=fals
 void DeskWindow::ShrinkCapsule(){if(capsuleNow||dragging)return;Capture();capsuleNow=true;Refresh();Place();}
 // 拖出手势只在移动超过 6px 后才成立：浮层里的格子收不到 root 的 PointerMoved，所以两边共用这一段
 void DeskWindow::DragOutIfMoved(){
- if(!dragArmed)return;POINT cp{};GetCursorPos(&cp);long dx=cp.x-dragSX,dy=cp.y-dragSY;if(dx*dx+dy*dy<=36)return;
- dragArmed=false;std::wstring h=dragPath;root.DispatcherQueue().TryEnqueue([this,h]{std::vector<std::wstring> out;auto k=PathKey(h);if(std::find(selected.begin(),selected.end(),k)!=selected.end()&&selected.size()>1){for(auto const& s:selected)for(auto const& e:View().entries)if(PathKey(e.path)==s&&GetFileAttributesW(e.path.c_str())!=INVALID_FILE_ATTRIBUTES){out.push_back(e.path);break;}}else if(GetFileAttributesW(h.c_str())!=INVALID_FILE_ATTRIBUTES)out.push_back(h);if(!out.empty())shell::DragOut(hwnd,out);});
+ // 按下之后松过手就别再拖：光标没被格子抓住时，走神的一次移动会被当成一次拖出
+ if(!dragArmed)return;
+ if((GetAsyncKeyState(VK_LBUTTON)&0x8000)==0){dragArmed=false;return;}
+ POINT cp{};GetCursorPos(&cp);long dx=cp.x-dragSX,dy=cp.y-dragSY;if(dx*dx+dy*dy<=36)return;
+ // 排队里用的是裸 this：撤销/导入布局会当场重建所有分区，等这一跑就是野指针，所以按仓库规矩带上 alive 护栏
+ dragArmed=false;std::wstring h=dragPath;auto guard=alive;root.DispatcherQueue().TryEnqueue([this,guard,h]{if(!*guard||!IsWindow(hwnd))return;std::vector<std::wstring> out;auto k=PathKey(h);if(std::find(selected.begin(),selected.end(),k)!=selected.end()&&selected.size()>1){for(auto const& s:selected)for(auto const& e:View().entries)if(PathKey(e.path)==s&&GetFileAttributesW(e.path.c_str())!=INVALID_FILE_ATTRIBUTES){out.push_back(e.path);break;}}else if(GetFileAttributesW(h.c_str())!=INVALID_FILE_ATTRIBUTES)out.push_back(h);if(!out.empty())shell::DragOut(hwnd,out);});
 }
 void DeskWindow::AttachDrag(FrameworkElement const& el,std::wstring const& path){
  el.PointerPressed([this,path](auto&&,Input::PointerRoutedEventArgs const&){FocusBody();int idx=-1;for(size_t i=0;i<navPaths.size();++i)if(PathKey(navPaths[i])==PathKey(path)){idx=static_cast<int>(i);break;}if(idx>=0)SetFocus(idx);POINT sp{};GetCursorPos(&sp);dragSX=sp.x;dragSY=sp.y;dragPath=path;dragArmed=true;});
@@ -242,7 +246,7 @@ void DeskWindow::TapSelect(std::wstring const& path){
  bool shift=(GetAsyncKeyState(VK_SHIFT)&0x8000)!=0,ctrl=(GetAsyncKeyState(VK_CONTROL)&0x8000)!=0;
  int index=NavIndex(path);
  if(shift&&selAnchor>=0&&index>=0){SelectRange(selected,navPaths,selAnchor,index);SetFocus(index);SelHint();return;}
- if(ctrl){selAnchor=index;ToggleSel(path);SetFocus(index);SelHint();FocusBody();return;}
+ if(ctrl){NotePointerActivity();selAnchor=index;ToggleSel(path);SetFocus(index);SelHint();FocusBody();return;}
  selAnchor=index;selected.clear();selected.push_back(PathKey(path));SetFocus(index);SelHint();
 }
 void DeskWindow::BeginOp(std::wstring const& label,std::function<void(shell::CancelFlag const&,shell::ProgressFn const&)> work,std::function<void()> finish){
@@ -653,7 +657,9 @@ void DeskWindow::ShowStackPeek(std::wstring const& sid){
  int const total=static_cast<int>([&]{int n=0;for(auto const& e:v.entries)if(e.stack==sid)++n;return n;}());
  // 面板最多摊 25 格：角标和菜单说的是整叠，标题就得讲清楚"前 25 项"，别让人以为丢了文件
  auto const label=total>static_cast<int>(paths.size())?i18n::TrF(L"{0} · 前 {1} 项（共 {2} 项）",{shown,std::to_wstring(paths.size()),std::to_wstring(total)}):i18n::TrF(L"{0} · {1} 项",{shown,std::to_wstring(paths.size())});
- owner.ShowPeek(viewId,sid,label,paths,r,GetDpiForWindow(hwnd));
+ // 面板是第一次点角标时才现建的，建窗口本身会抛（shell::Handle 是 check_hresult）：从 Tapped 里逃出去整个程序就没了
+ try{owner.ShowPeek(viewId,sid,label,paths,r,GetDpiForWindow(hwnd));}
+ catch(...){Notify(i18n::Tr(L"浮层没能打开，请再点一次角标。"));return;}
  Notify(i18n::TrF(L"已摊开「{0}」的 {1} 项。",{shown,std::to_wstring(paths.size())}));
 }
 void DeskWindow::MoveFocus(int delta){
@@ -972,6 +978,9 @@ static constexpr UINT WM_APP_CTRL_TOGGLE=WM_APP+4;
 static HWND g_ctrlTarget{};
 static DWORD g_lastCtrlDown=0;
 static bool g_inCtrl=false,g_ctrlUpSeen=false,g_otherKey=false;
+// 钩子只看得见按键：鼠标点一下它一无所知，于是 Ctrl 连点两下就被判成"双击 Ctrl"把所有窗口藏掉。
+// 所以每次用 Ctrl 点选都手动来作废这一轮判定。
+void NotePointerActivity(){g_otherKey=true;g_ctrlUpSeen=false;}
 static LRESULT CALLBACK CtrlHookProc(int code,WPARAM w,LPARAM l){
  if(code>=0&&g_ctrlTarget){
   auto* info=reinterpret_cast<KBDLLHOOKSTRUCT*>(l);
@@ -1094,6 +1103,7 @@ void Controller::CloseCapture(){capture.reset();}
 void Controller::ShowPreview(std::vector<std::wstring> const& paths,size_t start){if(!preview)preview=std::make_unique<PreviewWindow>(*this);preview->Open(paths,start);}
 void Controller::ClosePreview(){preview.reset();}
 void Controller::ShowPeek(std::wstring zone,std::wstring stack,std::wstring const& title,std::vector<std::wstring> const& items,RECT const& anchor,int anchorDpi){
+ if(peek&&!peek->Usable())peek.reset();// 窗口已经开始关闭的那块面板复用不得：再 Open 上去就是个点不开也关不掉的黑洞
  if(!peek)peek=std::make_unique<StackPeekWindow>(*this);
  peek->Open(std::move(zone),std::move(stack),title,items,anchor,anchorDpi);
 }
@@ -1103,7 +1113,7 @@ bool Controller::ExpandStackInZone(std::wstring const& zoneKey,std::wstring cons
  for(auto& w:windows)if(w->viewId==zoneKey&&w->Exists()){w->ExpandStack(sid);return true;}
  return false;}
 void Controller::RebuildWidgets(){
- note.reset();todo.reset();clockW.reset();music.reset();weather.reset();appGrid.reset();search.reset();
+ note.reset();todo.reset();clockW.reset();music.reset();weather.reset();appGrid.reset();search.reset();peek.reset();// 浮层一起重建：不然换了语言/字号/材质之后它一直穿着旧衣服
  for(auto& w:windows)w->ApplySettings();
  std::weak_ptr<bool> weak=syncAlive;
  winrt::Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread().TryEnqueue([this,weak]{
@@ -1136,7 +1146,9 @@ bool Controller::RevealPending(){
  for(auto& w:windows)if(w->RevealEntry(path))return true;
  return false;
 }
-void Controller::CheckReminders(){bool save=false;for(auto& t:layout.widgets.todos){if(t.done||t.reminded||!DueReached(t.due))continue;t.reminded=true;save=true;std::wstring text=t.text;if(text.size()>100)text=text.substr(0,100)+L"…";NOTIFYICONDATAW nif{sizeof(nif)};nif.hWnd=messageWindow;nif.uID=1;nif.uFlags=NIF_INFO;nif.dwInfoFlags=NIIF_INFO;wcscpy_s(nif.szInfoTitle,i18n::Tr(L"待办到期提醒").c_str());wcscpy_s(nif.szInfo,i18n::TrF(L"「{0}」已到截止日期",{text}).c_str());Shell_NotifyIconW(NIM_MODIFY,&nif);}if(save)Save();}
+void Controller::CheckReminders(){bool save=false;for(auto& t:layout.widgets.todos){if(t.done||t.reminded||!DueReached(t.due))continue;t.reminded=true;save=true;std::wstring text=t.text;if(text.size()>100)text=text.substr(0,100)+L"…";
+ // 走 Toast 而不是自己拼气泡：那条路径会裁切缓冲、也会清掉待定位的下载，另发一条会把"点气泡带我去看文件"的承诺悄悄作废
+ Toast(i18n::Tr(L"待办到期提醒"),i18n::TrF(L"「{0}」已到截止日期",{text}));}if(save)Save();}
 void Controller::ApplySettings(){for(auto& w:windows)w->ApplySettings();}
 void Controller::MoveEntry(std::wstring const& key,std::wstring const& target,size_t index){auto to=std::find_if(layout.zones.begin(),layout.zones.end(),[&](auto const& z){return z.id==target;});if(to==layout.zones.end())return;for(auto& from:layout.zones){auto entry=std::find_if(from.entries.begin(),from.entries.end(),[&](auto const& e){return e.id==key;});if(entry==from.entries.end())continue;if(&from!=&*to){for(auto const& existing:to->entries)if(PathKey(existing.path)==PathKey(entry->path))return;PushUndo(i18n::TrF(L"移动入口到「{0}」",{to->name}));}auto value=*entry;if(&from!=&*to)value.stack.clear();auto old=static_cast<size_t>(entry-from.entries.begin());from.entries.erase(entry);if(&from==&*to && index>old)--index;index=std::min(index,to->entries.size());to->entries.insert(to->entries.begin()+index,std::move(value));return;}}
 static void TrimMemoryIfIdle(){
