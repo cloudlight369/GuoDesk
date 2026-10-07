@@ -12,12 +12,18 @@ class StackPeekWindow {
  std::wstring zoneId, stackId;
  std::vector<winrt::Microsoft::UI::Xaml::Controls::Border> cells; std::vector<std::wstring> cellPaths, picked;
  winrt::Microsoft::UI::Xaml::Controls::TextBlock selInfo{nullptr};
+ // 整叠成员都交给面板，一屏 25 格摊不下的翻页看：以前 25 格以外只能靠标题说"没摊开"，人却够不着那些文件
+ std::vector<std::wstring> all; int page=0, pages=1, side=2, cell=44;
+ winrt::Microsoft::UI::Xaml::Controls::StackPanel pager{nullptr};
+ winrt::Microsoft::UI::Xaml::Controls::Button prevBtn{nullptr}, nextBtn{nullptr};
+ winrt::Microsoft::UI::Xaml::Controls::TextBlock pageInfo{nullptr};
  // 全区共用这一块面板：每次 Open 换一代，排队中的"关闭"只作废它那一代，别把刚摊开的下一叠也带走
  unsigned long long generation=0;
  bool dragArmed=false, dragFired=false, pickArmed=false; POINT dragStart{}; std::wstring dragPath;
  void OnKey(winrt::Microsoft::UI::Xaml::Input::KeyRoutedEventArgs const& a);
  void PeekDragMoved(); void BeginDrag(std::wstring const& path);
  void Repick(); void TogglePick(std::wstring const& path);
+ void BuildPage(); void MovePage(int delta);
  winrt::Microsoft::UI::Xaml::Media::Brush ThemeBrush(wchar_t const* key,winrt::Windows::UI::Color fallback);
  void RequestClose();
 public:

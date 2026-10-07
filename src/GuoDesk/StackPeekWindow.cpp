@@ -60,6 +60,10 @@ void StackPeekWindow::PeekDragMoved(){
 }
 void StackPeekWindow::OnKey(Input::KeyRoutedEventArgs const& a){
  if(a.Key()==Windows::System::VirtualKey::Escape){a.Handled(true);RequestClose();return;}
+ if(pages<2)return;
+ // 翻页键用左右和 PageUp/PageDown（这套枚举里没有 WPF 的 Prior/Next 名字）：这里没有别的焦点导航会抢
+ if(a.Key()==Windows::System::VirtualKey::Left||a.Key()==Windows::System::VirtualKey::PageUp){MovePage(-1);a.Handled(true);return;}
+ if(a.Key()==Windows::System::VirtualKey::Right||a.Key()==Windows::System::VirtualKey::PageDown){MovePage(1);a.Handled(true);return;}
 }
 void StackPeekWindow::RequestClose(){
  // 全区共用这一块面板：排队中的关闭只作废它自己那一代，别把之后刚摊开的另一叠也一起带走
@@ -90,34 +94,50 @@ StackPeekWindow::StackPeekWindow(Controller& c):owner(c){
   hint.Text(i18n::Tr(L"那一页已经不在了，展开没有生效；再点一次角标就能看到现在的内容。"));
  }));
  actions.Children().Append(mk(i18n::Tr(L"关闭"),[this]{RequestClose();}));
+ // 页码条排在按钮上面：它紧挨着格子，翻到哪一页一眼就能看到，又不会把「在分区里展开」挤走
+ StackPanel pg;pg.Orientation(Orientation::Horizontal);pg.Spacing(8);pg.HorizontalAlignment(HorizontalAlignment::Center);
+ prevBtn=mk(L"◀",[this]{MovePage(-1);});
+ pageInfo=TextBlock();pageInfo.FontSize(ScaledFont(owner.layout.settings.textSize,11));pageInfo.Foreground(ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,140,140,140}));pageInfo.VerticalAlignment(VerticalAlignment::Center);pageInfo.TextWrapping(TextWrapping::NoWrap);pageInfo.TextTrimming(TextTrimming::CharacterEllipsis);
+ nextBtn=mk(L"▶",[this]{MovePage(1);});
+ pg.Children().Append(prevBtn);pg.Children().Append(pageInfo);pg.Children().Append(nextBtn);
+ pager=pg;pager.Visibility(Visibility::Collapsed);
+ footer.Children().Append(pager);
  footer.Children().Append(actions);
  footer.Children().Append(selInfo);
  root.Children().Append(footer);
  root.PreviewKeyDown([this,guard](auto&&,Input::KeyRoutedEventArgs const& a){if(*guard)OnKey(a);});
  root.PointerMoved([this,guard](auto&&,Input::PointerRoutedEventArgs const&){if(*guard)PeekDragMoved();});
+ // 滚轮翻页挂在 root 上：格子只有 46px，落在格子里滚一下就换一页，不用瞄准那颗 ◀▶
+ root.PointerWheelChanged([this,guard](auto&&,Input::PointerRoutedEventArgs const& a){
+  if(!*guard)return;
+  if(pages<2)return;
+  MovePage(a.GetCurrentPoint(root).Properties().MouseWheelDelta()>0?-1:1);
+  a.Handled(true);
+ });
  window.Content(root);
  window.Closed([this,guard](auto&&,auto&&){if(!*guard||closing)return;closing=true;RequestClose();});
 }
-// anchor 是来源分区在屏幕上的矩形：贴着它下边缘摆，放不下就翻到上边缘
-void StackPeekWindow::Open(std::wstring zone,std::wstring stack,std::wstring const& title,std::vector<std::wstring> const& items,RECT const& anchor,int anchorDpi){
- zoneId=std::move(zone);stackId=std::move(stack);++generation;
- int const tier=owner.layout.settings.textSize<0?0:(owner.layout.settings.textSize>2?2:owner.layout.settings.textSize);
- int const side=StackPeekSide(static_cast<int>(items.size()));
- int dpi=anchorDpi;if(dpi<=96)dpi=96;
- MONITORINFOEXW mi{sizeof(mi)};
- if(!GetMonitorInfoW(MonitorFromRect(&anchor,MONITOR_DEFAULTTONEAREST),&mi))mi.rcWork=RECT{0,0,1920,1080};
- // 面板比屏幕还高时「关闭」会被顶到屏幕外，所以先把格子按工作区能装下的尺寸收一遍
- int const chrome=172+18*tier,roomY=MulDiv(mi.rcWork.bottom-mi.rcWork.top,96,dpi)-16;
- int cell=std::max(34,std::min(52+6*tier,(roomY-chrome)/side));
- head.Text(title);
- // 每次点开都重画一遍：面板开着的时候这一叠可能被归档、文件可能被改名，留快照就会谎报"这项还在"
+void StackPeekWindow::MovePage(int delta){
+ if(pages<2)return;
+ int const p=page+delta;
+ if(p<0||p>=pages)return;
+ page=p;BuildPage();
+}
+void StackPeekWindow::BuildPage(){
+ int const total=static_cast<int>(all.size());
+ int const start=StackPeekPageStart(page,total);
+ int const shown=std::min(side*side,total-start);
+ // 行只按这一页真有的格子开：最后一页常常只有五个，留着 5 行等于在按钮上面挖一个大洞，
+ // 而窗口尺寸又不能跟着变（一变「关闭」就在鼠标底下跑掉），所以让这几格自己居中
+ int const rows=(shown+side-1)/side;
+ // 每次摊一页都重画一遍：面板开着的时候这一叠可能被归档、文件可能被改名，留快照就会谎报"这项还在"
  board.Children().Clear();board.RowDefinitions().Clear();board.ColumnDefinitions().Clear();
- cells.clear();cellPaths.clear();picked.clear();
- dragArmed=false;dragFired=false;pickArmed=false;dragPath.clear();
- for(int k=0;k<side;++k){RowDefinition rd;rd.Height(GridLength{1,GridUnitType::Star});board.RowDefinitions().Append(rd);ColumnDefinition cd;cd.Width(GridLength{1,GridUnitType::Star});board.ColumnDefinitions().Append(cd);}
+ cells.clear();cellPaths.clear();
+ for(int k=0;k<rows;++k){RowDefinition rd;rd.Height(GridLength{1,GridUnitType::Star});board.RowDefinitions().Append(rd);}
+ for(int k=0;k<side;++k){ColumnDefinition cd;cd.Width(GridLength{1,GridUnitType::Star});board.ColumnDefinitions().Append(cd);}
  bool const wantIcons=PerfMosaic(owner.layout.settings.perfTier);
- for(size_t n=0;n<items.size();++n){
-  auto const path=items[n];
+ for(int k=0;k<shown;++k){
+  auto const path=all[start+k];
   bool const exists=GetFileAttributesW(path.c_str())!=INVALID_FILE_ATTRIBUTES;
   Border c;c.Width(cell-6);c.Height(cell-6);c.CornerRadius(CornerRadius{6,6,6,6});c.Padding(Thickness{2,2,2,2});
   c.Background(SolidColorBrush(Windows::UI::Colors::Transparent()));// 空 Background 在 XAML 里不参与命中，点击和拖拽都会掉地上
@@ -155,16 +175,40 @@ void StackPeekWindow::Open(std::wstring zone,std::wstring stack,std::wstring con
    self->TogglePick(path);
   });
   c.PointerCaptureLost([guard,self](auto&&,auto&&){if(*guard){self->dragArmed=false;self->pickArmed=false;}});
-  Grid::SetRow(c,static_cast<int>(n/side));Grid::SetColumn(c,static_cast<int>(n%side));
+  Grid::SetRow(c,k/side);Grid::SetColumn(c,k%side);
   board.Children().Append(c);
   cells.push_back(c);cellPaths.push_back(path);
  }
- hint.Text(i18n::Tr(L"单击打开 · 右键系统菜单 · 按住拖出去 · Ctrl 单击多选"));
  Repick();
+ // 页码条只在一屏摊不下的时候露面：两三件的小面板白多一行，看着像漏了东西
+ bool const many=pages>1;
+ pager.Visibility(many?Visibility::Visible:Visibility::Collapsed);
+ if(many)pageInfo.Text(i18n::TrF(L"第 {0} / {1} 页 · 共 {2} 项",{std::to_wstring(page+1),std::to_wstring(pages),std::to_wstring(total)}));
+ prevBtn.IsEnabled(page>0);nextBtn.IsEnabled(page+1<pages);
+}
+// anchor 是来源分区在屏幕上的矩形：贴着它下边缘摆，放不下就翻到上边缘
+void StackPeekWindow::Open(std::wstring zone,std::wstring stack,std::wstring const& title,std::vector<std::wstring> const& items,RECT const& anchor,int anchorDpi){
+ zoneId=std::move(zone);stackId=std::move(stack);++generation;
+ all=items;page=0;picked.clear();
+ dragArmed=false;dragFired=false;pickArmed=false;dragPath.clear();
+ int const tier=owner.layout.settings.textSize<0?0:(owner.layout.settings.textSize>2?2:owner.layout.settings.textSize);
+ side=StackPeekSide(static_cast<int>(all.size()));
+ pages=StackPeekPages(static_cast<int>(all.size()));
+ int dpi=anchorDpi;if(dpi<=96)dpi=96;
+ MONITORINFOEXW mi{sizeof(mi)};
+ if(!GetMonitorInfoW(MonitorFromRect(&anchor,MONITOR_DEFAULTTONEAREST),&mi))mi.rcWork=RECT{0,0,1920,1080};
+ // 面板比屏幕还高时「关闭」会被顶到屏幕外，所以先把格子按工作区能装下的尺寸收一遍
+ // 页码条露面那天要多占一行，所以先算页数再定 chrome，免得「关闭」正好被页码条顶出工作区
+ int const chrome=172+18*tier+(pages>1?38:0),roomY=MulDiv(mi.rcWork.bottom-mi.rcWork.top,96,dpi)-16;
+ cell=std::max(34,std::min(52+6*tier,(roomY-chrome)/side));
+ head.Text(title);
+ hint.Text(i18n::Tr(L"单击打开 · 右键系统菜单 · 按住拖出去 · Ctrl 单击多选"));
+ BuildPage();
  // 尺寸按分区所在显示器的 DPI 算：这块面板自己还没显示过的时候 GetDpiForWindow 报的是"创建它的那块显示器"，
  // 混 DPI 双屏下就会大出一圈或者把内容裁掉，所以由发起它的分区把 anchorDpi 传进来（mi/roomY 在上面已经算好）
  int const span=std::max(side*cell,236+12*tier);// 提示行和底部按钮比 2×2 的格子宽，面板不能只按格子算
  selInfo.MaxWidth(span);// 计数行限宽，长文案只会省略号，不会把按钮挤出面板
+ pageInfo.MaxWidth(span);// 页码行同理：名字再长也只会省略号，不会把 ◀▶ 挤到点不着的地方
  int const roomX=MulDiv(mi.rcWork.right-mi.rcWork.left,96,dpi)-16;
  int const w=MulDiv(std::min(span+28,roomX),dpi,96),h=MulDiv(std::min(side*cell+chrome,roomY),dpi,96);
  int x=anchor.left+MulDiv(10,dpi,96),y=anchor.bottom+MulDiv(6,dpi,96);

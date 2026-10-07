@@ -152,6 +152,10 @@ int ClampStackGrid(int value);
 int StackCells(int mode);
 // 弹出浮层的列数：按叠放件数取刚好够的正方形（2..5），跟磁贴画不画得下无关
 int StackPeekSide(int count);
+// 浮层页数：一屏就是 side² 格，摊不下才翻页；翻页不改 side，否则整块面板每点一下 ◀▶ 就长大一圈
+int StackPeekPages(int count);
+// 这一页第一项在整叠里的下标；页号越界钳到第一/最后一页
+int StackPeekPageStart(int page,int count);
 // 引导窗口的高度（物理像素）：按条目数长，但封顶在工作区高的 85%，小屏时宁可短也不把主按钮顶出屏幕
 int GuideWindowHeight(int rows,int dpi,int workHeight);
 // 宫格画得下几列：按磁贴里真正可用的像素高度算，每格至少 12px（含间隙），1 表示退回单图

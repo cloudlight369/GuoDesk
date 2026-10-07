@@ -30,8 +30,18 @@ bool ArchiveDue(int mode,long long lastRun,long long now){auto const span=Archiv
 int ClampArchiveMode(int v){return (v>=0&&v<=2)?v:0;}
 int ClampStackGrid(int v){return (v>=0&&v<=3)?v:0;}
 int StackCells(int mode){return mode==1?9:mode==2?16:mode==3?25:1;}
-// 浮层按件数取刚好够得着的正方形：2~4 件两列，5~9 三列，10~16 四列，再往上五列封顶（25 格以外不再摊开）
+// 浮层按件数取刚好够得着的正方形：2~4 件两列，5~9 三列，10~16 四列，再往上五列封顶（一屏 25 格，摊不下的翻页）
 int StackPeekSide(int count){ return count<=4?2:count<=9?3:count<=16?4:5; }
+int StackPeekPages(int count){
+ if(count<=0)return 1;
+ int const cap=StackPeekSide(count);
+ return (count+cap*cap-1)/(cap*cap);
+}
+int StackPeekPageStart(int page,int count){
+ int const side=StackPeekSide(count>0?count:1),cap=side*side,pages=StackPeekPages(count);
+ int p=page<0?0:(page>=pages?pages-1:page);
+ return p*cap;
+}
 // 引导窗口按条目数长高，但工作区只有那么点：封顶 85%，小屏时连"首屏 420 DIP"也让给屏幕，别让主按钮掉到外面
 int GuideWindowHeight(int rows,int dpi,int workHeight){
  if(dpi<96)dpi=96;

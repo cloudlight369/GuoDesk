@@ -766,14 +766,13 @@ void DeskWindow::ShowStackPeek(std::wstring const& sid){
  if(sid.empty()||!Exists())return;
  auto& v=View();
  std::vector<std::wstring> paths;
- for(auto const& e:v.entries)if(e.stack==sid&&paths.size()<25)paths.push_back(e.path);
+ for(auto const& e:v.entries)if(e.stack==sid)paths.push_back(e.path);
  std::wstring sname;for(auto const& s:v.stacks)if(s.id==sid)sname=s.name;
  auto const shown=sname.empty()?i18n::Tr(L"叠放"):sname;
  if(paths.size()<2){Notify(i18n::TrF(L"「{0}」里只剩一项，不必摊开。",{shown}));return;}
  RECT r{};if(!GetWindowRect(hwnd,&r))return;
- int const total=static_cast<int>([&]{int n=0;for(auto const& e:v.entries)if(e.stack==sid)++n;return n;}());
- // 面板最多摊 25 格：角标和菜单说的是整叠，标题就得讲清楚"前 25 项"，别让人以为丢了文件
- auto const label=total>static_cast<int>(paths.size())?i18n::TrF(L"{0} · 前 {1} 项（共 {2} 项）",{shown,std::to_wstring(paths.size()),std::to_wstring(total)}):i18n::TrF(L"{0} · {1} 项",{shown,std::to_wstring(paths.size())});
+ // 整叠都交给浮层摊，一屏放不下的它自己翻页，所以标题不必再交代"只摊了前 25 项"
+ auto const label=i18n::TrF(L"{0} · {1} 项",{shown,std::to_wstring(paths.size())});
  // 面板是第一次点角标时才现建的，建窗口本身会抛（shell::Handle 是 check_hresult）：从 Tapped 里逃出去整个程序就没了
  try{owner.ShowPeek(viewId,sid,label,paths,r,GetDpiForWindow(hwnd));}
  catch(...){Notify(i18n::Tr(L"浮层没能打开，请再点一次角标。"));return;}

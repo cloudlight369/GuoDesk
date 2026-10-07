@@ -120,13 +120,18 @@ function Button-Named($win, [string]$name) {
   return $null
 }
 # 角标只是画在磁贴上的 Border，没有 InvokePattern，只能按矩形中心合成鼠标点击
+# 上一块面板正在销毁时那一下点击会被吃掉：失败就重新聚焦再点一次，别让它冒充产品缺陷
 function Open-Pile([string]$count) {
-  $z = Find-Window $titleZone 2500
-  $b = @(In-Window $z $CT::Text $count)
-  if ($b.Count -lt 1) { return $false }
-  $null = Focus-Window $z
-  $null = Click-At $b[0].Current.BoundingRectangle
-  return ($null -ne (Find-Window $titlePeek 5000))
+  for ($try = 0; $try -lt 2; $try++) {
+    $z = Find-Window $titleZone 2500
+    $b = @(In-Window $z $CT::Text $count)
+    if ($b.Count -lt 1) { return $false }
+    $null = Focus-Window $z
+    $null = Click-At $b[0].Current.BoundingRectangle
+    if ($null -ne (Find-Window $titlePeek 5000)) { return $true }
+    Start-Sleep -Milliseconds 600
+  }
+  return $false
 }
 
 $app = Start-Process -FilePath $exe -ArgumentList @('--data-dir', $data) -PassThru
@@ -141,17 +146,26 @@ if ($null -eq $zone) {
 }
 Note 'both-badges-show-counts' (@(In-Window $zone $CT::Text '4').Count -ge 1 -and @(In-Window $zone $CT::Text '26').Count -ge 1) ''
 
-# 1) 26 件的一叠：面板只能摊 25 格，标题必须承认是"前 25 项"
+# 1) 26 件的一叠：一屏摊 25 格，剩下的翻页就摸得到，标题按整叠计数（v3.30.0 之前只能靠标题承认"前 25 项"）
 Note 'big-pile-opens' (Open-Pile '26') ''
 $bigWin = Find-Window $titlePeek 2000
-$head = @(In-Window $bigWin $CT::Text '*25*26*')
-Note 'panel-admits-the-truncation' ($head.Count -ge 1) ('head=' + $(if ($head.Count) { $head[0].Current.Name } else { 'none' }))
+$head = @(In-Window $bigWin $CT::Text '*26 项*')
+Note 'panel-counts-the-whole-pile' ($head.Count -ge 1) ('head=' + $(if ($head.Count) { $head[0].Current.Name } else { 'none' }))
+Note 'panel-offers-a-second-page' (@(In-Window $bigWin $CT::Text '第 1 / 2 页*').Count -ge 1) ''
 $cells = 0
 foreach ($n in $big) {
   $stem = $n.Substring(0, $n.Length - 4)
   if (@(In-Window $bigWin $CT::Text ($stem + '*')).Count -ge 1) { $cells++ }
 }
 Note 'panel-shows-exactly-25-cells' ($cells -eq 25) ('cells=' + $cells)
+$nx = Button-Named (Find-Window $titlePeek 2000) '▶'
+Note 'second-page-has-a-button' ($null -ne $nx) ''
+if ($null -ne $nx) {
+  $null = Click-At $nx.Current.BoundingRectangle
+  Start-Sleep -Milliseconds 900
+  $bw = Find-Window $titlePeek 2000
+  Note 'last-member-is-reachable' (@(In-Window $bw $CT::Text 'big-26.txt').Count -ge 1) ''
+}
 $null = Invoke-El (Button-Named (Find-Window $titlePeek 2000) '关闭')
 Start-Sleep -Milliseconds 800
 Note 'panel-closes-by-button' ($null -eq (Find-Window $titlePeek 1500)) ''

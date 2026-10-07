@@ -121,6 +121,12 @@ void RunTests(std::filesystem::path const& output){std::ofstream report(output);
  expect(pgLegacy.zones[0].stackGrid==0&&pgBogus.zones[0].stackGrid==0,"pile grid defaults and clamps on load");
  expect(StackPeekSide(2)==2&&StackPeekSide(4)==2&&StackPeekSide(5)==3&&StackPeekSide(9)==3&&StackPeekSide(10)==4&&StackPeekSide(17)==5&&StackPeekSide(400)==5,"the stack panel takes the smallest square that holds the pile");
  expect(StackPeekSide(0)==2&&StackPeekSide(1)==2,"a one-item pile still opens as a two-column panel");
+ expect(StackPeekPages(0)==1&&StackPeekPages(25)==1&&StackPeekPages(16)==1&&StackPeekPages(9)==1,"a pile that fits one screen gets no pager");
+ expect(StackPeekPages(26)==2&&StackPeekPages(50)==2&&StackPeekPages(51)==3&&StackPeekPages(1000)==40,"a pile past 25 cells paginates instead of dropping the tail");
+ expect(StackPeekPageStart(0,30)==0&&StackPeekPageStart(1,30)==25&&StackPeekPageStart(2,30)==25,"page offsets land on 25-cell boundaries and clamp the last page");
+ expect(StackPeekPageStart(-1,30)==0&&StackPeekPageStart(9,30)==25&&StackPeekPageStart(0,0)==0,"a bogus page number still points at a real page");
+ for(int n=1;n<=200;++n){int const cap=StackPeekSide(n)*StackPeekSide(n),pages=StackPeekPages(n);int last=(pages-1)*cap;bool tailOk=last<n&&last+cap>=n;int off=StackPeekPageStart(pages,n);if(!(off==last&&tailOk&&StackPeekPageStart(pages+5,n)==last)){expect(false,"every page offset stays inside its pile");break;}}
+ expect(true,"page offsets and counts agree for piles up to 200 items");
  expect(GuideWindowHeight(11,96,1440)==1090&&GuideWindowHeight(11,96,2160)==1090,"the guide grows with its rows while the screen has room");
  expect(GuideWindowHeight(11,96,1080)==918&&GuideWindowHeight(11,96,768)==653&&GuideWindowHeight(11,96,600)==510,"the guide stops at 85% of the work area so its main button stays reachable");
  expect(GuideWindowHeight(1,96,1080)==420&&GuideWindowHeight(11,96,0)==204&&GuideWindowHeight(11,192,700)==595&&GuideWindowHeight(11,0,1080)==918,"a short screen, a broken work-area reading and a 200% display all still give a usable guide height");
