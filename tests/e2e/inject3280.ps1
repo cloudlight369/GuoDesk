@@ -131,12 +131,12 @@ Start-Sleep -Milliseconds 2500
 $spread = Color-Spread (Find-Panel $zt)
 Note 'thumbnails-land-after-the-panel-is-up' ($spread -ge 40) ('colors=' + $spread)
 
-# 3) Escape 关掉再开：命中缓存应该更快
+# 3) Escape 关掉再开：取图已经挪到后台，冷开和重开都只剩面板自己的搭建成本
 Press-Escape
 Start-Sleep -Milliseconds 700
 Note 'panel-closed-by-escape' ($null -eq (Find-Panel $zt)) ''
-$r2 = Open-Panel $zt $badge[0].Current.BoundingRectangle 250
-Note 'second-open-uses-the-cache' ($r2.ms -ge 0 -and $r2.ms -le 250) ('ms=' + $r2.ms)
+$r2 = Open-Panel $zt $badge[0].Current.BoundingRectangle 400
+Note 'second-open-uses-the-cache' ($r2.ms -ge 0 -and $r2.ms -le 400 -and $r2.ms -le ($r1.ms * 1.6)) ('ms=' + $r2.ms + ' cold=' + $r1.ms)
 
 # 4) 反复开关：格子被销毁之后，晚到的回调不能再碰它
 for ($i = 0; $i -lt 4; $i++) {

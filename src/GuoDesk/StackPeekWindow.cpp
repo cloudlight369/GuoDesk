@@ -122,7 +122,7 @@ void StackPeekWindow::Open(std::wstring zone,std::wstring stack,std::wstring con
   Border c;c.Width(cell-6);c.Height(cell-6);c.CornerRadius(CornerRadius{6,6,6,6});c.Padding(Thickness{2,2,2,2});
   c.Background(SolidColorBrush(Windows::UI::Colors::Transparent()));// 空 Background 在 XAML 里不参与命中，点击和拖拽都会掉地上
   StackPanel box;box.Spacing(1);box.HorizontalAlignment(HorizontalAlignment::Center);
-  // 取缩略图是同步跑在 UI 线程上的（LoadIcon 里一个 await 都没有），省电档就跟磁贴宫格一样不画，只留一个文件图标
+  // 省电档跟磁贴宫格一样不画缩略图：取图虽然已经挪到后台车道，一次开二十几格仍要起线程、读盘、解码，这一档就省下
   if(wantIcons){Image ic;ic.Width(28);ic.Height(28);ic.HorizontalAlignment(HorizontalAlignment::Center);box.Children().Append(ic);shell::LoadIcon(path,ic);}
   else{FontIcon g;g.FontFamily(FontFamily(L"Segoe Fluent Icons"));g.Glyph(L"\uE8A5");g.FontSize(24);g.HorizontalAlignment(HorizontalAlignment::Center);box.Children().Append(g);}
   TextBlock t;t.Text((exists?L"":L"⚠ ")+shell::Name(path));t.FontSize(ScaledFont(owner.layout.settings.textSize,10));t.TextWrapping(TextWrapping::NoWrap);t.TextTrimming(TextTrimming::CharacterEllipsis);t.HorizontalAlignment(HorizontalAlignment::Center);t.MaxWidth(cell-8);t.Foreground(exists?ThemeBrush(L"TextFillColorPrimary",Windows::UI::Color{255,24,24,24}):ThemeBrush(L"TextFillColorSecondary",Windows::UI::Color{255,140,140,140}));box.Children().Append(t);

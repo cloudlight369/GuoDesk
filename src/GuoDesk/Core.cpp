@@ -443,6 +443,21 @@ int ZoneCapHeight(int maxHeight,int workHeight,int dpi){if(maxHeight<=0||workHei
 int ZoneExpandedHeight(int height,int maxHeight,int workHeight,int dpi){int cap=ZoneCapHeight(maxHeight,workHeight,dpi);return height>cap?cap:height;}
 // 折叠高度一直是物理像素写死的 88：100% 缩放的屏幕刚好，200% 的笔记本上标题行会把整条挤成一半高
 int ZoneCollapsedHeight(int dpi){ return MulDiv(88,dpi<96?96:dpi,96); }
+bool FitBox(int w,int h,int limit,int& outW,int& outH){
+ outW=w;outH=h;
+ if(!(w>limit||h>limit)||w<=0||h<=0)return false;
+ int const longSide=w>h?w:h;
+ outW=static_cast<int>(w*static_cast<double>(limit)/longSide+0.5);
+ outH=static_cast<int>(h*static_cast<double>(limit)/longSide+0.5);
+ if(outW<1)outW=1;
+ if(outH<1)outH=1;
+ return true;
+}
+bool OpaqueIfNoAlpha(std::vector<uint8_t>& px){
+ for(size_t i=3;i<px.size();i+=4)if(px[i])return false;
+ for(size_t i=3;i<px.size();i+=4)px[i]=255;
+ return true;
+}
 int NavIndexOf(std::vector<std::wstring> const& paths,std::wstring const& want){if(want.empty())return -1;auto const k=PathKey(want);for(size_t i=0;i<paths.size();++i)if(!paths[i].empty()&&PathKey(paths[i])==k)return static_cast<int>(i);return -1;}
 int ZoneAnchorTop(int top,int height,int targetHeight,int dir,int workTop,int workBottom){
  int bottom=top+height;int t=ClampExpandDir(dir);int next;

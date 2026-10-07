@@ -245,8 +245,16 @@ $icons3 = Image-Count (Find-Window $titleZone 2500)
 Note 'grid-mode-returns' ((Grid-Mode) -eq 1 -and $icons3 -ge 9) ('mode=' + (Grid-Mode) + ' images=' + $icons3)
 
 # 最小磁贴要 5×5 时画不下：按可用高度自动降档，只画放得下的那几格
+# 缩略图现在后台取，格子先占位、图随后补，所以数之前要等它落图（最多 6 秒）
 $tiny = Find-Window 'GuoDesk · 小格叠放' 9000
-$iconsSmall = if ($null -ne $tiny) { Image-Count $tiny } else { -1 }
+$iconsSmall = -1
+$until = (Get-Date).AddSeconds(6)
+while ($null -ne $tiny) {
+  $iconsSmall = Image-Count $tiny
+  if ($iconsSmall -ge 2) { break }
+  if ((Get-Date) -ge $until) { break }
+  Start-Sleep -Milliseconds 300
+}
 Note 'small-tile-shrinks-grid' ($iconsSmall -ge 2 -and $iconsSmall -le 4) ('images=' + $iconsSmall)
 
 Note 'zone-alive' ($null -ne (Find-Window $titleZone 2500)) ''

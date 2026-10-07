@@ -7,6 +7,10 @@
 #include <oleidl.h>
 #include <winhttp.h>
 #include "WebDav.h"
+#include <thread>
+#include <mutex>
+#include <deque>
+#include <vector>
 using namespace winrt;
 namespace guodesk::shell {
 HWND Handle(Microsoft::UI::Xaml::Window const& w){HWND h{};check_hresult(w.as<IWindowNative>()->get_WindowHandle(&h));return h;}
@@ -71,57 +75,156 @@ void Fit(Zone& z,int dpi){RECT r{z.x,z.y,z.x+z.width,z.y+z.height};MONITORINFO i
 HWND DesktopHost(){HWND result{};EnumWindows([](HWND h,LPARAM p)->BOOL{if(FindWindowExW(h,nullptr,L"SHELLDLL_DefView",nullptr)){*reinterpret_cast<HWND*>(p)=h;return FALSE;}return TRUE;},reinterpret_cast<LPARAM>(&result));return result;}
 bool Attach(HWND window,HWND host){if(!IsWindow(host))return false;RECT r{};GetWindowRect(window,&r);auto style=GetWindowLongPtrW(window,GWL_STYLE);SetWindowLongPtrW(window,GWL_STYLE,((style&~WS_POPUP)&~WS_THICKFRAME)|WS_CHILD);SetLastError(0);auto old=SetParent(window,host);if(!old&&GetLastError()){SetWindowLongPtrW(window,GWL_STYLE,style);return false;}POINT p{r.left,r.top};ScreenToClient(host,&p);SetWindowPos(window,HWND_TOP,p.x,p.y,r.right-r.left,r.bottom-r.top,SWP_FRAMECHANGED|SWP_NOACTIVATE);return GetParent(window)==host;}
 void Detach(HWND window){RECT r{};GetWindowRect(window,&r);SetParent(window,nullptr);SetWindowLongPtrW(window,GWL_STYLE,(GetWindowLongPtrW(window,GWL_STYLE)&~WS_CHILD)|WS_POPUP|WS_THICKFRAME);SetWindowPos(window,HWND_NOTOPMOST,r.left,r.top,r.right-r.left,r.bottom-r.top,SWP_FRAMECHANGED|SWP_NOACTIVATE);}
-fire_and_forget LoadIcon(std::wstring path,Microsoft::UI::Xaml::Controls::Image image){
+// 取缩略图是整条 UI 里最容易卡住的一步（shell 工厂要解析文件、可能还要解码图片），所以放到工作线程去做，
+// 回到 UI 线程只做两件事：拼 WriteableBitmap 和把它交给 Image。下面三张表只在 UI 线程访问，不跨线程也就不需要锁。
+namespace {
+using Microsoft::UI::Xaml::Controls::Image;
+using Microsoft::UI::Xaml::Media::Imaging::WriteableBitmap;
+using Microsoft::UI::Dispatching::DispatcherQueue;
+struct IconPixels{int w=0,h=0;std::vector<uint8_t> px;bool ok=false;};
+struct IconJob{std::wstring path;DispatcherQueue dq;};
+// 这几张表故意不析构：进程退出时 uninit_apartment 早跑完了，最后几条后台线程却还可能正摸着队列和锁。
+// 泄漏给系统回收，比让 CRT 在错误的顺序里释放一堆 XAML 对象安全
+inline std::mutex& g_iconMtx=*new std::mutex();
+inline std::deque<IconJob>& g_iconQ=*new std::deque<IconJob>();
+int g_iconRunning=0;
+constexpr int g_iconLanes=4;// 一次开二十几格时不许起二十几条线程，四条道足够把 shell 排队跑满
+inline std::map<std::wstring,WriteableBitmap>& g_iconCache=*new std::map<std::wstring,WriteableBitmap>();
+inline std::map<std::wstring,std::vector<winrt::weak_ref<Image>>>& g_iconWait=*new std::map<std::wstring,std::vector<winrt::weak_ref<Image>>>();
+inline std::set<std::wstring>& g_iconPending=*new std::set<std::wstring>();
+IconPixels ExtractIcon(std::wstring const& path){
+ IconPixels out;
+ // 工作线程没有消息循环，用 MTA：shell 的缩略图工厂在跨进程取图时，STA 又不管泵会偶尔卡死在那次调用上
+ HRESULT const co=CoInitializeEx(nullptr,COINIT_MULTITHREADED);
  try{
-  static std::map<std::wstring,Microsoft::UI::Xaml::Media::Imaging::WriteableBitmap> cache;
-  auto hit=cache.find(path);
-  if(hit!=cache.end()){image.Source(hit->second);co_return;}
-  auto attrs=GetFileAttributesW(path.c_str());
-  if(attrs==INVALID_FILE_ATTRIBUTES)co_return;
-  com_ptr<IShellItemImageFactory> factory;
-  check_hresult(SHCreateItemFromParsingName(path.c_str(),nullptr,IID_PPV_ARGS(factory.put())));
-  HBITMAP handle{};
-  check_hresult(factory->GetImage(SIZE{64,64},SIIGBF_RESIZETOFIT|SIIGBF_BIGGERSIZEOK,&handle));
-  BITMAP info{};
-  GetObjectW(handle,sizeof(info),&info);
-  int width=info.bmWidth,height=info.bmHeight;
-  if((width>64||height>64)&&width>0&&height>0){
-   int const longSide=width>height?width:height;
-   int tw=static_cast<int>(width*64.0/longSide+0.5),th=static_cast<int>(height*64.0/longSide+0.5);
-   if(tw<1)tw=1;
-   if(th<1)th=1;
-   BITMAPINFO target{};
-   target.bmiHeader.biSize=sizeof(target.bmiHeader);target.bmiHeader.biWidth=tw;target.bmiHeader.biHeight=-th;target.bmiHeader.biPlanes=1;target.bmiHeader.biBitCount=32;target.bmiHeader.biCompression=BI_RGB;
-   void* bits=nullptr;
-   HBITMAP scaled=CreateDIBSection(nullptr,&target,DIB_RGB_COLORS,&bits,nullptr,0);
-   if(scaled&&bits){
-    HDC src=CreateCompatibleDC(nullptr),dst=CreateCompatibleDC(nullptr);
-    auto oldSrc=static_cast<HBITMAP>(SelectObject(src,handle)),oldDst=static_cast<HBITMAP>(SelectObject(dst,scaled));
-    SetStretchBltMode(dst,HALFTONE);SetBrushOrgEx(dst,0,0,nullptr);
-    bool drew=StretchBlt(dst,0,0,tw,th,src,0,0,width,height,SRCCOPY);
-    SelectObject(src,oldSrc);SelectObject(dst,oldDst);DeleteDC(src);DeleteDC(dst);
-    if(drew){DeleteObject(handle);handle=scaled;width=tw;height=th;}
-    else DeleteObject(scaled);
+  if(GetFileAttributesW(path.c_str())!=INVALID_FILE_ATTRIBUTES){
+   com_ptr<IShellItemImageFactory> factory;
+   check_hresult(SHCreateItemFromParsingName(path.c_str(),nullptr,IID_PPV_ARGS(factory.put())));
+   HBITMAP handle{};
+   HRESULT hr=E_PENDING;
+   // 一批并发请求同时涌进来时缩略图提供方会回 E_PENDING（图还没备好），Explorer 自己也是稍后重试；
+   // 车道不在 UI 线程上，正好在这儿退避几次，实在拿不到才算这一格没图
+   for(int attempt=0;attempt<6;++attempt){
+    handle=nullptr;
+    hr=factory->GetImage(SIZE{64,64},SIIGBF_RESIZETOFIT|SIIGBF_BIGGERSIZEOK,&handle);
+    if(hr!=E_PENDING)break;
+    Sleep(30);
    }
+   if(SUCCEEDED(hr)&&!handle)hr=E_FAIL;// 说成功却没给句柄：按失败走，别把空句柄喂进 GDI
+   check_hresult(hr);
+   BITMAP info{};
+   GetObjectW(handle,sizeof(info),&info);
+   int width=info.bmWidth,height=info.bmHeight;
+   int tw=0,th=0;
+   if(FitBox(width,height,64,tw,th)){
+    BITMAPINFO target{};
+    target.bmiHeader.biSize=sizeof(target.bmiHeader);target.bmiHeader.biWidth=tw;target.bmiHeader.biHeight=-th;target.bmiHeader.biPlanes=1;target.bmiHeader.biBitCount=32;target.bmiHeader.biCompression=BI_RGB;
+    void* bits=nullptr;
+    HBITMAP scaled=CreateDIBSection(nullptr,&target,DIB_RGB_COLORS,&bits,nullptr,0);
+    if(scaled&&bits){
+     HDC src=CreateCompatibleDC(nullptr),dst=CreateCompatibleDC(nullptr);
+     auto oldSrc=static_cast<HBITMAP>(SelectObject(src,handle)),oldDst=static_cast<HBITMAP>(SelectObject(dst,scaled));
+     SetStretchBltMode(dst,HALFTONE);SetBrushOrgEx(dst,0,0,nullptr);
+     bool drew=StretchBlt(dst,0,0,tw,th,src,0,0,width,height,SRCCOPY);
+     SelectObject(src,oldSrc);SelectObject(dst,oldDst);DeleteDC(src);DeleteDC(dst);
+     // 缩放没成就继续用原图，但句柄只能留一个，否则要么泄漏要么被用两次
+     if(drew){DeleteObject(handle);handle=scaled;width=tw;height=th;}
+     else DeleteObject(scaled);
+    }
+   }
+   BITMAPINFOHEADER header{sizeof(header)};
+   header.biWidth=width;header.biHeight=-height;header.biPlanes=1;header.biBitCount=32;header.biCompression=BI_RGB;
+   std::vector<uint8_t> pixels(static_cast<size_t>(width)*height*4);
+   HDC screen=GetDC(nullptr);
+   // 读不出像素就当这一格没图：半截数据被 OpaqueIfNoAlpha 补成不透明，缓存里就永远是一块黑
+   if(!GetDIBits(screen,handle,0,height,pixels.data(),reinterpret_cast<BITMAPINFO*>(&header),DIB_RGB_COLORS)){ReleaseDC(nullptr,screen);DeleteObject(handle);throw_last_error();}
+   ReleaseDC(nullptr,screen);
+   DeleteObject(handle);
+   OpaqueIfNoAlpha(pixels);
+   out.w=width;out.h=height;out.px=std::move(pixels);out.ok=out.w>0&&out.h>0&&!out.px.empty();
   }
-  BITMAPINFOHEADER header{sizeof(header)};
-  header.biWidth=width;header.biHeight=-height;header.biPlanes=1;header.biBitCount=32;header.biCompression=BI_RGB;
-  std::vector<uint8_t> pixels(static_cast<size_t>(width)*height*4);
-  HDC screen=GetDC(nullptr);
-  GetDIBits(screen,handle,0,height,pixels.data(),reinterpret_cast<BITMAPINFO*>(&header),DIB_RGB_COLORS);
-  ReleaseDC(nullptr,screen);
-  DeleteObject(handle);
-  bool alpha=false;
-  for(size_t i=3;i<pixels.size();i+=4)if(pixels[i]){alpha=true;break;}
-  if(!alpha)for(size_t i=3;i<pixels.size();i+=4)pixels[i]=255;
-  Microsoft::UI::Xaml::Media::Imaging::WriteableBitmap bitmap(width,height);
+ }catch(...){out=IconPixels{};}
+ if(co==S_OK)CoUninitialize();
+ return out;
+}
+void PumpIcons();
+void IconDone(std::wstring path,IconPixels px){
+ WriteableBitmap bitmap=nullptr;
+ if(px.ok)try{
+  bitmap=WriteableBitmap(px.w,px.h);
   auto bytes=bitmap.PixelBuffer().as<::Windows::Storage::Streams::IBufferByteAccess>();
   uint8_t* target{};
   check_hresult(bytes->Buffer(&target));
-  memcpy(target,pixels.data(),pixels.size());
-  if(cache.size()>2048){auto stop=cache.begin();for(int k=0;k<512&&stop!=cache.end();++k)++stop;cache.erase(cache.begin(),stop);}
-  cache.insert_or_assign(path,bitmap);
-  image.Source(bitmap);
+  memcpy(target,px.px.data(),px.px.size());
+ }catch(...){bitmap=nullptr;}// 建位图失败（内存紧张）就当作没图：车道和排队状态照常还原
+ std::vector<winrt::weak_ref<Image>> waiters;
+ {
+  std::lock_guard<std::mutex> lk(g_iconMtx);
+  if(bitmap){
+   if(g_iconCache.size()>2048){auto stop=g_iconCache.begin();for(int k=0;k<512&&stop!=g_iconCache.end();++k)++stop;g_iconCache.erase(g_iconCache.begin(),stop);}
+   g_iconCache.insert_or_assign(path,bitmap);
+  }
+  auto it=g_iconWait.find(path);
+  if(it!=g_iconWait.end()){waiters=std::move(it->second);g_iconWait.erase(it);}
+  g_iconPending.erase(path);// 缓存和排队状态在同一个锁里一起翻面，中间不许插进新的活计
+  --g_iconRunning;
+ }
+ // 等它的格子可能早就随分区重画没了：逐个解析弱引用，死了就跳过
+ if(bitmap)for(auto& w:waiters)if(auto el=w.get())el.Source(bitmap);
+ // 取图失败也要往下走：腾出的车道得让排队的下一批补上，否则队列会停在半路
+ PumpIcons();
+}
+void PumpIcons(){
+ // 起线程这一步本身可能失败，失败了要接着把队列往下推，所以循环到拿不出活计为止
+ for(;;){
+  std::vector<IconJob> go;
+  {
+   std::lock_guard<std::mutex> lk(g_iconMtx);
+   while(g_iconRunning<g_iconLanes&&!g_iconQ.empty()){++g_iconRunning;go.push_back(std::move(g_iconQ.front()));g_iconQ.pop_front();}
+  }
+  if(go.empty())return;
+  for(auto& job:go){
+   auto keep=job.path;// 线程没起来时要用它清表：下面按值拷进线程，job 里的名字要留到 catch 为止
+   try{
+    std::thread([path=std::move(job.path),dq=std::move(job.dq),keep=keep]()mutable{
+     bool handed=false;// TryEnqueue 的实参先求值：真失败了 path 已经空了，清表靠 keep 这份拷贝
+     try{
+      auto px=ExtractIcon(path);
+      if(dq)handed=dq.TryEnqueue([path=std::move(path),px=std::move(px)]()mutable{IconDone(std::move(path),std::move(px));});
+     }catch(...){handed=false;}// 队列已停时投影是直接抛的：异常跑出线程就是 std::terminate
+     if(!handed){
+      // 没人接这张图（程序在退出）：车道和排队状态一起还回去，别让计数只减不增地漏死
+      std::lock_guard<std::mutex> lk(g_iconMtx);
+      g_iconPending.erase(keep);g_iconWait.erase(keep);--g_iconRunning;
+     }
+    }).detach();
+   }catch(...){
+    // 线程创建失败（资源耗尽）：这一格干脆不要图标，但车道和排队状态必须还原
+    std::lock_guard<std::mutex> lk(g_iconMtx);
+    g_iconPending.erase(keep);g_iconWait.erase(keep);--g_iconRunning;
+   }
+  }
+ }
+}
+}
+fire_and_forget LoadIcon(std::wstring path,Microsoft::UI::Xaml::Controls::Image image){
+ try{
+  WriteableBitmap ready=nullptr;
+  bool start=false;
+  {
+   std::lock_guard<std::mutex> lk(g_iconMtx);
+   auto hit=g_iconCache.find(path);
+   if(hit!=g_iconCache.end())ready=hit->second;
+   else{
+    g_iconWait[path].push_back(winrt::make_weak(image));
+    start=g_iconPending.insert(path).second;// 这条路径已经有活计在跑了，挂个等位就行
+   }
+  }
+  if(ready){image.Source(ready);co_return;}// 动 XAML 要放在锁外：设值会不会回调回取图这条路，谁也不敢保证
+  if(!start)co_return;
+  IconJob job{path,DispatcherQueue::GetForCurrentThread()};// DispatcherQueue 没有默认构造，直接聚合初始化
+  {std::lock_guard<std::mutex> lk(g_iconMtx);g_iconQ.push_back(std::move(job));}
+  PumpIcons();
  }catch(...){}
 }
 std::vector<char> MakeHdrop(std::vector<std::wstring> const& paths){

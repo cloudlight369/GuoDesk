@@ -76,6 +76,10 @@ int ZoneCapHeight(int maxHeight,int workHeight,int dpi);
 int ZoneExpandedHeight(int height,int maxHeight,int workHeight,int dpi);
 // 折叠分区的高度：88 DIP 换算到这块屏幕的物理像素，100% 下仍是 88，200% 下不会只有一半高
 int ZoneCollapsedHeight(int dpi);
+// 缩略图缩放：按长边把 w×h 等比塞进 limit×limit，返回是否真的缩了；算出来的边至少 1px
+bool FitBox(int w,int h,int limit,int& outW,int& outH);
+// 32bpp BGRA：整幅 alpha 全为 0 就补成不透明（shell 给一些图标就是留的全 0），返回是否补过
+bool OpaqueIfNoAlpha(std::vector<uint8_t>& px);
 // 在渲染出来的条目里找一个路径（大小写/短路径无关），返回下标，找不到返回 -1
 int NavIndexOf(std::vector<std::wstring> const& paths,std::wstring const& want);
 int ZoneAnchorTop(int top,int height,int targetHeight,int dir,int workTop,int workBottom);
