@@ -82,16 +82,17 @@ using Microsoft::UI::Xaml::Controls::Image;
 using Microsoft::UI::Xaml::Media::Imaging::WriteableBitmap;
 using Microsoft::UI::Dispatching::DispatcherQueue;
 struct IconPixels{int w=0,h=0;std::vector<uint8_t> px;bool ok=false;};
-struct IconJob{std::wstring path;DispatcherQueue dq;};
-// 这几张表故意不析构：进程退出时 uninit_apartment 早跑完了，最后几条后台线程却还可能正摸着队列和锁。
-// 泄漏给系统回收，比让 CRT 在错误的顺序里释放一堆 XAML 对象安全
+struct IconJob{std::wstring key,path;DispatcherQueue dq;};
+// 这几张表故意不析构：退出时 CRT 会按看不见的顺序跑静态对象的析构函数，而最后几条后台线程可能正摸着队列和锁，
+// 表里还挂着一堆 XAML 对象。泄漏给系统回收比让析构抢跑安全。键统一用 PathKey，同一文件换个写法大小写就不再排第二次队
 inline std::mutex& g_iconMtx=*new std::mutex();
 inline std::deque<IconJob>& g_iconQ=*new std::deque<IconJob>();
 int g_iconRunning=0;
 constexpr int g_iconLanes=4;// 一次开二十几格时不许起二十几条线程，四条道足够把 shell 排队跑满
 inline std::map<std::wstring,WriteableBitmap>& g_iconCache=*new std::map<std::wstring,WriteableBitmap>();
-inline std::map<std::wstring,std::vector<winrt::weak_ref<Image>>>& g_iconWait=*new std::map<std::wstring,std::vector<winrt::weak_ref<Image>>>();
+inline std::map<std::wstring,std::vector<std::pair<winrt::weak_ref<Image>,unsigned long long>>>& g_iconWait=*new std::map<std::wstring,std::vector<std::pair<winrt::weak_ref<Image>,unsigned long long>>>();
 inline std::set<std::wstring>& g_iconPending=*new std::set<std::wstring>();
+std::atomic<unsigned long long> g_iconSeq{0};// 每次请求一个号，写进格子的 Tag：晚到的结果只有号还对得上才许画上去
 IconPixels ExtractIcon(std::wstring const& path){
  IconPixels out;
  // 工作线程没有消息循环，用 MTA：shell 的缩略图工厂在跨进程取图时，STA 又不管泵会偶尔卡死在那次调用上
@@ -105,6 +106,7 @@ IconPixels ExtractIcon(std::wstring const& path){
    // 一批并发请求同时涌进来时缩略图提供方会回 E_PENDING（图还没备好），Explorer 自己也是稍后重试；
    // 车道不在 UI 线程上，正好在这儿退避几次，实在拿不到才算这一格没图
    for(int attempt=0;attempt<6;++attempt){
+    if(handle)DeleteObject(handle);// 说了没备好却又把句柄写进来的提供方也得收尾，否则每重试一次漏一个
     handle=nullptr;
     hr=factory->GetImage(SIZE{64,64},SIIGBF_RESIZETOFIT|SIIGBF_BIGGERSIZEOK,&handle);
     if(hr!=E_PENDING)break;
@@ -115,6 +117,8 @@ IconPixels ExtractIcon(std::wstring const& path){
    BITMAP info{};
    GetObjectW(handle,sizeof(info),&info);
    int width=info.bmWidth,height=info.bmHeight;
+   if(width<0)width=-width;
+   if(height<0)height=-height;// 自上而下的位图把高度报成负数：不掰正，下面按它算缓冲就是一次几百 GB 的分配
    int tw=0,th=0;
    if(FitBox(width,height,64,tw,th)){
     BITMAPINFO target{};
@@ -148,7 +152,7 @@ IconPixels ExtractIcon(std::wstring const& path){
  return out;
 }
 void PumpIcons();
-void IconDone(std::wstring path,IconPixels px){
+void IconDone(std::wstring key,IconPixels px){
  WriteableBitmap bitmap=nullptr;
  if(px.ok)try{
   bitmap=WriteableBitmap(px.w,px.h);
@@ -157,20 +161,21 @@ void IconDone(std::wstring path,IconPixels px){
   check_hresult(bytes->Buffer(&target));
   memcpy(target,px.px.data(),px.px.size());
  }catch(...){bitmap=nullptr;}// 建位图失败（内存紧张）就当作没图：车道和排队状态照常还原
- std::vector<winrt::weak_ref<Image>> waiters;
+ std::vector<std::pair<winrt::weak_ref<Image>,unsigned long long>> waiters;
  {
   std::lock_guard<std::mutex> lk(g_iconMtx);
   if(bitmap){
    if(g_iconCache.size()>2048){auto stop=g_iconCache.begin();for(int k=0;k<512&&stop!=g_iconCache.end();++k)++stop;g_iconCache.erase(g_iconCache.begin(),stop);}
-   g_iconCache.insert_or_assign(path,bitmap);
+   g_iconCache.insert_or_assign(key,bitmap);
   }
-  auto it=g_iconWait.find(path);
+  auto it=g_iconWait.find(key);
   if(it!=g_iconWait.end()){waiters=std::move(it->second);g_iconWait.erase(it);}
-  g_iconPending.erase(path);// 缓存和排队状态在同一个锁里一起翻面，中间不许插进新的活计
+  g_iconPending.erase(key);// 缓存和排队状态在同一个锁里一起翻面，中间不许插进新的活计
   --g_iconRunning;
  }
- // 等它的格子可能早就随分区重画没了：逐个解析弱引用，死了就跳过
- if(bitmap)for(auto& w:waiters)if(auto el=w.get())el.Source(bitmap);
+ // 等它的格子可能早就随分区重画没了（死了拿不到），也可能已经被复去等另一张图了：Tag 里存的是这一格当下要图的序号，
+ // 对不上就不许再画，否则胶囊那颗图标会一直挂着上一个文件的缩略图
+ if(bitmap)for(auto& w:waiters)if(auto el=w.first.get())if(unbox_value_or<unsigned long long>(el.Tag(),0)==w.second)el.Source(bitmap);
  // 取图失败也要往下走：腾出的车道得让排队的下一批补上，否则队列会停在半路
  PumpIcons();
 }
@@ -184,16 +189,18 @@ void PumpIcons(){
   }
   if(go.empty())return;
   for(auto& job:go){
-   auto keep=job.path;// 线程没起来时要用它清表：下面按值拷进线程，job 里的名字要留到 catch 为止
+   auto keep=job.key;// 交接失败时要用它清表：交给 handler 的那份 key 会被 move 走，所以按值拷一份进线程
    try{
-    std::thread([path=std::move(job.path),dq=std::move(job.dq),keep=keep]()mutable{
-     bool handed=false;// TryEnqueue 的实参先求值：真失败了 path 已经空了，清表靠 keep 这份拷贝
+    std::thread([path=std::move(job.path),key=std::move(job.key),dq=std::move(job.dq),keep=keep]()mutable{
+     bool handed=false;
      try{
-      auto px=ExtractIcon(path);
-      if(dq)handed=dq.TryEnqueue([path=std::move(path),px=std::move(px)]()mutable{IconDone(std::move(path),std::move(px));});
+      if(dq){// 没有能接结果的派发队列（程序在退出）就别白读一趟盘
+       auto px=ExtractIcon(path);
+       handed=dq.TryEnqueue([key=std::move(key),px=std::move(px)]()mutable{IconDone(std::move(key),std::move(px));});
+      }
      }catch(...){handed=false;}// 队列已停时投影是直接抛的：异常跑出线程就是 std::terminate
      if(!handed){
-      // 没人接这张图（程序在退出）：车道和排队状态一起还回去，别让计数只减不增地漏死
+      // 没人接这张图：车道和排队状态一起还回去，别让计数只减不增地漏死
       std::lock_guard<std::mutex> lk(g_iconMtx);
       g_iconPending.erase(keep);g_iconWait.erase(keep);--g_iconRunning;
      }
@@ -209,20 +216,23 @@ void PumpIcons(){
 }
 fire_and_forget LoadIcon(std::wstring path,Microsoft::UI::Xaml::Controls::Image image){
  try{
+  auto const key=PathKey(path);// 排队、缓存、等待全按 PathKey 走，同一个文件换个大小写不再排第二次队
+  auto const seq=++g_iconSeq;
+  image.Tag(box_value(seq));// 先记下这一格现在等的是第几号图：命中缓存也要盖掉旧号，否则晚到的旧图会把它顶回去
   WriteableBitmap ready=nullptr;
   bool start=false;
   {
    std::lock_guard<std::mutex> lk(g_iconMtx);
-   auto hit=g_iconCache.find(path);
+   auto hit=g_iconCache.find(key);
    if(hit!=g_iconCache.end())ready=hit->second;
    else{
-    g_iconWait[path].push_back(winrt::make_weak(image));
-    start=g_iconPending.insert(path).second;// 这条路径已经有活计在跑了，挂个等位就行
+    g_iconWait[key].emplace_back(winrt::make_weak(image),seq);
+    start=g_iconPending.insert(key).second;// 这条路径已经有活计在跑了，挂个等位就行
    }
   }
   if(ready){image.Source(ready);co_return;}// 动 XAML 要放在锁外：设值会不会回调回取图这条路，谁也不敢保证
   if(!start)co_return;
-  IconJob job{path,DispatcherQueue::GetForCurrentThread()};// DispatcherQueue 没有默认构造，直接聚合初始化
+  IconJob job{key,path,DispatcherQueue::GetForCurrentThread()};// DispatcherQueue 没有默认构造，直接聚合初始化
   {std::lock_guard<std::mutex> lk(g_iconMtx);g_iconQ.push_back(std::move(job));}
   PumpIcons();
  }catch(...){}
