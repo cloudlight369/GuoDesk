@@ -675,6 +675,19 @@ void RunTests(std::filesystem::path const& output){std::ofstream report(output);
   std::vector<char> split3140{'A',(char)0xE4,(char)0xB8,(char)0xAD,(char)0xE2};
   expect(DecodeNeutralText(split3140)==L"A中","a trailing utf-8 sequence cut by the head read does not corrupt the text");
  }
+ {
+  std::vector<std::wstring> files3290{L"C:\\d\\报告 1.txt",L"C:\\d\\photo.png",L"C:\\d\\noext"};
+  auto rp3290=RenamePlan(files3290,L"归档_{n}",1,2);
+  expect(rp3290.size()==3&&rp3290[0].to==L"归档_01.txt"&&rp3290[1].to==L"归档_02.png"&&rp3290[2].to==L"归档_03","the template keeps each file's own extension and pads the counter");
+  expect(RenamePlan(files3290,L"",1,0)[0].problem==1&&RenamePlan(files3290,L"   ",1,0)[0].problem==1,"an empty or blank template is a missing name, not a rename to the bare extension");
+  auto dup3290=RenamePlan(std::vector<std::wstring>{L"C:\\d\\A.txt",L"C:\\d\\a.TXT"},L"同一份",1,0);
+  expect(dup3290[0].problem==0&&dup3290[1].problem==6,"a second file landing on the same name is pointed out, not silently overwritten (Windows ignores case)");
+  expect(RenamePlan(files3290,L"a/b",1,0)[0].problem==2&&RenamePlan(files3290,L"CON",1,0)[0].problem==3&&RenamePlan(std::vector<std::wstring>{L"C:\\d\\noext"},L"{name}.",1,0)[0].problem==4,"illegal characters, a reserved device name and a trailing dot are each refused");
+  expect(RenamePlan(std::vector<std::wstring>{L"C:\\d\\x.txt"},std::wstring(300,L'x'),1,0)[0].problem==5,"a name past the filesystem's limit is refused before anything is written");
+  expect(RenamePlan(std::vector<std::wstring>{L"C:\\d\\x.txt"},L"{n}",-5,20)[0].to==L"000000000.txt","the counter's start and width are clamped, and the extension still rides along");
+  expect(RenamePlan(files3290,L"{name}{ext} ",1,0)[0].to==L"报告 1.txt"&&RenamePlan(files3290,L"{name}{ext}",1,0)[2].to==L"noext","{ext} carries its own dot, so writing it out explicitly is the user's choice");
+  expect(RenamePlan(std::vector<std::wstring>{},L"x{n}",1,0).empty()&&RenamePlan(std::vector<std::wstring>{L"C:\\d\\x.txt"},L"未知 {q} 保留",1,0)[0].problem==0,"an unknown token stays literal text rather than eating the name");
+ }
 report<<"TOTAL "<<passed<<" passed\n";
 }
 }

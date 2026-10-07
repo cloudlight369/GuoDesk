@@ -97,6 +97,8 @@ std::wstring PreviewSizeText(long long bytes);
 int ProgressPercent(long long done,long long total);
 int OpOutcome(long long ok,long long failed,bool cancelled);
 bool IsReservedDeviceName(std::wstring const& name);
+struct RenameStep{std::wstring from,to;int problem=0;};// problem：0 可改 1 空名 2 非法字符 3 系统保留名 4 末尾是点或空格 5 名字过长 6 这个名字已经有别的文件在用（同批内撞出同一个名）
+std::vector<RenameStep> RenamePlan(std::vector<std::wstring> const& paths,std::wstring const& pattern,int start,int pad);
 // 拖入落盘语义：0=按引用加入口（普通分区），1=复制到映射文件夹，2=移动到映射文件夹
 int DropOperation(bool mappedZone,bool shiftPressed);
 std::wstring BuildDiagnostics(Layout const& l,std::wstring const& version,std::wstring const& machine,std::wstring const& osBuild,long long today);

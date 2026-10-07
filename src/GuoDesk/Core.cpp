@@ -548,6 +548,58 @@ bool IsReservedDeviceName(std::wstring const& name){
  if(stem.size()==4&&(stem==L"com1"||stem==L"com2"||stem==L"com3"||stem==L"com4"||stem==L"com5"||stem==L"com6"||stem==L"com7"||stem==L"com8"||stem==L"com9"||stem==L"lpt1"||stem==L"lpt2"||stem==L"lpt3"||stem==L"lpt4"||stem==L"lpt5"||stem==L"lpt6"||stem==L"lpt7"||stem==L"lpt8"||stem==L"lpt9"))return true;
  return false;
 }
+// 批量重命名的计划：模板认 {n} 序号 / {name} 原名 / {ext} 原扩展名，别的都原样留着。
+// 模板里没写 {ext} 就把原扩展名补回去——否则一句「图片_{n}」会把 .png 一起丢掉，文件类型跟着没了。
+// 问题只报告不偷偷修：让用户在预览里看见是哪一项、为什么，改模板而不是被程序代劳
+std::vector<RenameStep> RenamePlan(std::vector<std::wstring> const& paths,std::wstring const& pattern,int start,int pad){
+ std::vector<RenameStep> out;
+ std::wstring pat=pattern;
+ if(auto a=pat.find_first_not_of(L" \t");a!=std::wstring::npos)pat=pat.substr(a,pat.find_last_not_of(L" \t")-a+1);else pat.clear();// 模板前后的空格是打字留下的，不是名字的一部分
+ if(start<0)start=0;
+ if(pad<0)pad=0;
+ if(pad>9)pad=9;
+ std::vector<std::wstring> taken;
+ for(size_t i=0;i<paths.size();++i){
+  std::filesystem::path const p(paths[i]);
+  auto const stem=p.stem().wstring(),ext=p.extension().wstring();
+  int const order=start+static_cast<int>(i);
+  std::wstring body;
+  bool wroteExt=false;
+  for(size_t k=0;k<pat.size();){
+   if(pat[k]==L'{'){
+    auto const close=pat.find(L'}',k);
+    if(close!=std::wstring::npos){
+     auto const token=Lower(pat.substr(k+1,close-k-1));
+     if(token==L"n"){
+      auto text=std::to_wstring(order);
+      while(static_cast<int>(text.size())<pad)text.insert(text.begin(),L'0');
+      body+=text;k=close+1;continue;
+     }
+     if(token==L"name"){body+=stem;k=close+1;continue;}
+     if(token==L"ext"){wroteExt=true;body+=ext;k=close+1;continue;}
+    }
+   }
+   body.push_back(pat[k]);++k;
+  }
+  if(!wroteExt&&!pat.empty())body+=ext;// 模板整体空着就是"还没填"，别用补上的扩展名假装改好了
+  RenameStep step;
+  step.from=paths[i];
+  auto const a=body.find_first_not_of(L" \t");
+  step.to=a==std::wstring::npos?std::wstring():body.substr(a,body.find_last_not_of(L" \t")-a+1);
+  if(step.to.empty())step.problem=1;
+  for(auto ch:step.to)if(ch<32||wcschr(L"\\/:*?\"<>|",ch)!=nullptr){if(!step.problem)step.problem=2;break;}
+  if(!step.problem&&(step.to.back()==L'.'||step.to.back()==L' '))step.problem=4;// 结尾的点与空格会被系统悄悄吃掉，别装作能改
+  if(!step.problem&&IsReservedDeviceName(step.to))step.problem=3;
+  if(!step.problem&&step.to.size()>255)step.problem=5;
+  if(!step.problem){
+   auto const key=Lower(step.to);
+   for(auto const& prev:taken)if(prev==key){step.problem=6;break;}
+   taken.push_back(key);
+  }
+  out.push_back(std::move(step));
+ }
+ return out;
+}
 std::wstring BuildDiagnostics(Layout const& l,std::wstring const& version,std::wstring const& machine,std::wstring const& osBuild,long long today){
  auto b=[](bool v){return v?std::wstring(L"1"):std::wstring(L"0");};
  auto n=[](size_t v){return std::to_wstring(v);};

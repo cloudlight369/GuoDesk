@@ -546,6 +546,92 @@ void DeskWindow::RenameOne(){
   Notify(i18n::TrF(L"已重命名为「{0}」。",{t}));
  });
 }
+// 批量重命名：模板 + 起始号 + 补零位，逐行实时预览「旧名 → 新名」，有一项不合规就整批按住不执行——
+// 改名是少数"改坏了没法用撤销找回来"的操作，宁可让用户先看清楚再落盘
+void DeskWindow::RenameMany(){
+ auto paths=OpPaths();
+ if(paths.size()<2){Notify(i18n::Tr(L"请至少选中两个条目再批量重命名。"));return;}
+ if(opRunning){Notify(i18n::Tr(L"上一个文件操作还在进行，请稍候或点击“取消”。"));return;}
+ if(opDialog)return;
+ TextBox pat;pat.Text(L"{name}_{n}");pat.PlaceholderText(i18n::Tr(L"模板：{n} 序号 · {name} 原名 · {ext} 扩展名"));pat.MaxLength(240);pat.HorizontalAlignment(HorizontalAlignment::Stretch);
+ TextBox from;from.Text(L"1");from.Header(box_value(i18n::Tr(L"起始序号")));from.Width(104);from.MaxLength(6);
+ TextBox width;width.Text(L"2");width.Header(box_value(i18n::Tr(L"序号补零位数")));width.Width(104);width.MaxLength(2);
+ StackPanel inputs;inputs.Orientation(Orientation::Horizontal);inputs.Spacing(8);inputs.Children().Append(from);inputs.Children().Append(width);
+ TextBlock summary;summary.FontSize(11);summary.TextWrapping(TextWrapping::Wrap);
+ StackPanel rows;rows.Spacing(2);
+ ScrollViewer sheet;sheet.MaxHeight(230);sheet.Content(rows);sheet.HorizontalScrollMode(ScrollMode::Disabled);
+ ContentDialog dlg;dlg.Title(box_value(i18n::TrF(L"批量重命名 {0} 项",{std::to_wstring(paths.size())})));dlg.PrimaryButtonText(i18n::Tr(L"保存"));dlg.CloseButtonText(i18n::Tr(L"取消"));dlg.DefaultButton(ContentDialogButton::Primary);
+ StackPanel p;p.Spacing(8);p.MaxWidth(380);p.Children().Append(pat);p.Children().Append(inputs);p.Children().Append(summary);p.Children().Append(sheet);dlg.Content(p);
+ try{dlg.XamlRoot(root.XamlRoot());}catch(...){return;}
+ auto guard=this->alive;
+ auto digits=[](std::wstring const& s){int v=0;for(auto ch:s)if(ch>=L'0'&&ch<=L'9')v=v*10+(ch-L'0');return v;};
+ auto reason=[](int code)->std::wstring{switch(code){case 1:return i18n::Tr(L"名字不能为空");case 2:return i18n::Tr(L"名字里有不能用于文件名的字符");case 3:return i18n::Tr(L"名字是系统保留名");case 4:return i18n::Tr(L"名字末尾不能是点或空格");case 5:return i18n::Tr(L"名字太长了");case 6:return i18n::Tr(L"这个名字已经有别的文件在用");default:return std::wstring();}};
+ // 纯函数只看这一批；盘上还有一个没被选中的同名文件时，落盘会被 RenamePath 拒掉。
+ // 预览既然承诺"看得见结果"，就得把这种也算出来，别等用户点保存才发现
+ auto markTaken=[](std::vector<RenameStep>& plan){
+  for(auto& s:plan){
+   if(s.problem||std::filesystem::path(s.from).filename().wstring()==s.to)continue;
+   auto const target=std::filesystem::path(s.from).parent_path().wstring()+L"\\"+s.to,key=PathKey(target);
+   bool movesAway=false;
+   // 批里有人正要从这个名字走开，那就不算撞名（执行顺序会把它让出来）
+   for(auto const& o:plan)if(PathKey(o.from)==key&&o.to!=std::filesystem::path(o.from).filename().wstring())movesAway=true;
+   if(movesAway)continue;
+   if(GetFileAttributesW(target.c_str())!=INVALID_FILE_ATTRIBUTES)s.problem=6;
+  }
+ };
+ auto recompute=[paths,digits,reason,markTaken,pat,from,width,summary,rows,dlg](){
+  try{
+   auto plan=RenamePlan(paths,std::wstring(pat.Text()),digits(std::wstring(from.Text())),digits(std::wstring(width.Text())));
+   markTaken(plan);
+   rows.Children().Clear();
+   int bad=0,same=0;
+   for(auto const& s:plan)if(s.problem)++bad;else if(std::filesystem::path(s.from).filename().wstring()==s.to)++same;
+   size_t shown=0;
+   for(auto const& s:plan){
+    if(shown>=40)break;
+    ++shown;
+    TextBlock line;
+    auto const oldName=std::filesystem::path(s.from).filename().wstring();
+    line.Text(s.problem?oldName+L" → "+s.to+L"（"+reason(s.problem)+L"）":oldName==s.to?oldName+L" · "+i18n::Tr(L"名字不变"):oldName+L" → "+s.to);
+    line.FontSize(11);line.TextWrapping(TextWrapping::Wrap);
+    if(s.problem)line.Foreground(SolidColorBrush(Windows::UI::Color{255,232,17,35}));
+    rows.Children().Append(line);
+   }
+   if(plan.size()>shown){TextBlock more;more.Text(i18n::TrF(L"还有 {0} 项未列出",{std::to_wstring(plan.size()-shown)}));more.FontSize(11);more.Opacity(0.7);rows.Children().Append(more);}
+   summary.Text(i18n::TrF(L"{0} 项可改名 · {1} 项名字不变 · {2} 项有问题",{std::to_wstring(plan.size()-bad-same),std::to_wstring(same),std::to_wstring(bad)}));
+   dlg.IsPrimaryButtonEnabled(bad==0);
+  }catch(...){dlg.IsPrimaryButtonEnabled(false);summary.Text(i18n::Tr(L"预览没能算出来，请换个模板。"));}
+ };
+ recompute();
+ pat.TextChanged([recompute](auto&&,auto&&){recompute();});
+ from.TextChanged([recompute](auto&&,auto&&){recompute();});
+ width.TextChanged([recompute](auto&&,auto&&){recompute();});
+ opDialog=true;
+ try{dlg.ShowAsync().Completed([this,guard,paths,digits,markTaken,pat,from,width](auto&&async,auto&&){
+  if(!*guard)return;
+  opDialog=false;
+  if(async.GetResults()!=ContentDialogResult::Primary)return;
+  auto plan=RenamePlan(paths,std::wstring(pat.Text()),digits(std::wstring(from.Text())),digits(std::wstring(width.Text())));
+  markTaken(plan);
+  for(auto const& s:plan)if(s.problem){Notify(i18n::Tr(L"有项目的名字不合规，一个都没改；请先看预览里的红字。"));return;}
+  auto& v=View();
+  long long done=0,same=0,failed=0;
+  for(auto const& s:plan){
+   auto const oldName=std::filesystem::path(s.from).filename().wstring();
+   if(oldName==s.to){++same;continue;}
+   auto const oldKey=PathKey(s.from),parent=std::filesystem::path(s.from).parent_path().wstring();
+   try{shell::RenamePath(s.from,s.to);}catch(...){++failed;continue;}
+   auto const next=parent+L"\\"+s.to;
+   for(auto& e:v.entries)if(PathKey(e.path)==oldKey)e.path=next;
+   ++done;
+  }
+  selected.clear();focusIdx=-1;
+  if(!v.mappedFolder.empty())SyncMapped(v);
+  Refresh();owner.Save();
+  if(done)Notify(i18n::TrF(L"已重命名 {0} 项，{1} 项名字没变，{2} 项没能改。",{std::to_wstring(done),std::to_wstring(same),std::to_wstring(failed)}));
+  else Notify(i18n::TrF(L"{0} 项的名字本来就是这样，没有改动。",{std::to_wstring(same)}));
+ });}catch(...){opDialog=false;Notify(i18n::Tr(L"批量重命名窗口没能打开，请重试。"));}
+}
 void DeskWindow::DeleteSelected(bool permanent){
  auto paths=OpPaths();
  if(paths.empty()){Notify(i18n::Tr(L"请先选中要删除的条目。"));return;}
@@ -736,6 +822,7 @@ void DeskWindow::Menu(FrameworkElement const& target){auto& z=Model();auto& v=Vi
  menu.Items().Append(MenuItem(i18n::Tr(L"按规则归档此文件夹…"),[this,mapped]{if(!mapped){Notify(i18n::Tr(L"普通分区没有映射文件夹，无法按规则归档。"));return;}ArchiveHere();}));
  menu.Items().Append(MenuItem(shell::HasClipFiles()?(mapped?i18n::Tr(L"粘贴文件到此处"):i18n::Tr(L"粘贴为入口")):i18n::Tr(L"粘贴（剪贴板无文件）"),[this]{PasteClip();}));
  menu.Items().Append(MenuItem(i18n::Tr(L"重命名选中项…"),[this]{RenameOne();}));
+ menu.Items().Append(MenuItem(i18n::Tr(L"批量重命名选中项…"),[this]{RenameMany();}));
  menu.Items().Append(MenuItem(i18n::Tr(L"删除选中项（回收站）…"),[this]{DeleteSelected(false);}));
  menu.Items().Append(MenuItem(i18n::Tr(L"钉选快捷方式…"),[this]{auto picked=shell::Pick(hwnd);if(picked.empty())return;auto& m=View();int added=0;for(auto const& p:picked){if(m.pins.size()>=12)break;if(std::any_of(m.pins.begin(),m.pins.end(),[&](auto const& q){return PathKey(q)==PathKey(p);}))continue;owner.PushUndo(i18n::TrF(L"钉选快捷方式「{0}」",{shell::Name(p)}));m.pins.push_back(p);++added;}if(added){Refresh();owner.Save();Notify(i18n::TrF(L"已钉选 {0} 个快捷方式。",{std::to_wstring(added)}));}}));
  menu.Items().Append(MenuItem(mapped?i18n::Tr(L"取消文件夹映射"):i18n::Tr(L"映射文件夹…"),[this,mapped]{if(mapped){View().mappedFolder.clear();View().browseFolder.clear();Refresh();owner.Save();Notify(i18n::Tr(L"已取消映射，恢复普通分区。"));return;}auto picked=shell::Pick(hwnd,true);if(picked.empty())return;View().mappedFolder=picked.front();View().browseFolder.clear();SyncMapped(View());Refresh();owner.Save();Notify(i18n::Tr(L"已映射文件夹（只读视图）：修改请在资源管理器中完成，右键可刷新。"));}));

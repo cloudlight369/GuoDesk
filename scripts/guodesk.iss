@@ -1,5 +1,5 @@
 ﻿#define AppName "GuoDesk"
-#define AppVersion "3.28.1"
+#define AppVersion "3.29.0"
 #ifndef SourceDir
 #define SourceDir "..\artifacts\Release"
 #endif
