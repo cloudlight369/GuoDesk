@@ -29,7 +29,7 @@ DeleteResult DeleteFiles(std::vector<std::wstring> const& paths,bool permanent,C
 std::vector<AppShortcut> EnumerateApps();
 std::vector<char> MakeHdrop(std::vector<std::wstring> const& paths);
 HRESULT DragOut(HWND,std::vector<std::wstring> const& paths);
-void Fit(Zone& zone);
+void Fit(Zone& zone,int dpi=96);
 HWND DesktopHost();
 bool Attach(HWND window,HWND host);
 void Detach(HWND window);

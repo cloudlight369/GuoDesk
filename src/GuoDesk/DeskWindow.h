@@ -68,7 +68,7 @@ class DeskWindow {
  void CopyClip(bool cut); void PasteClip(); void CreateFolderHere(); void ArchiveHere(); void StartDownload(std::wstring url); void RunArchive(std::shared_ptr<std::vector<ArchiveGroup>> groups,std::wstring here); void RunAutoArchive(std::wstring here,std::vector<Rule> rules); void FinishArchive(std::shared_ptr<shell::TransferResult> res,std::shared_ptr<long long> cats,std::shared_ptr<long long> blocked,long long total); void RenameOne(); void DeleteSelected(bool permanent);
  void PreviewSelection(); void PreviewPath(std::wstring const& path);
  int selAnchor=-1;
- winrt::Microsoft::UI::Xaml::Media::Brush ItemFill(std::wstring const& path);
+ winrt::Microsoft::UI::Xaml::Media::Brush ItemFill(std::wstring const& path,bool hover=false);
  winrt::Microsoft::UI::Xaml::Controls::Border dimLayer{nullptr};
  std::wstring bgPath; int bgDim=-1; bool bgPerf=false; bool bgDesk=false;
  struct OpState;
