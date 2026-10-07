@@ -592,7 +592,7 @@ std::vector<RenameStep> RenamePlan(std::vector<std::wstring> const& paths,std::w
   if(!step.problem&&IsReservedDeviceName(step.to))step.problem=3;
   if(!step.problem&&step.to.size()>255)step.problem=5;
   if(!step.problem){
-   auto const key=Lower(step.to);
+   auto const key=Lower(p.parent_path().wstring()+L'\\'+step.to);// 普通分区可以混着放不同目录，同名不冲突就别拦
    for(auto const& prev:taken)if(prev==key){step.problem=6;break;}
    taken.push_back(key);
   }

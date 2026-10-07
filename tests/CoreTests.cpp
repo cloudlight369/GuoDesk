@@ -685,6 +685,8 @@ void RunTests(std::filesystem::path const& output){std::ofstream report(output);
   expect(RenamePlan(files3290,L"a/b",1,0)[0].problem==2&&RenamePlan(files3290,L"CON",1,0)[0].problem==3&&RenamePlan(std::vector<std::wstring>{L"C:\\d\\noext"},L"{name}.",1,0)[0].problem==4,"illegal characters, a reserved device name and a trailing dot are each refused");
   expect(RenamePlan(std::vector<std::wstring>{L"C:\\d\\x.txt"},std::wstring(300,L'x'),1,0)[0].problem==5,"a name past the filesystem's limit is refused before anything is written");
   expect(RenamePlan(std::vector<std::wstring>{L"C:\\d\\x.txt"},L"{n}",-5,20)[0].to==L"000000000.txt","the counter's start and width are clamped, and the extension still rides along");
+  auto cross3290=RenamePlan(std::vector<std::wstring>{L"D:\\x\\a.txt",L"E:\\y\\a.txt"},L"同一份",1,0);
+  expect(cross3290[0].problem==0&&cross3290[1].problem==0,"two files in different folders may take the same new name, because a zone can mix directories");
   expect(RenamePlan(files3290,L"{name}{ext} ",1,0)[0].to==L"报告 1.txt"&&RenamePlan(files3290,L"{name}{ext}",1,0)[2].to==L"noext","{ext} carries its own dot, so writing it out explicitly is the user's choice");
   expect(RenamePlan(std::vector<std::wstring>{},L"x{n}",1,0).empty()&&RenamePlan(std::vector<std::wstring>{L"C:\\d\\x.txt"},L"未知 {q} 保留",1,0)[0].problem==0,"an unknown token stays literal text rather than eating the name");
  }

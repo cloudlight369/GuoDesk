@@ -530,21 +530,25 @@ void DeskWindow::RenameOne(){
  try{dlg.XamlRoot(root.XamlRoot());}catch(...){return;}
  auto guard=this->alive;
  if(opDialog)return;opDialog=true;
- dlg.ShowAsync().Completed([this,guard,path,box](auto&& async,auto&&){
-  if(!*guard)return;
-  opDialog=false;
-  if(async.GetResults()!=ContentDialogResult::Primary)return;
-  auto t=std::wstring(box.Text());
-  size_t a=t.find_first_not_of(L" \t");
-  if(a==std::wstring::npos)return;
-  t=t.substr(a,t.find_last_not_of(L" \t")-a+1);
-  auto oldKey=PathKey(path),parent=std::filesystem::path(path).parent_path().wstring();
-  try{shell::RenamePath(path,t);}catch(...){Notify(i18n::Tr(L"重命名未完成：名称重复、是系统保留名，或含有 \\ / : * ? \" < > |。"));return;}
-  auto& v=View();for(auto& e:v.entries)if(PathKey(e.path)==oldKey)e.path=parent+L"\\"+t;
-  if(!v.mappedFolder.empty())SyncMapped(v);
-  selected.clear();focusIdx=-1;Refresh();owner.Save();
-  Notify(i18n::TrF(L"已重命名为「{0}」。",{t}));
- });
+ try{dlg.ShowAsync().Completed([this,guard,path,box](auto&& async,auto&&){
+  try{
+   if(!*guard)return;
+   opDialog=false;
+   FocusBody();// 同 RenameMany：把焦点还给列表，关完对话框还能接着用键盘
+   if(async.GetResults()!=ContentDialogResult::Primary)return;
+   auto t=std::wstring(box.Text());
+   size_t a=t.find_first_not_of(L" \t");
+   if(a==std::wstring::npos)return;
+   t=t.substr(a,t.find_last_not_of(L" \t")-a+1);
+   auto oldKey=PathKey(path),parent=std::filesystem::path(path).parent_path().wstring();
+   try{shell::RenamePath(path,t);}catch(...){Notify(i18n::Tr(L"重命名未完成：名称重复、是系统保留名，或含有 \\ / : * ? \" < > |。"));return;}
+   auto& v=View();for(auto& e:v.entries)if(PathKey(e.path)==oldKey)e.path=parent+L"\\"+t;
+   for(auto& pin:v.pins)if(PathKey(pin)==oldKey)pin=parent+L"\\"+t;// 快捷栏记的也是路径，不改它就剩个灰图标
+   if(!v.mappedFolder.empty())SyncMapped(v);
+   selected.clear();focusIdx=-1;Refresh();owner.Save();
+   Notify(i18n::TrF(L"已重命名为「{0}」。",{t}));
+  }catch(...){if(*guard){opDialog=false;Notify(i18n::Tr(L"重命名没能完成。"));}}// 异常从 XAML 回调里逃出去是整个进程没了
+ });}catch(...){opDialog=false;Notify(i18n::Tr(L"重命名窗口没能打开，请重试。"));}
 }
 // 批量重命名：模板 + 起始号 + 补零位，逐行实时预览「旧名 → 新名」，有一项不合规就整批按住不执行——
 // 改名是少数"改坏了没法用撤销找回来"的操作，宁可让用户先看清楚再落盘
@@ -566,38 +570,45 @@ void DeskWindow::RenameMany(){
  auto guard=this->alive;
  auto digits=[](std::wstring const& s){int v=0;for(auto ch:s)if(ch>=L'0'&&ch<=L'9')v=v*10+(ch-L'0');return v;};
  auto reason=[](int code)->std::wstring{switch(code){case 1:return i18n::Tr(L"名字不能为空");case 2:return i18n::Tr(L"名字里有不能用于文件名的字符");case 3:return i18n::Tr(L"名字是系统保留名");case 4:return i18n::Tr(L"名字末尾不能是点或空格");case 5:return i18n::Tr(L"名字太长了");case 6:return i18n::Tr(L"这个名字已经有别的文件在用");default:return std::wstring();}};
+ // 只改大小写在 Windows 上等于什么都没改：RenamePath 判它是同一个路径，直接返回，盘上名字不动。
+ // 与其承诺一个做不到的改名，不如老老实实按"名字不变"报出来
+ auto sameName=[](std::wstring const& from,std::wstring const& to){return _wcsicmp(std::filesystem::path(from).filename().c_str(),to.c_str())==0;};
  // 纯函数只看这一批；盘上还有一个没被选中的同名文件时，落盘会被 RenamePath 拒掉。
  // 预览既然承诺"看得见结果"，就得把这种也算出来，别等用户点保存才发现
- auto markTaken=[](std::vector<RenameStep>& plan){
+ auto markTaken=[sameName](std::vector<RenameStep>& plan){
   for(auto& s:plan){
-   if(s.problem||std::filesystem::path(s.from).filename().wstring()==s.to)continue;
+   if(s.problem||sameName(s.from,s.to))continue;
    auto const target=std::filesystem::path(s.from).parent_path().wstring()+L"\\"+s.to,key=PathKey(target);
    bool movesAway=false;
-   // 批里有人正要从这个名字走开，那就不算撞名（执行顺序会把它让出来）
-   for(auto const& o:plan)if(PathKey(o.from)==key&&o.to!=std::filesystem::path(o.from).filename().wstring())movesAway=true;
+   // 批里有人正要从这个名字走开，落盘会按"谁先让位"分轮做，所以这一项不算撞名
+   for(auto const& o:plan)if(PathKey(o.from)==key&&!sameName(o.from,o.to))movesAway=true;
    if(movesAway)continue;
    if(GetFileAttributesW(target.c_str())!=INVALID_FILE_ATTRIBUTES)s.problem=6;
   }
  };
- auto recompute=[paths,digits,reason,markTaken,pat,from,width,summary,rows,dlg](){
+ auto recompute=[paths,digits,reason,markTaken,sameName,pat,from,width,summary,rows,dlg](){
   try{
    auto plan=RenamePlan(paths,std::wstring(pat.Text()),digits(std::wstring(from.Text())),digits(std::wstring(width.Text())));
    markTaken(plan);
    rows.Children().Clear();
-   int bad=0,same=0;
-   for(auto const& s:plan)if(s.problem)++bad;else if(std::filesystem::path(s.from).filename().wstring()==s.to)++same;
-   size_t shown=0;
-   for(auto const& s:plan){
-    if(shown>=40)break;
-    ++shown;
+   auto lineOf=[&](RenameStep const& s){
     TextBlock line;
     auto const oldName=std::filesystem::path(s.from).filename().wstring();
-    line.Text(s.problem?oldName+L" → "+s.to+L"（"+reason(s.problem)+L"）":oldName==s.to?oldName+L" · "+i18n::Tr(L"名字不变"):oldName+L" → "+s.to);
+    line.Text(s.problem?oldName+L" → "+s.to+L"（"+reason(s.problem)+L"）":sameName(s.from,s.to)?oldName+L" · "+i18n::Tr(L"名字不变"):oldName+L" → "+s.to);
     line.FontSize(11);line.TextWrapping(TextWrapping::Wrap);
     if(s.problem)line.Foreground(SolidColorBrush(Windows::UI::Color{255,232,17,35}));
-    rows.Children().Append(line);
+    return line;
+   };
+   int bad=0,same=0;
+   for(auto const& s:plan)if(s.problem)++bad;else if(sameName(s.from,s.to))++same;
+   size_t shown=0;
+   for(auto const& s:plan){if(shown>=40)break;rows.Children().Append(lineOf(s));++shown;}
+   if(plan.size()>shown){
+    TextBlock more;more.Text(i18n::TrF(L"还有 {0} 项未列出",{std::to_wstring(plan.size()-shown)}));more.FontSize(11);more.Opacity(0.7);rows.Children().Append(more);
+    // 藏起来的行里要有闹问题的，必须照样列出来：不然"保存"灰着却看不出为什么灰
+    size_t extra=0;
+    for(size_t i=shown;i<plan.size()&&extra<3;++i)if(plan[i].problem){rows.Children().Append(lineOf(plan[i]));++extra;}
    }
-   if(plan.size()>shown){TextBlock more;more.Text(i18n::TrF(L"还有 {0} 项未列出",{std::to_wstring(plan.size()-shown)}));more.FontSize(11);more.Opacity(0.7);rows.Children().Append(more);}
    summary.Text(i18n::TrF(L"{0} 项可改名 · {1} 项名字不变 · {2} 项有问题",{std::to_wstring(plan.size()-bad-same),std::to_wstring(same),std::to_wstring(bad)}));
    dlg.IsPrimaryButtonEnabled(bad==0);
   }catch(...){dlg.IsPrimaryButtonEnabled(false);summary.Text(i18n::Tr(L"预览没能算出来，请换个模板。"));}
@@ -607,29 +618,47 @@ void DeskWindow::RenameMany(){
  from.TextChanged([recompute](auto&&,auto&&){recompute();});
  width.TextChanged([recompute](auto&&,auto&&){recompute();});
  opDialog=true;
- try{dlg.ShowAsync().Completed([this,guard,paths,digits,markTaken,pat,from,width](auto&&async,auto&&){
-  if(!*guard)return;
-  opDialog=false;
-  if(async.GetResults()!=ContentDialogResult::Primary)return;
-  auto plan=RenamePlan(paths,std::wstring(pat.Text()),digits(std::wstring(from.Text())),digits(std::wstring(width.Text())));
-  markTaken(plan);
-  for(auto const& s:plan)if(s.problem){Notify(i18n::Tr(L"有项目的名字不合规，一个都没改；请先看预览里的红字。"));return;}
-  auto& v=View();
-  long long done=0,same=0,failed=0;
-  for(auto const& s:plan){
-   auto const oldName=std::filesystem::path(s.from).filename().wstring();
-   if(oldName==s.to){++same;continue;}
-   auto const oldKey=PathKey(s.from),parent=std::filesystem::path(s.from).parent_path().wstring();
-   try{shell::RenamePath(s.from,s.to);}catch(...){++failed;continue;}
-   auto const next=parent+L"\\"+s.to;
-   for(auto& e:v.entries)if(PathKey(e.path)==oldKey)e.path=next;
-   ++done;
-  }
-  selected.clear();focusIdx=-1;
-  if(!v.mappedFolder.empty())SyncMapped(v);
-  Refresh();owner.Save();
-  if(done)Notify(i18n::TrF(L"已重命名 {0} 项，{1} 项名字没变，{2} 项没能改。",{std::to_wstring(done),std::to_wstring(same),std::to_wstring(failed)}));
-  else Notify(i18n::TrF(L"{0} 项的名字本来就是这样，没有改动。",{std::to_wstring(same)}));
+ try{dlg.ShowAsync().Completed([this,guard,paths,digits,markTaken,sameName,pat,from,width](auto&&async,auto&&){
+  try{
+   if(!*guard)return;
+   opDialog=false;
+   FocusBody();// 焦点还停在对话框那颗按钮上（OnNavKey 见 Button/TextBox 就让路），不还回来紧接着按 Ctrl+A 是白按
+   if(async.GetResults()!=ContentDialogResult::Primary)return;
+   auto plan=RenamePlan(paths,std::wstring(pat.Text()),digits(std::wstring(from.Text())),digits(std::wstring(width.Text())));
+   markTaken(plan);
+   for(auto const& s:plan)if(s.problem){Notify(i18n::Tr(L"有项目的名字不合规，一个都没改；请先看预览里的红字。"));return;}
+   auto& v=View();
+   long long done=0,same=0,failed=0;
+   std::vector<char> tried(plan.size(),0);
+   // 链式改名（A→B、B→C）得等占着名字的人先走开，所以一轮只做"目标此刻是空的"那些
+   for(int pass=0;pass<static_cast<int>(plan.size());++pass){
+    bool progressed=false;
+    for(size_t i=0;i<plan.size();++i){
+     if(tried[i])continue;
+     auto const& s=plan[i];
+     auto const parent=std::filesystem::path(s.from).parent_path().wstring(),target=parent+L"\\"+s.to;
+     if(GetFileAttributesW(target.c_str())!=INVALID_FILE_ATTRIBUTES)continue;
+     tried[i]=1;progressed=true;
+     auto const oldKey=PathKey(s.from);
+     try{shell::RenamePath(s.from,s.to);}catch(...){++failed;continue;}
+     for(auto& e:v.entries)if(PathKey(e.path)==oldKey)e.path=target;
+     for(auto& pin:v.pins)if(PathKey(pin)==oldKey)pin=target;// 快捷栏也记着路径，不改它就成一个点不动的灰图标
+     ++done;
+    }
+    if(!progressed)break;
+   }
+   for(size_t i=0;i<plan.size();++i){
+    if(tried[i])continue;
+    auto const& s=plan[i];
+    if(sameName(s.from,s.to))++same;else ++failed;// 名字早就是它、或者绕不开的占用，各自算清楚
+   }
+   selected.clear();focusIdx=-1;
+   if(!v.mappedFolder.empty())SyncMapped(v);
+   Refresh();owner.Save();
+   if(failed)Notify(i18n::TrF(L"已重命名 {0} 项，{1} 项名字没变，{2} 项没能改。",{std::to_wstring(done),std::to_wstring(same),std::to_wstring(failed)}));
+   else if(done)Notify(i18n::TrF(L"已重命名 {0} 项，{1} 项名字没变。",{std::to_wstring(done),std::to_wstring(same)}));
+   else Notify(i18n::TrF(L"{0} 项的名字本来就是这样，没有改动。",{std::to_wstring(same)}));
+  }catch(...){if(*guard){opDialog=false;Notify(i18n::Tr(L"批量重命名没能完成。"));}}// 异常从 XAML 回调里逃出去是整个进程没了
  });}catch(...){opDialog=false;Notify(i18n::Tr(L"批量重命名窗口没能打开，请重试。"));}
 }
 void DeskWindow::DeleteSelected(bool permanent){

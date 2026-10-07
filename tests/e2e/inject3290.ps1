@@ -202,6 +202,10 @@ function Texts($win) {
   }
   return ,$out
 }
+function First-Text([string]$like) {
+  foreach ($t in (Texts (Find-Window $titleZone 2500))) { if ($t -like $like) { return [string]$t } }
+  return ''
+}
 function Count-Text([string]$like) {
   $zone = Find-Window $titleZone 2500
   $n = 0
@@ -296,6 +300,8 @@ Note 'pair-left-untouched' ((Test-Path (Join-Path $src 'a1.txt')) -and (Test-Pat
 # 上面那一段故意只选两行，这里要把四个都选回来再验证"干净模板真的落盘"
 [void](Click-Named 'a1.txt' $false)
 Send-CtrlA
+$wide = First-Text '已选*'
+Note 'selection-widened-back' ($wide -like '已选 4*') ('seen=' + $wide)
 $more2 = More-Button (Find-Window $titleZone 2500)
 [void](Invoke-El $more2)
 $pick2 = Menu-Item '批量重命名选中项…' 4000
