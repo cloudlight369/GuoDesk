@@ -72,8 +72,8 @@ int NextOpacityStep(int v);
 int ClampBackdropKind(int v);
 int ClampExpandDir(int v);
 int ClampMaxHeight(int v);
-int ZoneCapHeight(int maxHeight,int workHeight);
-int ZoneExpandedHeight(int height,int maxHeight,int workHeight);
+int ZoneCapHeight(int maxHeight,int workHeight,int dpi);
+int ZoneExpandedHeight(int height,int maxHeight,int workHeight,int dpi);
 // 折叠分区的高度：88 DIP 换算到这块屏幕的物理像素，100% 下仍是 88，200% 下不会只有一半高
 int ZoneCollapsedHeight(int dpi);
 // 在渲染出来的条目里找一个路径（大小写/短路径无关），返回下标，找不到返回 -1
@@ -120,7 +120,8 @@ bool UnderRoot(std::wstring const& root,std::wstring const& path);
 bool SelfNesting(std::wstring const& source,std::wstring const& destDir);
 std::vector<std::wstring> Crumbs(std::wstring const& root,std::wstring const& current);
 std::wstring CrumbParent(std::wstring const& root,std::wstring const& current);
-void Clamp(Zone& zone,RECT const& area,int dpi=96);
+// dpi 没有默认值：漏传就等于把这几处的几何退回"物理像素写死"的老 bug
+void Clamp(Zone& zone,RECT const& area,int dpi);
 void DefaultRules(Layout& layout);
 long long ClampSizeKb(long long value);
 int ClampAgeDays(int value);
